@@ -425,6 +425,23 @@ select:focus-visible {
   min-height: 485px;
 }
 
+.word-card.loading {
+  min-height: 390px;
+}
+
+.word-card.loading .word-face {
+  cursor: default;
+}
+
+.word-card.loading .word-face h1 {
+  font-size: clamp(46px, 6vw, 68px);
+  letter-spacing: -0.045em;
+}
+
+.word-card.loading .word-face span {
+  color: #7f8880;
+}
+
 .word-heading {
   display: flex;
   align-items: center;
@@ -468,6 +485,11 @@ select:focus-visible {
   color: #318c66;
   background: var(--mint-soft);
   border-color: #bce4d2;
+}
+
+.word-actions button:disabled {
+  opacity: 0.38;
+  cursor: default;
 }
 
 .word-face {
