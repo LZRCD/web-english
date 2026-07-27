@@ -29,6 +29,7 @@ type Review = {
 };
 
 type StudyMode = "ordered" | "shuffled";
+type StudyScope = "selection" | "all";
 type RedbookStatus = "loading" | "ready" | "error";
 
 type SavedWord = {
@@ -69,7 +70,7 @@ const REDBOOK_PLACEHOLDER: Word = {
 function wordKey(word: Word) {
   return word.id !== undefined
     ? `redbook-${word.id}`
-    : `${word.section ?? "sample"}-${word.unit ?? "all"}-${word.word}`;
+    : `${word.section ?? "redbook"}-${word.unit ?? "all"}-${word.word}`;
 }
 
 function seededScore(value: string, seed: number) {
@@ -92,7 +93,7 @@ function buildLocalCoach(word: Word, prompt: string) {
     return `辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
   }
   if (prompt.includes("题") || prompt.includes("测")) {
-    return `小测验：Small habits can ____ long-term progress.\nA. disrupt  B. sustain  C. diminish\n\n先在脑中补全，再告诉我你的答案。`;
+    return `主动回忆：先遮住释义，用 ${word.word} 造一个与你今天经历有关的英文句子。再回答：它在红宝书中的核心含义“${word.meaning.split("；")[0]}”是什么？`;
   }
   if (prompt.includes("例句") || prompt.includes("语境")) {
     return `给你一个学习语境：When you review ${word.word} in several meaningful situations, the memory becomes easier to retrieve. 先读懂整句，再回想 ${word.word} 的核心含义。`;
@@ -109,6 +110,7 @@ export default function Home() {
   const [favorites, setFavorites] = useState<SavedWord[]>([]);
   const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
+  const [studyScope, setStudyScope] = useState<StudyScope>("selection");
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes">("favorites");
   const [pendingWordKey, setPendingWordKey] = useState("");
@@ -127,10 +129,11 @@ export default function Home() {
 
   const filteredStudyWords = useMemo(() => {
     if (redbookStatus !== "ready") return [];
+    if (studyScope === "all") return redbookWords;
     const sectionWords = redbookWords.filter((word) => word.section === selectedSection);
     if (selectedUnit === "all") return sectionWords;
     return sectionWords.filter((word) => String(word.unit) === String(selectedUnit));
-  }, [redbookStatus, redbookWords, selectedSection, selectedUnit]);
+  }, [redbookStatus, redbookWords, selectedSection, selectedUnit, studyScope]);
   const studyWords = useMemo(
     () => studyMode === "shuffled" ? shuffleWithSeed(filteredStudyWords, shuffleSeed) : filteredStudyWords,
     [filteredStudyWords, shuffleSeed, studyMode],
@@ -159,7 +162,9 @@ export default function Home() {
     ? "2027 红宝书 · 正在载入"
     : redbookStatus === "error"
       ? "2027 红宝书 · 读取失败"
-      : `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
+      : studyScope === "all"
+        ? `全书乱序 · ${current.section ?? "红宝书"} ${current.unit ? `Unit ${current.unit}` : ""}`
+        : `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
 
   useEffect(() => {
     let active = true;
@@ -177,7 +182,10 @@ export default function Home() {
           setFavorites(Array.isArray(state.favorites) ? state.favorites : []);
           setMistakes(Array.isArray(state.mistakes) ? state.mistakes : []);
           setStudyMode(state.studyMode === "shuffled" ? "shuffled" : "ordered");
+          setStudyScope(state.studyScope === "all" ? "all" : "selection");
           setShuffleSeed(Number.isFinite(state.shuffleSeed) ? state.shuffleSeed : 1);
+          setSelectedSection(typeof state.selectedSection === "string" ? state.selectedSection : "必考词");
+          setSelectedUnit(state.selectedUnit ?? 1);
         } catch {
           localStorage.removeItem("wordloop-state");
         }
@@ -214,9 +222,12 @@ export default function Home() {
       favorites,
       mistakes,
       studyMode,
+      studyScope,
       shuffleSeed,
+      selectedSection,
+      selectedUnit,
     }));
-  }, [dailyGoal, favorites, hydrated, mistakes, reviews, shuffleSeed, soundOn, started, studyMode, wordIndex]);
+  }, [dailyGoal, favorites, hydrated, mistakes, reviews, selectedSection, selectedUnit, shuffleSeed, soundOn, started, studyMode, studyScope, wordIndex]);
 
   useEffect(() => {
     if (!pendingWordKey || !studyWords.length) return;
@@ -296,12 +307,24 @@ export default function Home() {
   }
 
   function changeStudyMode(mode: StudyMode) {
+    setStudyScope("selection");
     setStudyMode(mode);
     if (mode === "shuffled") setShuffleSeed(Date.now());
     setWordIndex(0);
     setRevealed(false);
     setToast(mode === "shuffled" ? "已打乱当前单元" : "已恢复红宝书顺序");
     setTimeout(() => setToast(""), 1600);
+  }
+
+  function startAllBookShuffle(openLearning = true) {
+    setStudyScope("all");
+    setStudyMode("shuffled");
+    setShuffleSeed(Date.now());
+    setWordIndex(0);
+    setRevealed(false);
+    if (openLearning) setActiveView("learn");
+    setToast("已打乱红宝书全部 6550 词");
+    setTimeout(() => setToast(""), 1800);
   }
 
   function toggleFavorite(word: Word = current) {
@@ -320,6 +343,7 @@ export default function Home() {
     const unit = word.unit ?? "all";
     setSelectedSection(section);
     setSelectedUnit(unit);
+    setStudyScope("selection");
     setPendingWordKey(wordKey(word));
     setRevealed(false);
     setActiveView("learn");
@@ -411,7 +435,13 @@ export default function Home() {
         <header className={activeView === "learn" ? "topbar learn-topbar" : "topbar"}>
           <div>
             <p className="eyebrow">{activeView === "learn" ? "2027 红宝书伴学" : "词环 WordLoop"}</p>
-            <p className="topbar-title">{activeView === "learn" ? `${selectedSection} · ${selectedUnit === "all" ? "全部" : `Unit ${selectedUnit}`}` : navigation.find((item) => item.id === activeView)?.label}</p>
+            <p className="topbar-title">
+              {activeView === "learn"
+                ? studyScope === "all"
+                  ? "全书 6550 词 · 乱序"
+                  : `${selectedSection} · ${selectedUnit === "all" ? "全部" : `Unit ${selectedUnit}`}`
+                : navigation.find((item) => item.id === activeView)?.label}
+            </p>
           </div>
           {activeView === "learn" && (
             <div className="study-tools">
@@ -424,6 +454,7 @@ export default function Home() {
                       const section = event.target.value;
                       setSelectedSection(section);
                       setSelectedUnit(section === "超纲词" ? "A" : 1);
+                      setStudyScope("selection");
                       setWordIndex(0);
                       setRevealed(false);
                     }}
@@ -435,6 +466,7 @@ export default function Home() {
                     aria-label="选择红宝书单元"
                     onChange={(event) => {
                       setSelectedUnit(event.target.value);
+                      setStudyScope("selection");
                       setWordIndex(0);
                       setRevealed(false);
                     }}
@@ -446,18 +478,26 @@ export default function Home() {
               )}
               <div className="order-switch" aria-label="学习顺序">
                 <button
-                  className={studyMode === "ordered" ? "active" : ""}
+                  className={studyScope === "selection" && studyMode === "ordered" ? "active" : ""}
                   onClick={() => changeStudyMode("ordered")}
-                  aria-pressed={studyMode === "ordered"}
+                  aria-pressed={studyScope === "selection" && studyMode === "ordered"}
                 >
                   顺序
                 </button>
                 <button
-                  className={studyMode === "shuffled" ? "active" : ""}
+                  className={studyScope === "selection" && studyMode === "shuffled" ? "active" : ""}
                   onClick={() => changeStudyMode("shuffled")}
-                  aria-pressed={studyMode === "shuffled"}
+                  aria-pressed={studyScope === "selection" && studyMode === "shuffled"}
                 >
                   乱序
+                </button>
+                <button
+                  className={studyScope === "all" ? "active all" : ""}
+                  onClick={() => startAllBookShuffle()}
+                  aria-pressed={studyScope === "all"}
+                  title="打乱红宝书全部 6550 词"
+                >
+                  全书
                 </button>
               </div>
             </div>
@@ -547,7 +587,10 @@ export default function Home() {
           <div className="content-view">
             <div className="section-heading">
               <div><p className="eyebrow">2027 考研英语红宝书</p><h1>按红宝书顺序开始</h1></div>
-              <span className="resource-badge">本地资源 · 6550 词</span>
+              <div className="book-heading-actions">
+                <span className="resource-badge">本地资源 · 6550 词</span>
+                <button className="primary-button" onClick={() => startAllBookShuffle()}>全书乱序</button>
+              </div>
             </div>
             <div className="book-grid">
               {SECTION_META.map((book) => {
@@ -556,6 +599,7 @@ export default function Home() {
                 <button className="book-card" key={book.name} onClick={() => {
                   setSelectedSection(book.name);
                   setSelectedUnit(book.name === "超纲词" ? "A" : 1);
+                  setStudyScope("selection");
                   setWordIndex(0);
                   setRevealed(false);
                   setActiveView("learn");
@@ -569,9 +613,10 @@ export default function Home() {
                   <div className="book-line"><i style={{ width: `${(learned / book.total) * 100}%` }} /></div>
                 </button>
               )})}
-              <button className="book-card empty-book">
+              <button className="book-card empty-book all-book-card" onClick={() => startAllBookShuffle()}>
                 <span>6550</span>
-                <p>完整收录正序词表，释义与书中中文词表逐项对应</p>
+                <h2>全书乱序</h2>
+                <p>跨越必考词、基础词和超纲词，每次重新洗牌</p>
               </button>
             </div>
           </div>
@@ -614,7 +659,7 @@ export default function Home() {
                   <div className="saved-word-copy">
                     <div><h2>{item.word.word}</h2><span>{item.word.phonetic ?? item.word.part ?? "红宝书"}</span></div>
                     <p>{item.word.meaning}</p>
-                    <small>{item.word.section ?? "示例词表"} · Unit {item.word.unit ?? "—"}</small>
+                    <small>{item.word.section ?? "红宝书"} · Unit {item.word.unit ?? "—"}</small>
                   </div>
                   <div className="saved-word-actions">
                     <button onClick={() => focusSavedWord(item.word)}>去复习</button>
@@ -628,7 +673,7 @@ export default function Home() {
                   <div className="saved-word-copy">
                     <div><h2>{item.word.word}</h2><span>{ratingLabels[item.lastRating]}</span></div>
                     <p>{item.word.meaning}</p>
-                    <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "示例词表"} Unit {item.word.unit ?? "—"}</small>
+                    <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "红宝书"} Unit {item.word.unit ?? "—"}</small>
                   </div>
                   <div className="saved-word-actions">
                     <button onClick={() => focusSavedWord(item.word)}>重新学习</button>
@@ -704,10 +749,17 @@ export default function Home() {
                 <input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />
               </label>
               <label>
-                <span><strong>学习顺序</strong><small>乱序会重新打乱当前分组或单元</small></span>
-                <select value={studyMode} onChange={(event) => changeStudyMode(event.target.value as StudyMode)}>
+                <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 6550 词</small></span>
+                <select
+                  value={studyScope === "all" ? "all" : studyMode}
+                  onChange={(event) => {
+                    if (event.target.value === "all") startAllBookShuffle(false);
+                    else changeStudyMode(event.target.value as StudyMode);
+                  }}
+                >
                   <option value="ordered">红宝书顺序</option>
-                  <option value="shuffled">乱序学习</option>
+                  <option value="shuffled">当前范围乱序</option>
+                  <option value="all">全书 6550 词乱序</option>
                 </select>
               </label>
               <label>

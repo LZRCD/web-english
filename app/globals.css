@@ -715,6 +715,12 @@ select:focus-visible {
   font-size: 10px;
 }
 
+.book-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .book-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -797,6 +803,22 @@ select:focus-visible {
 .empty-book span {
   font-size: 25px;
   color: #9ca39b;
+}
+
+.all-book-card {
+  border-color: #cfe5da;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(85, 201, 150, 0.14), transparent 42%),
+    rgba(255, 255, 255, 0.72);
+}
+
+.all-book-card span {
+  color: #318c66;
+  font: 500 34px/1 Georgia, serif;
+}
+
+.all-book-card h2 {
+  margin: 2px 0 0;
 }
 
 .stat-grid {
@@ -1575,6 +1597,11 @@ kbd {
     margin-bottom: 35px;
   }
 
+  .book-heading-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
   .section-heading h1 {
     font-size: 36px;
   }
@@ -1685,6 +1712,10 @@ kbd {
 
   .wordbook-heading {
     display: grid;
+  }
+
+  .book-heading-actions {
+    align-items: flex-start;
   }
 
   .wordbook-counts span {
