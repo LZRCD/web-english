@@ -1,5 +1,5 @@
 import vinext from "vinext";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -13,7 +13,7 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
+  compatibility_flags: ["nodejs_compat", "nodejs_compat_populate_process_env"],
   d1_databases: d1
     ? [
         {
@@ -33,7 +33,14 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ mode }) => {
+  const localEnv = loadEnv(mode, process.cwd(), "");
+  const runtimeVars = Object.fromEntries(
+    ["DEEPSEEK_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]
+      .filter((key) => localEnv[key])
+      .map((key) => [key, localEnv[key]]),
+  );
+
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -52,7 +59,7 @@ export default defineConfig(async () => {
       sites(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
+        config: { ...localBindingConfig, vars: runtimeVars },
       }),
     ],
   };

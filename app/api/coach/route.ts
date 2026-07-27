@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
 
   if (!apiKey) {
-    return NextResponse.json({ answer: localAnswer(body), mode: "local" });
+    return NextResponse.json({ answer: localAnswer(body), mode: "local", reason: "missing_key" });
   }
 
   try {
@@ -71,6 +71,6 @@ export async function POST(request: NextRequest) {
     const answer = data.choices?.[0]?.message?.content?.trim();
     return NextResponse.json({ answer: answer || localAnswer(body), mode: "cloud" });
   } catch {
-    return NextResponse.json({ answer: localAnswer(body), mode: "local" });
+    return NextResponse.json({ answer: localAnswer(body), mode: "local", reason: "upstream_error" });
   }
 }
