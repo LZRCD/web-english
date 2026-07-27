@@ -275,11 +275,17 @@ select:focus-visible {
   font-weight: 700;
 }
 
+.study-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  margin-right: 24px;
+}
+
 .study-picker {
   display: flex;
   gap: 7px;
-  margin-left: auto;
-  margin-right: 24px;
 }
 
 .study-picker select {
@@ -289,6 +295,31 @@ select:focus-visible {
   padding: 8px 28px 8px 11px;
   color: #59615a;
   font-size: 11px;
+}
+
+.order-switch {
+  padding: 3px;
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(238, 241, 237, 0.72);
+}
+
+.order-switch button {
+  min-width: 43px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: transparent;
+  color: #858b84;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.order-switch button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 3px 10px rgba(31, 42, 35, 0.08);
 }
 
 .daily-progress {
@@ -407,6 +438,12 @@ select:focus-visible {
   letter-spacing: 0.08em;
 }
 
+.word-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.favorite-button,
 .sound-button {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -415,6 +452,22 @@ select:focus-visible {
   border-radius: 50%;
   cursor: pointer;
   font-size: 11px;
+}
+
+.favorite-button {
+  color: #8c938c;
+  transition: 160ms ease;
+}
+
+.favorite-button:hover {
+  color: #318c66;
+  border-color: #acd9c5;
+}
+
+.favorite-button.saved {
+  color: #318c66;
+  background: var(--mint-soft);
+  border-color: #bce4d2;
 }
 
 .word-face {
@@ -844,6 +897,193 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.wordbook-heading {
+  margin-bottom: 30px;
+}
+
+.wordbook-counts {
+  display: flex;
+  gap: 10px;
+}
+
+.wordbook-counts span {
+  min-width: 88px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #8b918a;
+  font-size: 10px;
+}
+
+.wordbook-counts strong {
+  color: var(--ink);
+  font: 500 18px/1 Georgia, serif;
+}
+
+.wordbook-tabs {
+  width: fit-content;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--mist);
+}
+
+.wordbook-tabs button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 14px;
+  background: transparent;
+  color: #777e77;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.wordbook-tabs button.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 4px 13px rgba(31, 42, 35, 0.07);
+}
+
+.wordbook-tabs span {
+  margin-left: 5px;
+  color: #39936c;
+  font: 700 10px/1 "Courier New", monospace;
+}
+
+.saved-word-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.saved-word-card {
+  min-height: 118px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px 20px;
+  background:
+    linear-gradient(90deg, rgba(85, 201, 150, 0.055), transparent 22%),
+    var(--surface);
+}
+
+.saved-word-card.mistake-card {
+  background:
+    linear-gradient(90deg, rgba(238, 156, 123, 0.075), transparent 22%),
+    var(--surface);
+}
+
+.saved-word-mark {
+  width: 54px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px 15px 15px 6px;
+  background: var(--mint-soft);
+  color: #2f7f60;
+  font: 500 23px/1 Georgia, serif;
+}
+
+.mistake-card .saved-word-mark {
+  background: #f7e4dd;
+  color: #a45f4e;
+}
+
+.saved-word-copy {
+  min-width: 0;
+}
+
+.saved-word-copy > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.saved-word-copy h2 {
+  margin: 0;
+  font: 500 24px/1.1 Georgia, serif;
+}
+
+.saved-word-copy span,
+.saved-word-copy small {
+  color: #929990;
+  font-size: 9px;
+}
+
+.saved-word-copy p {
+  margin: 9px 0 7px;
+  color: #525a53;
+  font-size: 12px;
+}
+
+.saved-word-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.saved-word-actions button,
+.wordbook-empty button {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: var(--ink);
+  color: white;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.saved-word-actions button.quiet {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: #70776f;
+}
+
+.saved-word-actions button.quiet.saved {
+  border-color: #bce4d2;
+  color: #318c66;
+  background: var(--mint-soft);
+}
+
+.wordbook-empty {
+  min-height: 310px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border: 1px dashed #d8ddd7;
+  border-radius: 24px;
+  padding: 40px;
+  text-align: center;
+}
+
+.wordbook-empty > span {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cfe0d6;
+  border-radius: 50%;
+  color: #3e956e;
+  font-size: 26px;
+}
+
+.wordbook-empty h2 {
+  margin: 18px 0 7px;
+  font: 500 23px/1.2 Georgia, serif;
+}
+
+.wordbook-empty p {
+  margin: 0 0 18px;
+  color: #8c928b;
+  font-size: 11px;
+}
+
 .settings-view {
   max-width: 1000px;
 }
@@ -1200,7 +1440,7 @@ kbd {
 
   .side-rail nav {
     flex: 1;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 3px;
   }
 
@@ -1223,13 +1463,19 @@ kbd {
     padding: 0 20px;
   }
 
-  .study-picker {
+  .study-tools {
+    gap: 6px;
     margin: 0 12px 0 auto;
   }
 
   .study-picker select {
     max-width: 92px;
     padding-inline: 8px;
+  }
+
+  .order-switch button {
+    min-width: 36px;
+    padding-inline: 6px;
   }
 
   .learn-view {
@@ -1330,6 +1576,20 @@ kbd {
     padding-inline: 18px;
   }
 
+  .saved-word-card {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .saved-word-mark {
+    width: 48px;
+    height: 60px;
+  }
+
+  .saved-word-actions {
+    grid-column: 2;
+  }
+
   .shortcut-panel > div {
     flex-direction: column;
     gap: 10px;
@@ -1337,8 +1597,26 @@ kbd {
 }
 
 @media (max-width: 480px) {
+  .learn-topbar > div:first-child {
+    display: none;
+  }
+
   .topbar .eyebrow {
     display: none;
+  }
+
+  .study-tools {
+    width: 100%;
+    margin: 0;
+    justify-content: space-between;
+  }
+
+  .study-picker {
+    min-width: 0;
+  }
+
+  .study-picker select {
+    max-width: 82px;
   }
 
   .daily-progress {
@@ -1381,6 +1659,22 @@ kbd {
 
   .book-line {
     left: 93px;
+  }
+
+  .wordbook-heading {
+    display: grid;
+  }
+
+  .wordbook-counts span {
+    min-width: 80px;
+  }
+
+  .saved-word-card {
+    padding: 16px;
+  }
+
+  .saved-word-actions {
+    flex-wrap: wrap;
   }
 }
 

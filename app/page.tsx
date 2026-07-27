@@ -28,6 +28,20 @@ type Review = {
   unit?: number | string;
 };
 
+type StudyMode = "ordered" | "shuffled";
+
+type SavedWord = {
+  key: string;
+  word: Word;
+  addedAt: string;
+};
+
+type MistakeRecord = SavedWord & {
+  mistakeCount: number;
+  lastRating: number;
+  lastMistakeAt: string;
+};
+
 type RedbookData = {
   metadata: {
     title: string;
@@ -99,6 +113,27 @@ const SECTION_META = [
 const ratingLabels = ["忘记", "模糊", "认识", "熟练"];
 const ratingIntervals = ["10 分钟", "1 天", "4 天", "12 天"];
 
+function wordKey(word: Word) {
+  return word.id !== undefined
+    ? `redbook-${word.id}`
+    : `${word.section ?? "sample"}-${word.unit ?? "all"}-${word.word}`;
+}
+
+function seededScore(value: string, seed: number) {
+  let hash = seed | 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+  }
+  return hash >>> 0;
+}
+
+function shuffleWithSeed(words: Word[], seed: number) {
+  return [...words].sort(
+    (first, second) =>
+      seededScore(wordKey(first), seed) - seededScore(wordKey(second), seed),
+  );
+}
+
 function buildLocalCoach(word: Word, prompt: string) {
   if (prompt.includes("近义") || prompt.includes("区别")) {
     return `辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
@@ -114,10 +149,17 @@ function buildLocalCoach(word: Word, prompt: string) {
 
 export default function Home() {
   const [started, setStarted] = useState(false);
-  const [activeView, setActiveView] = useState<"learn" | "books" | "history" | "settings">("learn");
+  const [activeView, setActiveView] = useState<"learn" | "books" | "wordbook" | "history" | "settings">("learn");
   const [revealed, setRevealed] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [favorites, setFavorites] = useState<SavedWord[]>([]);
+  const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
+  const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
+  const [shuffleSeed, setShuffleSeed] = useState(1);
+  const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes">("favorites");
+  const [pendingWordKey, setPendingWordKey] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiAnswer, setAiAnswer] = useState("我会用语境、联想和小测验帮你真正记住这个词。");
@@ -129,13 +171,19 @@ export default function Home() {
   const [selectedSection, setSelectedSection] = useState("必考词");
   const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
 
-  const studyWords = useMemo(() => {
+  const filteredStudyWords = useMemo(() => {
     if (!redbookWords.length) return WORDS;
     const sectionWords = redbookWords.filter((word) => word.section === selectedSection);
     if (selectedUnit === "all") return sectionWords;
     return sectionWords.filter((word) => String(word.unit) === String(selectedUnit));
   }, [redbookWords, selectedSection, selectedUnit]);
+  const studyWords = useMemo(
+    () => studyMode === "shuffled" ? shuffleWithSeed(filteredStudyWords, shuffleSeed) : filteredStudyWords,
+    [filteredStudyWords, shuffleSeed, studyMode],
+  );
   const current = studyWords[wordIndex % Math.max(1, studyWords.length)] ?? WORDS[0];
+  const currentKey = wordKey(current);
+  const isFavorite = favorites.some((item) => item.key === currentKey);
   const todayDone = Math.min(reviews.length, dailyGoal);
   const progress = Math.round((todayDone / dailyGoal) * 100);
   const recentReviews = useMemo(() => [...reviews].reverse().slice(0, 8), [reviews]);
@@ -155,19 +203,28 @@ export default function Home() {
   const currentLocation = current.level ?? `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
 
   useEffect(() => {
-    const saved = localStorage.getItem("wordloop-state");
-    if (saved) {
-      try {
-        const state = JSON.parse(saved);
-        setReviews(state.reviews ?? []);
-        setWordIndex(state.wordIndex ?? 0);
-        setStarted(state.started ?? false);
-        setDailyGoal(state.dailyGoal ?? 20);
-        setSoundOn(state.soundOn ?? true);
-      } catch {
-        localStorage.removeItem("wordloop-state");
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const saved = localStorage.getItem("wordloop-state");
+      if (saved) {
+        try {
+          const state = JSON.parse(saved);
+          setReviews(state.reviews ?? []);
+          setWordIndex(state.wordIndex ?? 0);
+          setStarted(state.started ?? false);
+          setDailyGoal(state.dailyGoal ?? 20);
+          setSoundOn(state.soundOn ?? true);
+          setFavorites(Array.isArray(state.favorites) ? state.favorites : []);
+          setMistakes(Array.isArray(state.mistakes) ? state.mistakes : []);
+          setStudyMode(state.studyMode === "shuffled" ? "shuffled" : "ordered");
+          setShuffleSeed(Number.isFinite(state.shuffleSeed) ? state.shuffleSeed : 1);
+        } catch {
+          localStorage.removeItem("wordloop-state");
+        }
       }
-    }
+      setHydrated(true);
+    });
     fetch("/data/redbook.json")
       .then((response) => {
         if (!response.ok) throw new Error("redbook data missing");
@@ -175,11 +232,34 @@ export default function Home() {
       })
       .then((data) => setRedbookWords(data.words))
       .catch(() => setToast("未找到红宝书数据，当前使用示例词表"));
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("wordloop-state", JSON.stringify({ reviews, wordIndex, started, dailyGoal, soundOn }));
-  }, [reviews, wordIndex, started, dailyGoal, soundOn]);
+    if (!hydrated) return;
+    localStorage.setItem("wordloop-state", JSON.stringify({
+      reviews,
+      wordIndex,
+      started,
+      dailyGoal,
+      soundOn,
+      favorites,
+      mistakes,
+      studyMode,
+      shuffleSeed,
+    }));
+  }, [dailyGoal, favorites, hydrated, mistakes, reviews, shuffleSeed, soundOn, started, studyMode, wordIndex]);
+
+  useEffect(() => {
+    if (!pendingWordKey || !studyWords.length) return;
+    const nextIndex = studyWords.findIndex((word) => wordKey(word) === pendingWordKey);
+    queueMicrotask(() => {
+      if (nextIndex >= 0) setWordIndex(nextIndex);
+      setPendingWordKey("");
+    });
+  }, [pendingWordKey, studyWords]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -190,6 +270,7 @@ export default function Home() {
         else if (activeView === "learn") setRevealed(true);
       }
       if (event.key.toLowerCase() === "a" && started) setAiOpen((value) => !value);
+      if (event.key.toLowerCase() === "f" && started && activeView === "learn") toggleFavorite();
       if (revealed && ["1", "2", "3", "4"].includes(event.key)) rateWord(Number(event.key) - 1);
     };
     window.addEventListener("keydown", onKey);
@@ -212,6 +293,21 @@ export default function Home() {
     const days = [0, 1, 4, 12][rating];
     const next = new Date();
     next.setDate(next.getDate() + days);
+    if (rating <= 1) {
+      const now = new Date().toISOString();
+      setMistakes((items) => {
+        const previous = items.find((item) => item.key === currentKey);
+        const record: MistakeRecord = {
+          key: currentKey,
+          word: current,
+          addedAt: previous?.addedAt ?? now,
+          mistakeCount: (previous?.mistakeCount ?? 0) + 1,
+          lastRating: rating,
+          lastMistakeAt: now,
+        };
+        return [record, ...items.filter((item) => item.key !== currentKey)];
+      });
+    }
     setReviews((items) => [
       ...items,
       {
@@ -229,6 +325,35 @@ export default function Home() {
     setAiAnswer("我会用语境、联想和小测验帮你真正记住这个词。");
     if (soundOn) setTimeout(speakNext, 80);
     setTimeout(() => setToast(""), 1800);
+  }
+
+  function changeStudyMode(mode: StudyMode) {
+    setStudyMode(mode);
+    if (mode === "shuffled") setShuffleSeed(Date.now());
+    setWordIndex(0);
+    setRevealed(false);
+    setToast(mode === "shuffled" ? "已打乱当前单元" : "已恢复红宝书顺序");
+    setTimeout(() => setToast(""), 1600);
+  }
+
+  function toggleFavorite(word: Word = current) {
+    const key = wordKey(word);
+    const exists = favorites.some((item) => item.key === key);
+    setFavorites((items) => exists
+      ? items.filter((item) => item.key !== key)
+      : [{ key, word, addedAt: new Date().toISOString() }, ...items]);
+    setToast(exists ? "已移出我的词本" : "已加入我的词本");
+    setTimeout(() => setToast(""), 1600);
+  }
+
+  function focusSavedWord(word: Word) {
+    const section = word.section ?? selectedSection;
+    const unit = word.unit ?? "all";
+    setSelectedSection(section);
+    setSelectedUnit(unit);
+    setPendingWordKey(wordKey(word));
+    setRevealed(false);
+    setActiveView("learn");
   }
 
   function speakNext() {
@@ -270,6 +395,7 @@ export default function Home() {
   const navigation = [
     { id: "learn", label: "学习", mark: "⌁" },
     { id: "books", label: "词书", mark: "□" },
+    { id: "wordbook", label: "词本", mark: "◇" },
     { id: "history", label: "轨迹", mark: "↗" },
     { id: "settings", label: "设置", mark: "○" },
   ] as const;
@@ -313,38 +439,58 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        <header className="topbar">
+        <header className={activeView === "learn" ? "topbar learn-topbar" : "topbar"}>
           <div>
             <p className="eyebrow">{activeView === "learn" ? "2027 红宝书伴学" : "词环 WordLoop"}</p>
             <p className="topbar-title">{activeView === "learn" ? `${selectedSection} · ${selectedUnit === "all" ? "全部" : `Unit ${selectedUnit}`}` : navigation.find((item) => item.id === activeView)?.label}</p>
           </div>
-          {activeView === "learn" && redbookWords.length > 0 && (
-            <div className="study-picker">
-              <select
-                value={selectedSection}
-                aria-label="选择红宝书词汇分组"
-                onChange={(event) => {
-                  const section = event.target.value;
-                  setSelectedSection(section);
-                  setSelectedUnit(section === "超纲词" ? "A" : 1);
-                  setWordIndex(0);
-                  setRevealed(false);
-                }}
-              >
-                {SECTION_META.map((section) => <option key={section.name}>{section.name}</option>)}
-              </select>
-              <select
-                value={String(selectedUnit)}
-                aria-label="选择红宝书单元"
-                onChange={(event) => {
-                  setSelectedUnit(event.target.value);
-                  setWordIndex(0);
-                  setRevealed(false);
-                }}
-              >
-                <option value="all">全部</option>
-                {availableUnits.map((unit) => <option value={unit} key={unit}>Unit {unit}</option>)}
-              </select>
+          {activeView === "learn" && (
+            <div className="study-tools">
+              {redbookWords.length > 0 && (
+                <div className="study-picker">
+                  <select
+                    value={selectedSection}
+                    aria-label="选择红宝书词汇分组"
+                    onChange={(event) => {
+                      const section = event.target.value;
+                      setSelectedSection(section);
+                      setSelectedUnit(section === "超纲词" ? "A" : 1);
+                      setWordIndex(0);
+                      setRevealed(false);
+                    }}
+                  >
+                    {SECTION_META.map((section) => <option key={section.name}>{section.name}</option>)}
+                  </select>
+                  <select
+                    value={String(selectedUnit)}
+                    aria-label="选择红宝书单元"
+                    onChange={(event) => {
+                      setSelectedUnit(event.target.value);
+                      setWordIndex(0);
+                      setRevealed(false);
+                    }}
+                  >
+                    <option value="all">全部</option>
+                    {availableUnits.map((unit) => <option value={unit} key={unit}>Unit {unit}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="order-switch" aria-label="学习顺序">
+                <button
+                  className={studyMode === "ordered" ? "active" : ""}
+                  onClick={() => changeStudyMode("ordered")}
+                  aria-pressed={studyMode === "ordered"}
+                >
+                  顺序
+                </button>
+                <button
+                  className={studyMode === "shuffled" ? "active" : ""}
+                  onClick={() => changeStudyMode("shuffled")}
+                  aria-pressed={studyMode === "shuffled"}
+                >
+                  乱序
+                </button>
+              </div>
             </div>
           )}
           <div className="daily-progress" aria-label={`今日完成 ${todayDone} 个，共 ${dailyGoal} 个`}>
@@ -361,7 +507,18 @@ export default function Home() {
               <article className={revealed ? "word-card revealed" : "word-card"}>
                 <div className="word-heading">
                   <p className="word-count">{String((wordIndex % dailyGoal) + 1).padStart(2, "0")} / {dailyGoal}</p>
-                  <button className="sound-button" onClick={speak} aria-label={`播放 ${current.word} 的发音`}>◖))</button>
+                  <div className="word-actions">
+                    <button
+                      className={isFavorite ? "favorite-button saved" : "favorite-button"}
+                      onClick={() => toggleFavorite()}
+                      aria-label={isFavorite ? `将 ${current.word} 移出词本` : `将 ${current.word} 加入词本`}
+                      aria-pressed={isFavorite}
+                      title={isFavorite ? "移出词本" : "加入词本"}
+                    >
+                      {isFavorite ? "◆" : "◇"}
+                    </button>
+                    <button className="sound-button" onClick={speak} aria-label={`播放 ${current.word} 的发音`}>◖))</button>
+                  </div>
                 </div>
                 <button className="word-face" onClick={() => setRevealed(true)} aria-label="显示单词释义">
                   <h1>{current.word}</h1>
@@ -443,6 +600,91 @@ export default function Home() {
           </div>
         )}
 
+        {activeView === "wordbook" && (
+          <div className="content-view">
+            <div className="section-heading wordbook-heading">
+              <div>
+                <p className="eyebrow">PERSONAL WORD LEDGER</p>
+                <h1>把难词留在手边</h1>
+              </div>
+              <div className="wordbook-counts">
+                <span><strong>{favorites.length}</strong> 个收藏</span>
+                <span><strong>{mistakes.length}</strong> 个错词</span>
+              </div>
+            </div>
+            <div className="wordbook-tabs" role="tablist" aria-label="词本分类">
+              <button
+                role="tab"
+                aria-selected={wordbookTab === "favorites"}
+                className={wordbookTab === "favorites" ? "active" : ""}
+                onClick={() => setWordbookTab("favorites")}
+              >
+                我的词本 <span>{favorites.length}</span>
+              </button>
+              <button
+                role="tab"
+                aria-selected={wordbookTab === "mistakes"}
+                className={wordbookTab === "mistakes" ? "active" : ""}
+                onClick={() => setWordbookTab("mistakes")}
+              >
+                错词记录 <span>{mistakes.length}</span>
+              </button>
+            </div>
+            <div className="saved-word-grid">
+              {wordbookTab === "favorites" && favorites.map((item) => (
+                <article className="saved-word-card" key={item.key}>
+                  <div className="saved-word-mark">{item.word.word.slice(0, 1).toUpperCase()}</div>
+                  <div className="saved-word-copy">
+                    <div><h2>{item.word.word}</h2><span>{item.word.phonetic ?? item.word.part ?? "红宝书"}</span></div>
+                    <p>{item.word.meaning}</p>
+                    <small>{item.word.section ?? "示例词表"} · Unit {item.word.unit ?? "—"}</small>
+                  </div>
+                  <div className="saved-word-actions">
+                    <button onClick={() => focusSavedWord(item.word)}>去复习</button>
+                    <button className="quiet" onClick={() => toggleFavorite(item.word)}>移除</button>
+                  </div>
+                </article>
+              ))}
+              {wordbookTab === "mistakes" && mistakes.map((item) => (
+                <article className="saved-word-card mistake-card" key={item.key}>
+                  <div className="saved-word-mark">{item.mistakeCount}</div>
+                  <div className="saved-word-copy">
+                    <div><h2>{item.word.word}</h2><span>{ratingLabels[item.lastRating]}</span></div>
+                    <p>{item.word.meaning}</p>
+                    <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "示例词表"} Unit {item.word.unit ?? "—"}</small>
+                  </div>
+                  <div className="saved-word-actions">
+                    <button onClick={() => focusSavedWord(item.word)}>重新学习</button>
+                    <button
+                      className={favorites.some((favorite) => favorite.key === item.key) ? "quiet saved" : "quiet"}
+                      onClick={() => toggleFavorite(item.word)}
+                    >
+                      {favorites.some((favorite) => favorite.key === item.key) ? "已收藏" : "加入词本"}
+                    </button>
+                    <button className="quiet" onClick={() => setMistakes((items) => items.filter((record) => record.key !== item.key))}>已掌握</button>
+                  </div>
+                </article>
+              ))}
+              {wordbookTab === "favorites" && favorites.length === 0 && (
+                <div className="wordbook-empty">
+                  <span>◇</span>
+                  <h2>词本还是空的</h2>
+                  <p>学习时点击单词卡右上角的菱形，即可收藏。</p>
+                  <button onClick={() => setActiveView("learn")}>去学习</button>
+                </div>
+              )}
+              {wordbookTab === "mistakes" && mistakes.length === 0 && (
+                <div className="wordbook-empty">
+                  <span>✓</span>
+                  <h2>暂时没有错词</h2>
+                  <p>评分为“忘记”或“模糊”的单词会自动记录在这里。</p>
+                  <button onClick={() => setActiveView("learn")}>继续学习</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeView === "history" && (
           <div className="content-view">
             <div className="section-heading">
@@ -485,16 +727,23 @@ export default function Home() {
                 <input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />
               </label>
               <label>
+                <span><strong>学习顺序</strong><small>乱序会重新打乱当前分组或单元</small></span>
+                <select value={studyMode} onChange={(event) => changeStudyMode(event.target.value as StudyMode)}>
+                  <option value="ordered">红宝书顺序</option>
+                  <option value="shuffled">乱序学习</option>
+                </select>
+              </label>
+              <label>
                 <span><strong>AI 记忆教练</strong><small>已启用；未配置云端模型时自动使用本地模式</small></span>
                 <span className="status-pill">DeepSeek V4</span>
               </label>
-              <button className="reset-button" onClick={() => { setReviews([]); setWordIndex(0); setToast("学习记录已清空"); }}>
+              <button className="reset-button" onClick={() => { setReviews([]); setMistakes([]); setWordIndex(0); setToast("学习与错词记录已清空，收藏词本已保留"); }}>
                 清空本机学习记录
               </button>
             </div>
             <div className="shortcut-panel">
               <h2>快捷键</h2>
-              <div><span><kbd>Space</kbd> 查看释义</span><span><kbd>1–4</kbd> 评估记忆</span><span><kbd>A</kbd> AI 教练</span></div>
+              <div><span><kbd>Space</kbd> 查看释义</span><span><kbd>1–4</kbd> 评估记忆</span><span><kbd>F</kbd> 收藏单词</span><span><kbd>A</kbd> AI 教练</span></div>
             </div>
           </div>
         )}
