@@ -8,6 +8,8 @@ type CoachRequest = {
     translation?: string;
     root?: string;
     collocation?: string;
+    section?: string;
+    unit?: number | string;
   };
   prompt?: string;
 };
@@ -15,7 +17,7 @@ type CoachRequest = {
 function localAnswer(body: CoachRequest) {
   const word = body.word?.word ?? "这个单词";
   const meaning = body.word?.meaning ?? "当前含义";
-  const sentence = body.word?.sentence ?? "";
+  const sentence = body.word?.sentence ?? "请结合考研阅读语境造句";
   const prompt = body.prompt ?? "";
 
   if (prompt.includes("题") || prompt.includes("测")) {
@@ -32,9 +34,9 @@ function localAnswer(body: CoachRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as CoachRequest;
-  const apiKey = process.env.OPENAI_API_KEY;
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-  const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
+  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
+  const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
 
   if (!apiKey) {
     return NextResponse.json({ answer: localAnswer(body), mode: "local" });
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: "你是一名简洁、准确的中英双语词汇教练。围绕当前单词，用真实语境、词源联想和主动回忆帮助中文母语学习者。回答不超过180字，不堆砌知识。",
+            content: "你是一名简洁、准确的考研英语词汇教练。围绕2027考研英语红宝书当前单词，用考研阅读语境、熟词僻义、词根联想、近义词辨析和主动回忆帮助中文母语学习者。回答不超过180字，不照抄教材，不堆砌知识。",
           },
           {
             role: "user",

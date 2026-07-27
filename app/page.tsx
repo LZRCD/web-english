@@ -4,15 +4,19 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Word = {
   word: string;
-  phonetic: string;
-  part: string;
+  phonetic?: string;
+  part?: string;
   meaning: string;
-  sentence: string;
-  translation: string;
-  collocation: string;
-  root: string;
-  family: string;
-  level: string;
+  sentence?: string;
+  translation?: string;
+  collocation?: string;
+  root?: string;
+  family?: string;
+  level?: string;
+  id?: number;
+  section?: string;
+  unit?: number | string;
+  sourcePage?: number;
 };
 
 type Review = {
@@ -20,6 +24,17 @@ type Review = {
   rating: number;
   nextReview: string;
   reviewedAt: string;
+  section?: string;
+  unit?: number | string;
+};
+
+type RedbookData = {
+  metadata: {
+    title: string;
+    total: number;
+    sectionCounts: Record<string, number>;
+  };
+  words: Word[];
 };
 
 const WORDS: Word[] = [
@@ -75,10 +90,10 @@ const WORDS: Word[] = [
   { word: "nuance", phonetic: "/ˈnjuːɑːns/", part: "n.", meaning: "细微差别；微妙之处", sentence: "Examples help learners notice shades of nuance.", translation: "例句帮助学习者注意细微的语义差别。", collocation: "a subtle nuance", root: "nue 云 → 阴影层次", family: "nuanced · nuances", level: "GRE" },
 ];
 
-const BOOKS = [
-  { name: "核心进阶词汇", detail: "CET-4 · CET-6", total: 50, progress: 24, color: "mint" },
-  { name: "雅思高频语境", detail: "IELTS Academic", total: 36, progress: 8, color: "blue" },
-  { name: "我的生词本", detail: "阅读中收集", total: 12, progress: 3, color: "peach" },
+const SECTION_META = [
+  { name: "必考词", detail: "26 个单元", total: 1856, color: "mint", marker: "必" },
+  { name: "基础词", detail: "31 个单元", total: 3680, color: "blue", marker: "基" },
+  { name: "超纲词", detail: "按首字母编排", total: 1014, color: "peach", marker: "超" },
 ];
 
 const ratingLabels = ["忘记", "模糊", "认识", "熟练"];
@@ -86,7 +101,7 @@ const ratingIntervals = ["10 分钟", "1 天", "4 天", "12 天"];
 
 function buildLocalCoach(word: Word, prompt: string) {
   if (prompt.includes("近义") || prompt.includes("区别")) {
-    return `辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。放在句子 “${word.sentence}” 中，语气比普通表达更准确。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
+    return `辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
   }
   if (prompt.includes("题") || prompt.includes("测")) {
     return `小测验：Small habits can ____ long-term progress.\nA. disrupt  B. sustain  C. diminish\n\n先在脑中补全，再告诉我你的答案。`;
@@ -94,7 +109,7 @@ function buildLocalCoach(word: Word, prompt: string) {
   if (prompt.includes("例句") || prompt.includes("语境")) {
     return `给你一个学习语境：When you review ${word.word} in several meaningful situations, the memory becomes easier to retrieve. 先读懂整句，再回想 ${word.word} 的核心含义。`;
   }
-  return `把 ${word.word} 记成一幅动作画面：${word.root}。核心不是死记“${word.meaning}”，而是把它放回这句真实表达：${word.sentence}`;
+  return `把 ${word.word} 记成一幅动作画面：${word.root ?? "先抓住词形和核心词义"}。核心不是死记“${word.meaning}”，而是主动造一个与你有关的句子。`;
 }
 
 export default function Home() {
@@ -110,11 +125,34 @@ export default function Home() {
   const [soundOn, setSoundOn] = useState(true);
   const [dailyGoal, setDailyGoal] = useState(20);
   const [toast, setToast] = useState("");
+  const [redbookWords, setRedbookWords] = useState<Word[]>([]);
+  const [selectedSection, setSelectedSection] = useState("必考词");
+  const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
 
-  const current = WORDS[wordIndex % WORDS.length];
+  const studyWords = useMemo(() => {
+    if (!redbookWords.length) return WORDS;
+    const sectionWords = redbookWords.filter((word) => word.section === selectedSection);
+    if (selectedUnit === "all") return sectionWords;
+    return sectionWords.filter((word) => String(word.unit) === String(selectedUnit));
+  }, [redbookWords, selectedSection, selectedUnit]);
+  const current = studyWords[wordIndex % Math.max(1, studyWords.length)] ?? WORDS[0];
   const todayDone = Math.min(reviews.length, dailyGoal);
   const progress = Math.round((todayDone / dailyGoal) * 100);
   const recentReviews = useMemo(() => [...reviews].reverse().slice(0, 8), [reviews]);
+  const availableUnits = useMemo(() => {
+    const values = redbookWords
+      .filter((word) => word.section === selectedSection)
+      .map((word) => word.unit)
+      .filter((value): value is number | string => value !== undefined);
+    return [...new Set(values.map(String))].sort((a, b) => {
+      const aNumber = Number(a);
+      const bNumber = Number(b);
+      if (!Number.isNaN(aNumber) && !Number.isNaN(bNumber)) return aNumber - bNumber;
+      return a.localeCompare(b);
+    });
+  }, [redbookWords, selectedSection]);
+  const currentPart = current.part ?? current.meaning.match(/^(?:adj|adv|n|v|vi|vt|prep|conj|pron|num|aux)\./i)?.[0] ?? "红宝书";
+  const currentLocation = current.level ?? `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
 
   useEffect(() => {
     const saved = localStorage.getItem("wordloop-state");
@@ -130,6 +168,13 @@ export default function Home() {
         localStorage.removeItem("wordloop-state");
       }
     }
+    fetch("/data/redbook.json")
+      .then((response) => {
+        if (!response.ok) throw new Error("redbook data missing");
+        return response.json() as Promise<RedbookData>;
+      })
+      .then((data) => setRedbookWords(data.words))
+      .catch(() => setToast("未找到红宝书数据，当前使用示例词表"));
   }, []);
 
   useEffect(() => {
@@ -174,11 +219,13 @@ export default function Home() {
         rating,
         nextReview: rating === 0 ? "今天稍后" : `${days} 天后`,
         reviewedAt: new Date().toISOString(),
+        section: current.section,
+        unit: current.unit,
       },
     ]);
     setToast(`${ratingLabels[rating]} · ${ratingIntervals[rating]}后再见`);
     setRevealed(false);
-    setWordIndex((index) => (index + 1) % WORDS.length);
+    setWordIndex((index) => (index + 1) % Math.max(1, studyWords.length));
     setAiAnswer("我会用语境、联想和小测验帮你真正记住这个词。");
     if (soundOn) setTimeout(speakNext, 80);
     setTimeout(() => setToast(""), 1800);
@@ -186,7 +233,7 @@ export default function Home() {
 
   function speakNext() {
     if (!("speechSynthesis" in window)) return;
-    const nextWord = WORDS[(wordIndex + 1) % WORDS.length];
+    const nextWord = studyWords[(wordIndex + 1) % Math.max(1, studyWords.length)] ?? WORDS[0];
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(nextWord.word);
     utterance.lang = "en-US";
@@ -268,9 +315,38 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">今日记忆轨道</p>
-            <p className="topbar-title">{activeView === "learn" ? "核心进阶词汇" : navigation.find((item) => item.id === activeView)?.label}</p>
+            <p className="eyebrow">{activeView === "learn" ? "2027 红宝书伴学" : "词环 WordLoop"}</p>
+            <p className="topbar-title">{activeView === "learn" ? `${selectedSection} · ${selectedUnit === "all" ? "全部" : `Unit ${selectedUnit}`}` : navigation.find((item) => item.id === activeView)?.label}</p>
           </div>
+          {activeView === "learn" && redbookWords.length > 0 && (
+            <div className="study-picker">
+              <select
+                value={selectedSection}
+                aria-label="选择红宝书词汇分组"
+                onChange={(event) => {
+                  const section = event.target.value;
+                  setSelectedSection(section);
+                  setSelectedUnit(section === "超纲词" ? "A" : 1);
+                  setWordIndex(0);
+                  setRevealed(false);
+                }}
+              >
+                {SECTION_META.map((section) => <option key={section.name}>{section.name}</option>)}
+              </select>
+              <select
+                value={String(selectedUnit)}
+                aria-label="选择红宝书单元"
+                onChange={(event) => {
+                  setSelectedUnit(event.target.value);
+                  setWordIndex(0);
+                  setRevealed(false);
+                }}
+              >
+                <option value="all">全部</option>
+                {availableUnits.map((unit) => <option value={unit} key={unit}>Unit {unit}</option>)}
+              </select>
+            </div>
+          )}
           <div className="daily-progress" aria-label={`今日完成 ${todayDone} 个，共 ${dailyGoal} 个`}>
             <span>{todayDone}</span>
             <i />
@@ -281,7 +357,7 @@ export default function Home() {
         {activeView === "learn" && (
           <div className="learn-view">
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
-              <div className="orbit-label orbit-label-top">NEW · {current.level}</div>
+              <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <article className={revealed ? "word-card revealed" : "word-card"}>
                 <div className="word-heading">
                   <p className="word-count">{String((wordIndex % dailyGoal) + 1).padStart(2, "0")} / {dailyGoal}</p>
@@ -289,24 +365,31 @@ export default function Home() {
                 </div>
                 <button className="word-face" onClick={() => setRevealed(true)} aria-label="显示单词释义">
                   <h1>{current.word}</h1>
-                  <p>{current.phonetic}</p>
+                  <p>{current.phonetic ?? `NO. ${String(current.id ?? wordIndex + 1).padStart(4, "0")}`}</p>
                   {!revealed && <span>先在脑中回忆，再点击查看</span>}
                 </button>
 
                 {revealed && (
                   <div className="meaning-panel">
                     <div className="meaning-main">
-                      <span>{current.part}</span>
+                      <span>{currentPart}</span>
                       <strong>{current.meaning}</strong>
                     </div>
-                    <div className="context-block">
-                      <p className="context-sentence">{current.sentence}</p>
-                      <p className="context-translation">{current.translation}</p>
-                    </div>
+                    {current.sentence ? (
+                      <div className="context-block">
+                        <p className="context-sentence">{current.sentence}</p>
+                        <p className="context-translation">{current.translation}</p>
+                      </div>
+                    ) : (
+                      <button className="context-block context-ai" onClick={() => { setAiOpen(true); askCoach("生成一个考研真题风格语境"); }}>
+                        <span>AI 语境</span>
+                        <p>生成一个考研阅读风格的例句与辨析</p>
+                      </button>
+                    )}
                     <div className="word-details">
-                      <div><span>常用搭配</span><strong>{current.collocation}</strong></div>
-                      <div><span>词源联想</span><strong>{current.root}</strong></div>
-                      <div><span>词族网络</span><strong>{current.family}</strong></div>
+                      <div><span>所在分组</span><strong>{current.section ?? selectedSection} · Unit {current.unit ?? selectedUnit}</strong></div>
+                      <div><span>词汇序号</span><strong>NO. {current.id ?? wordIndex + 1}</strong></div>
+                      <div><span>词表来源</span><strong>{current.sourcePage ? `正序中文词表第 ${current.sourcePage} 页` : current.family}</strong></div>
                     </div>
                   </div>
                 )}
@@ -329,24 +412,32 @@ export default function Home() {
         {activeView === "books" && (
           <div className="content-view">
             <div className="section-heading">
-              <div><p className="eyebrow">选择学习内容</p><h1>让词汇进入真实语境</h1></div>
-              <button className="primary-button">＋ 导入单词</button>
+              <div><p className="eyebrow">2027 考研英语红宝书</p><h1>按红宝书顺序开始</h1></div>
+              <span className="resource-badge">本地资源 · 6550 词</span>
             </div>
             <div className="book-grid">
-              {BOOKS.map((book) => (
-                <button className="book-card" key={book.name} onClick={() => setActiveView("learn")}>
-                  <span className={`book-swatch ${book.color}`}>{book.name.slice(0, 1)}</span>
+              {SECTION_META.map((book) => {
+                const learned = new Set(reviews.filter((review) => review.section === book.name).map((review) => review.word)).size;
+                return (
+                <button className="book-card" key={book.name} onClick={() => {
+                  setSelectedSection(book.name);
+                  setSelectedUnit(book.name === "超纲词" ? "A" : 1);
+                  setWordIndex(0);
+                  setRevealed(false);
+                  setActiveView("learn");
+                }}>
+                  <span className={`book-swatch ${book.color}`}>{book.marker}</span>
                   <div>
                     <small>{book.detail}</small>
                     <h2>{book.name}</h2>
-                    <p>{book.progress} 个已形成记忆 · 共 {book.total} 词</p>
+                    <p>{learned} 个已学习 · 共 {book.total} 词</p>
                   </div>
-                  <div className="book-line"><i style={{ width: `${(book.progress / book.total) * 100}%` }} /></div>
+                  <div className="book-line"><i style={{ width: `${(learned / book.total) * 100}%` }} /></div>
                 </button>
-              ))}
+              )})}
               <button className="book-card empty-book">
-                <span>＋</span>
-                <p>创建新的语境词书</p>
+                <span>6550</span>
+                <p>完整收录正序词表，释义与书中中文词表逐项对应</p>
               </button>
             </div>
           </div>
@@ -395,7 +486,7 @@ export default function Home() {
               </label>
               <label>
                 <span><strong>AI 记忆教练</strong><small>已启用；未配置云端模型时自动使用本地模式</small></span>
-                <span className="status-pill">可用</span>
+                <span className="status-pill">DeepSeek V4</span>
               </label>
               <button className="reset-button" onClick={() => { setReviews([]); setWordIndex(0); setToast("学习记录已清空"); }}>
                 清空本机学习记录
