@@ -70,7 +70,24 @@ import {
 import {
   loadStoredState,
   saveStoredState,
+  saveStoredStateImmediate,
 } from "../lib/storage";
+import {
+  buildLearningInsights,
+  buildReviewForecast,
+} from "../lib/insights";
+import {
+  buildLocalCoach,
+  cleanSelectedText,
+  clozeSentence,
+  formatDictionaryPhonetic,
+  formatRecallTime,
+  maskWord,
+  seededScore,
+  shuffleWithSeed,
+  splitSenseItems,
+  wordKey,
+} from "../lib/word-utils";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ActivityRange = 140 | 182 | 365;
@@ -162,33 +179,6 @@ const REDBOOK_PLACEHOLDER: Word = {
 const LOOKUP_CACHE_KEY = "wordloop-selection-lookups-v1";
 const DICTIONARY_BASE_PATH = "/data/dictionary";
 
-function cleanSelectedText(value: string) {
-  return value
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^[\s"'“”‘’()[\]{}.,，。;；:：!?！？]+/, "")
-    .replace(/[\s"'“”‘’()[\]{}.,，。;；:：!?！？]+$/, "")
-    .slice(0, 160);
-}
-
-function splitSenseItems(value: string) {
-  const items: string[] = [];
-  let current = "";
-  let depth = 0;
-  for (const character of value) {
-    if ("([{（【".includes(character)) depth += 1;
-    if (")]}）】".includes(character)) depth = Math.max(0, depth - 1);
-    if (depth === 0 && /[;；,，]/.test(character)) {
-      if (current.trim()) items.push(current.trim());
-      current = "";
-    } else {
-      current += character;
-    }
-  }
-  if (current.trim()) items.push(current.trim());
-  return items;
-}
-
 function readLookupCache() {
   try {
     const parsed = JSON.parse(localStorage.getItem(LOOKUP_CACHE_KEY) ?? "{}") as unknown;
@@ -197,65 +187,6 @@ function readLookupCache() {
   } catch {
     return {};
   }
-}
-
-function formatDictionaryPhonetic(value: string) {
-  const phonetic = value.trim();
-  if (!phonetic) return "";
-  return /^[\/\[].*[\/\]]$/.test(phonetic) ? phonetic : `/${phonetic}/`;
-}
-
-function wordKey(word: Word) {
-  return word.id !== undefined
-    ? `redbook-${word.id}`
-    : `${word.section ?? "redbook"}-${word.unit ?? "all"}-${word.word}`;
-}
-
-function seededScore(value: string, seed: number) {
-  let hash = seed | 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
-  }
-  return hash >>> 0;
-}
-
-function shuffleWithSeed(words: Word[], seed: number) {
-  return [...words].sort(
-    (first, second) =>
-      seededScore(wordKey(first), seed) - seededScore(wordKey(second), seed),
-  );
-}
-
-function formatRecallTime(recallMs: number) {
-  const seconds = recallMs / 1000;
-  return seconds < 10 ? `${seconds.toFixed(1)} 秒` : `${Math.round(seconds)} 秒`;
-}
-
-function maskWord(value: string) {
-  return value.replace(/\b([a-z])([a-z]*)\b/gi, (_, first: string, rest: string) =>
-    `${first}${"·".repeat(rest.length)}`);
-}
-
-function clozeSentence(sentence: string, word: string) {
-  const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const cloze = sentence.replace(new RegExp(escapedWord, "gi"), "＿＿＿＿");
-  return cloze === sentence ? "" : cloze;
-}
-
-function buildLocalCoach(word: Word, prompt: string) {
-  const relationHint = word.relation
-    ? `词族提示：${word.relation.label}。${word.relation.note}`
-    : "";
-  if (prompt.includes("近义") || prompt.includes("区别")) {
-    return `${relationHint}辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
-  }
-  if (prompt.includes("题") || prompt.includes("测")) {
-    return `${relationHint}主动回忆：先遮住释义，用 ${word.word} 造一个与你今天经历有关的英文句子。再回答：它在红宝书中的核心含义“${word.meaning.split("；")[0]}”是什么？`;
-  }
-  if (prompt.includes("例句") || prompt.includes("语境")) {
-    return `${relationHint}给你一个学习语境：When you review ${word.word} in several meaningful situations, the memory becomes easier to retrieve. 先读懂整句，再回想 ${word.word} 的核心含义。`;
-  }
-  return `${relationHint}把 ${word.word} 记成一幅动作画面：${word.root ?? "先抓住词形和核心词义"}。核心不是死记“${word.meaning}”，而是主动造一个与你有关的句子。`;
 }
 
 export default function Home() {
@@ -400,6 +331,14 @@ export default function Home() {
   const stats = useMemo(
     () => learningStats(reviews, wordProgress, new Date(clock)),
     [clock, reviews, wordProgress],
+  );
+  const insights = useMemo(
+    () => buildLearningInsights(reviews, new Date(clock), 7),
+    [clock, reviews],
+  );
+  const reviewForecast = useMemo(
+    () => buildReviewForecast(wordProgress, new Date(clock), 7),
+    [clock, wordProgress],
   );
   const stubbornWords = useMemo(
     () => ({
@@ -748,7 +687,11 @@ export default function Home() {
       }
       saveStoredState(persistedState)
         .then(() => localStorage.removeItem(STORAGE_KEY))
-        .catch(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState)));
+        .catch(() => {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
+          setToast("本地存储写入失败，已降级到浏览器缓存，建议导出备份");
+          setTimeout(() => setToast(""), 4000);
+        });
     }, 150);
     return () => window.clearTimeout(timer);
   }, [hydrated, persistedState]);
@@ -1003,11 +946,21 @@ export default function Home() {
         setAutomaticBackups(items);
       }
       applyStoredState(state);
-      setToast(`已导入 ${state.reviews.length} 条评分记录`);
+      if ("indexedDB" in window) {
+        try {
+          await saveStoredStateImmediate(state);
+          setToast(`已导入 ${state.reviews.length} 条评分记录，数据已保存`);
+        } catch {
+          setToast("导入成功但本地存储写入失败，请勿关闭页面，数据将在稍后自动重试");
+        }
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        setToast(`已导入 ${state.reviews.length} 条评分记录`);
+      }
     } catch (error) {
       setToast(error instanceof Error ? error.message : "备份导入失败");
     }
-    setTimeout(() => setToast(""), 2400);
+    setTimeout(() => setToast(""), 4000);
   }
 
   async function restoreBackup(id: string) {
@@ -2311,6 +2264,63 @@ export default function Home() {
                 <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
               </button>
             </div>
+            <section className="insights-panel" aria-labelledby="insights-title">
+              <div className="panel-title">
+                <h2 id="insights-title">学习趋势</h2>
+                <small>近 7 天</small>
+              </div>
+              <div className="insights-grid">
+                <div className="insight-card">
+                  <span>成功率</span>
+                  <strong>{Math.round(insights.successRate)}%</strong>
+                  <small>
+                    {insights.successRateDelta !== null
+                      ? `${insights.successRateDelta >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(insights.successRateDelta))}%`
+                      : "—"}
+                  </small>
+                </div>
+                <div className="insight-card">
+                  <span>平均回忆</span>
+                  <strong>
+                    {insights.averageRecallMs !== null
+                      ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
+                      : "—"}
+                  </strong>
+                  <small>反应耗时</small>
+                </div>
+                <div className="insight-card">
+                  <span>学习天数</span>
+                  <strong>{insights.activeDays}</strong>
+                  <small>/ 7 天</small>
+                </div>
+                <div className="insight-card">
+                  <span>不同单词</span>
+                  <strong>{insights.uniqueWordCount}</strong>
+                  <small>{insights.reviewCount} 次评分</small>
+                </div>
+              </div>
+              {reviewForecast.length > 0 && (
+                <div className="forecast-panel">
+                  <div className="forecast-title">
+                    <span>未来 7 天到期复习</span>
+                    <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
+                  </div>
+                  <div className="forecast-bars">
+                    {reviewForecast.map((day) => {
+                      const maxCount = Math.max(1, ...reviewForecast.map((d) => d.count));
+                      const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
+                      return (
+                        <div className="forecast-day" key={day.date} title={`${day.date} · ${day.count} 词到期`}>
+                          <small>{day.date.slice(5)}</small>
+                          <div className={`forecast-bar level-${level}`} style={{ height: `${Math.max(4, (day.count / maxCount) * 48)}px` }} />
+                          <span>{day.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
             <section className="activity-panel" aria-labelledby="activity-title">
               <div className="panel-title">
                 <div className="activity-heading">

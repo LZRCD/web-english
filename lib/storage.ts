@@ -233,13 +233,40 @@ async function writeSnapshot(snapshot: IndexedStateSnapshot) {
   }
 }
 
+let lastWriteError: unknown = null;
+let lastSuccessfulWrite = 0;
+
+export function getLastStorageError() {
+  return lastWriteError;
+}
+
+export function getLastSuccessfulWriteTime() {
+  return lastSuccessfulWrite;
+}
+
 let pendingWrite = Promise.resolve();
 
 export function saveStoredState(state: StoredState) {
   const snapshot = splitStoredState(state);
   pendingWrite = pendingWrite
-    .catch(() => {})
-    .then(() => writeSnapshot(snapshot));
+    .catch((error) => {
+      lastWriteError = error;
+    })
+    .then(() => writeSnapshot(snapshot))
+    .then(() => {
+      lastWriteError = null;
+      lastSuccessfulWrite = Date.now();
+    });
+  return pendingWrite;
+}
+
+/** 直接写入 IndexedDB，不经过防抖队列。用于导入等需要立即确认持久化的场景。 */
+export function saveStoredStateImmediate(state: StoredState) {
+  const snapshot = splitStoredState(state);
+  pendingWrite = writeSnapshot(snapshot).then(() => {
+    lastWriteError = null;
+    lastSuccessfulWrite = Date.now();
+  });
   return pendingWrite;
 }
 

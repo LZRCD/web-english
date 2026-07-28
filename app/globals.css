@@ -1419,6 +1419,107 @@ select:focus-visible {
   font: 400 38px/1 Georgia, serif;
 }
 
+/* 学习趋势洞察面板 */
+.insights-panel {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 24px 27px;
+  margin-bottom: 24px;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.insight-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: #f9faf8;
+  display: grid;
+  gap: 4px;
+}
+
+.insight-card span {
+  font-size: 10px;
+  color: #8d938c;
+}
+
+.insight-card strong {
+  font: 400 30px/1 Georgia, serif;
+  color: var(--ink);
+}
+
+.insight-card small {
+  font-size: 10px;
+  color: var(--mint);
+}
+
+.forecast-panel {
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.forecast-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.forecast-title span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forecast-title small {
+  font-size: 10px;
+  color: #8d938c;
+}
+
+.forecast-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 80px;
+}
+
+.forecast-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.forecast-day > small {
+  font-size: 9px;
+  color: #8d938c;
+}
+
+.forecast-day > span {
+  font-size: 9px;
+  color: var(--soft-ink);
+}
+
+.forecast-bar {
+  width: 100%;
+  max-width: 32px;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s ease;
+}
+
+.forecast-bar.level-0 { background: #e8eae6; }
+.forecast-bar.level-1 { background: #d0e8da; }
+.forecast-bar.level-2 { background: #9bdbbf; }
+.forecast-bar.level-3 { background: var(--mint); }
+.forecast-bar.level-4 { background: #3a9e6f; }
+
 .streak {
   display: flex;
   align-items: center;
