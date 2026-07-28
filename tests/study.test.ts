@@ -9,7 +9,7 @@ import {
   type Review,
 } from "../lib/study.ts";
 
-test("旧状态迁移到 v2 并清理 CET 示例记录", () => {
+test("旧状态迁移到 v3 并清理 CET 示例记录", () => {
   const legacy = JSON.stringify({
     wordIndex: 7,
     started: true,
@@ -41,7 +41,7 @@ test("旧状态迁移到 v2 并清理 CET 示例记录", () => {
   const state = parseStoredState(legacy);
   const key = buildStudyKey("selection", "ordered", "必考词", 1, 1);
 
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.deepEqual(state.favorites.map((item) => item.wordId), [12]);
   assert.deepEqual(state.mistakes.map((item) => item.wordId), [15]);
   assert.equal(state.reviews.length, 1);
@@ -51,6 +51,40 @@ test("旧状态迁移到 v2 并清理 CET 示例记录", () => {
     buildStudyKey("selection", "ordered", "必考词", 1, 1),
     buildStudyKey("selection", "ordered", "必考词", 2, 1),
   );
+});
+
+test("v3 迁移把 passer-by 旧记录归到 passersby 学习项", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 2,
+    favorites: [
+      { wordId: 6177, addedAt: "2026-07-27T10:00:00.000Z" },
+      { wordId: 2506, addedAt: "2026-07-28T10:00:00.000Z" },
+    ],
+    mistakes: [
+      {
+        wordId: 6177,
+        addedAt: "2026-07-27T10:00:00.000Z",
+        mistakeCount: 2,
+        lastRating: 1,
+        lastMistakeAt: "2026-07-27T10:00:00.000Z",
+      },
+    ],
+    reviews: [
+      {
+        wordId: 6177,
+        word: "passer-by",
+        rating: 2,
+        reviewedAt: "2026-07-27T10:00:00.000Z",
+        dueAt: "2026-07-31T10:00:00.000Z",
+        section: "超纲词",
+        unit: 18,
+      },
+    ],
+  }));
+
+  assert.deepEqual(state.favorites.map((item) => item.wordId), [2506]);
+  assert.deepEqual(state.mistakes.map((item) => item.wordId), [2506]);
+  assert.deepEqual(state.reviews.map((item) => item.wordId), [2506]);
 });
 
 test("今日、连续天数和到期数量来自真实日期", () => {

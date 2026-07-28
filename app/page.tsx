@@ -2,6 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  isPrimaryLearningWord,
+  REDBOOK_SOURCE_TOTAL,
+} from "../lib/redbook";
+import {
   buildActivityCalendar,
   buildStudyKey,
   dateKey,
@@ -30,8 +34,20 @@ type RedbookData = {
     title: string;
     total: number;
     sectionCounts: Record<string, number>;
+    learningItemCount?: number;
   };
   words: Word[];
+};
+
+type RedbookAnalysisData = {
+  metadata: {
+    auditedEntries: number;
+    learningItemCount: number;
+  };
+  entries: Record<string, {
+    correctedWord?: string;
+    relation?: Word["relation"];
+  }>;
 };
 
 const SECTION_META = [
@@ -75,16 +91,19 @@ function shuffleWithSeed(words: Word[], seed: number) {
 }
 
 function buildLocalCoach(word: Word, prompt: string) {
+  const relationHint = word.relation
+    ? `词族提示：${word.relation.label}。${word.relation.note}`
+    : "";
   if (prompt.includes("近义") || prompt.includes("区别")) {
-    return `辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
+    return `${relationHint}辨析 ${word.word}：它强调“${word.meaning.split("；")[0]}”。记忆时先抓住核心场景，再比较近义词，不要孤立背中文。`;
   }
   if (prompt.includes("题") || prompt.includes("测")) {
-    return `主动回忆：先遮住释义，用 ${word.word} 造一个与你今天经历有关的英文句子。再回答：它在红宝书中的核心含义“${word.meaning.split("；")[0]}”是什么？`;
+    return `${relationHint}主动回忆：先遮住释义，用 ${word.word} 造一个与你今天经历有关的英文句子。再回答：它在红宝书中的核心含义“${word.meaning.split("；")[0]}”是什么？`;
   }
   if (prompt.includes("例句") || prompt.includes("语境")) {
-    return `给你一个学习语境：When you review ${word.word} in several meaningful situations, the memory becomes easier to retrieve. 先读懂整句，再回想 ${word.word} 的核心含义。`;
+    return `${relationHint}给你一个学习语境：When you review ${word.word} in several meaningful situations, the memory becomes easier to retrieve. 先读懂整句，再回想 ${word.word} 的核心含义。`;
   }
-  return `把 ${word.word} 记成一幅动作画面：${word.root ?? "先抓住词形和核心词义"}。核心不是死记“${word.meaning}”，而是主动造一个与你有关的句子。`;
+  return `${relationHint}把 ${word.word} 记成一幅动作画面：${word.root ?? "先抓住词形和核心词义"}。核心不是死记“${word.meaning}”，而是主动造一个与你有关的句子。`;
 }
 
 export default function Home() {
@@ -117,11 +136,13 @@ export default function Home() {
   const [activityRange, setActivityRange] = useState<ActivityRange>(365);
   const [activityOffset, setActivityOffset] = useState(0);
   const [selectedActivityDate, setSelectedActivityDate] = useState("");
+  const [learningItemCount, setLearningItemCount] = useState(REDBOOK_SOURCE_TOTAL);
 
   const filteredStudyWords = useMemo(() => {
     if (redbookStatus !== "ready") return [];
-    if (studyScope === "all") return redbookWords;
-    const sectionWords = redbookWords.filter((word) => word.section === selectedSection);
+    const learningWords = redbookWords.filter((word) => isPrimaryLearningWord(word.id));
+    if (studyScope === "all") return learningWords;
+    const sectionWords = learningWords.filter((word) => word.section === selectedSection);
     if (selectedUnit === "all") return sectionWords;
     return sectionWords.filter((word) => String(word.unit) === String(selectedUnit));
   }, [redbookStatus, redbookWords, selectedSection, selectedUnit, studyScope]);
@@ -241,20 +262,37 @@ export default function Home() {
       }
       setHydrated(true);
     });
-    fetch("/data/redbook.json")
-      .then((response) => {
+    Promise.all([
+      fetch("/data/redbook.json").then((response) => {
         if (!response.ok) throw new Error("redbook data missing");
         return response.json() as Promise<RedbookData>;
-      })
-      .then((data) => {
+      }),
+      fetch("/data/redbook-analysis.json").then((response) => {
+        if (!response.ok) throw new Error("redbook analysis missing");
+        return response.json() as Promise<RedbookAnalysisData>;
+      }),
+    ])
+      .then(([data, analysis]) => {
         if (!data.words.length) throw new Error("redbook data empty");
+        if (analysis.metadata.auditedEntries !== REDBOOK_SOURCE_TOTAL) {
+          throw new Error("redbook analysis incomplete");
+        }
+        const auditedWords = data.words.map((word) => {
+          const audit = word.id === undefined ? undefined : analysis.entries[String(word.id)];
+          return {
+            ...word,
+            word: audit?.correctedWord ?? word.word,
+            relation: audit?.relation,
+          };
+        });
         const idLookup = new Map(
-          data.words.map((word) => [
+          auditedWords.map((word) => [
             `${word.section ?? ""}:${word.unit ?? ""}:${word.word.toLowerCase()}`,
             word.id,
           ]),
         );
-        setRedbookWords(data.words);
+        setRedbookWords(auditedWords);
+        setLearningItemCount(analysis.metadata.learningItemCount);
         setReviews((items) => items.map((review) => review.wordId
           ? review
           : {
@@ -408,7 +446,7 @@ export default function Home() {
     setShuffleSeed(Date.now());
     setRevealed(false);
     if (openLearning) setActiveView("learn");
-    setToast("已打乱红宝书全部 6550 词");
+    setToast(`已打乱 ${learningItemCount} 个学习项，保留 ${REDBOOK_SOURCE_TOTAL} 条原书来源`);
     setTimeout(() => setToast(""), 1800);
   }
 
@@ -525,7 +563,7 @@ export default function Home() {
             <p className="topbar-title">
               {activeView === "learn"
                 ? studyScope === "all"
-                  ? "全书 6550 词 · 乱序"
+                  ? `全书 ${learningItemCount} 学习项 · 乱序`
                   : `${selectedSection} · ${selectedUnit === "all" ? "全部" : `Unit ${selectedUnit}`}`
                 : navigation.find((item) => item.id === activeView)?.label}
             </p>
@@ -580,7 +618,7 @@ export default function Home() {
                   className={studyScope === "all" ? "active all" : ""}
                   onClick={() => startAllBookShuffle()}
                   aria-pressed={studyScope === "all"}
-                  title="打乱红宝书全部 6550 词"
+                  title={`打乱 ${learningItemCount} 个独立学习项`}
                 >
                   全书
                 </button>
@@ -632,6 +670,15 @@ export default function Home() {
                       <span>{currentPart}</span>
                       <strong>{currentMeaning.meaning}</strong>
                     </div>
+                    {current.relation && (
+                      <div className={`word-relation relation-${current.relation.kind}`}>
+                        <span>词族轨道</span>
+                        <div>
+                          <strong>{current.relation.label}</strong>
+                          <small>{current.relation.note}</small>
+                        </div>
+                      </div>
+                    )}
                     {current.sentence ? (
                       <div className="context-block">
                         <p className="context-sentence">{current.sentence}</p>
@@ -673,7 +720,7 @@ export default function Home() {
             <div className="section-heading">
               <div><p className="eyebrow">2027 考研英语红宝书</p><h1>按红宝书顺序开始</h1></div>
               <div className="book-heading-actions">
-                <span className="resource-badge">本地资源 · 6550 词</span>
+                <span className="resource-badge">本地资源 · 6550 原书词条 · {learningItemCount} 学习项</span>
                 <button className="primary-button" onClick={() => startAllBookShuffle()}>全书乱序</button>
               </div>
             </div>
@@ -698,9 +745,9 @@ export default function Home() {
                 </button>
               )})}
               <button className="book-card empty-book all-book-card" onClick={() => startAllBookShuffle()}>
-                <span>6550</span>
+                <span>{learningItemCount}</span>
                 <h2>全书乱序</h2>
-                <p>跨越必考词、基础词和超纲词，每次重新洗牌</p>
+                <p>保留 6550 条原书来源，变体不重复进入每日新词</p>
               </button>
             </div>
           </div>
@@ -954,7 +1001,7 @@ export default function Home() {
                 <input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />
               </label>
               <label>
-                <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 6550 词</small></span>
+                <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 {learningItemCount} 个学习项</small></span>
                 <select
                   value={studyScope === "all" ? "all" : studyMode}
                   onChange={(event) => {
@@ -964,7 +1011,7 @@ export default function Home() {
                 >
                   <option value="ordered">红宝书顺序</option>
                   <option value="shuffled">当前范围乱序</option>
-                  <option value="all">全书 6550 词乱序</option>
+                  <option value="all">全书 {learningItemCount} 学习项乱序</option>
                 </select>
               </label>
               <label>

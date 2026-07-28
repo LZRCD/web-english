@@ -175,3 +175,4 @@ writeFileSync(
 console.log(`已生成 ${words.length} 个词条：${outputFile}`);
 console.log(`分组统计：${JSON.stringify(sectionCounts)}`);
 console.log(`沿用相邻词单元位置：${inferredLocations} 个`);
+console.log("请继续运行 npm run data:audit，以高清正文修正冲突并生成词族审计。");

@@ -19,10 +19,12 @@
 
 html {
   background: var(--paper);
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 76% 8%, rgba(85, 201, 150, 0.06), transparent 26%),
     var(--paper);
@@ -549,6 +551,51 @@ select:focus-visible {
 .meaning-main strong {
   font-size: 18px;
   font-weight: 700;
+}
+
+.word-relation {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 12px;
+  border: 1px solid #dcebe2;
+  border-radius: 16px;
+  padding: 13px 16px;
+  background: linear-gradient(90deg, #f3faf6, #fbfdfb);
+}
+
+.word-relation > span {
+  color: #459b75;
+  font: 700 9px/1.4 "Courier New", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.word-relation > div {
+  display: grid;
+  gap: 4px;
+}
+
+.word-relation strong {
+  color: #27352e;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.word-relation small {
+  color: #748078;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.word-relation.relation-variant {
+  border-color: #dce4ef;
+  background: linear-gradient(90deg, #f3f6fb, #fbfcfd);
+}
+
+.word-relation.relation-variant > span {
+  color: #6c83a8;
 }
 
 .context-block {
@@ -1935,6 +1982,12 @@ kbd {
 
   .revealed .word-face {
     padding-top: 20px;
+  }
+
+  .word-relation {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 12px 14px;
   }
 
   .context-sentence {

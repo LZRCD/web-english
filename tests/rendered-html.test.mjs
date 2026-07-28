@@ -59,6 +59,24 @@ test("本地红宝书词库包含完整的 6550 条词目", async () => {
   assert.ok(words.every((word) => word.word && word.meaning && word.section && word.unit));
 });
 
+test("全量审计保留 6550 条来源并生成 6549 个学习项", async () => {
+  const raw = await readFile(
+    new URL("../public/data/redbook-analysis.json", import.meta.url),
+    "utf8",
+  );
+  const analysis = JSON.parse(raw);
+
+  assert.equal(analysis.metadata.auditedEntries, 6550);
+  assert.equal(analysis.metadata.learningItemCount, 6549);
+  assert.equal(analysis.metadata.unresolvedConfirmedSourceConflicts, 0);
+  assert.equal(analysis.entries["68"].relation.kind, "grammar");
+  assert.equal(analysis.entries["68"].relation.independent, true);
+  assert.equal(analysis.entries["2506"].correctedWord, "passersby");
+  assert.equal(analysis.entries["6177"].correctedWord, "passer-by");
+  assert.equal(analysis.entries["6177"].relation.canonicalId, 2506);
+  assert.equal(analysis.entries["6177"].relation.independent, false);
+});
+
 test("全书乱序与本地状态保存已接入学习流程", async () => {
   const [page, study, coach] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -69,13 +87,15 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(study, /type StudyScope = "selection" \| "all"/);
   assert.match(page, /function startAllBookShuffle/);
   assert.match(page, /setStudyScope\("all"\)/);
-  assert.match(page, /已打乱红宝书全部 6550 词/);
+  assert.match(page, /已打乱 \$\{learningItemCount\} 个学习项/);
+  assert.match(page, /redbook-analysis\.json/);
+  assert.match(page, /word-relation/);
   assert.match(page, /localStorage\.setItem\(STORAGE_KEY/);
   assert.match(page, /buildActivityCalendar\(reviews, activityRange/);
   assert.match(page, /activityRangeLabels/);
   assert.match(page, /selectedActivityDate/);
   assert.match(page, /回到今天/);
-  assert.match(study, /STORAGE_VERSION = 2/);
+  assert.match(study, /STORAGE_VERSION = 3/);
   assert.match(coach, /AbortSignal\.timeout\(15000\)/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);
 });

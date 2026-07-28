@@ -1,0 +1,5437 @@
+{
+  "metadata": {
+    "version": 1,
+    "sourceTitle": "2027考研英语红宝书",
+    "auditedEntries": 6550,
+    "learningItemCount": 6549,
+    "confirmedRelations": 70,
+    "morphologicalCandidates": 70,
+    "broaderRelationCandidates": 451,
+    "sourceCorrections": 2,
+    "unresolvedConfirmedSourceConflicts": 0,
+    "sourceComparisonScope": "全量扫描 6550 个词条；对规则候选、同形词及资料冲突项逐项复核",
+    "sourcePriority": [
+      "高清正文",
+      "正序英文词表",
+      "正序中文词表",
+      "自动词形分析"
+    ]
+  },
+  "entries": {
+    "59": {
+      "relation": {
+        "kind": "derived",
+        "label": "save → saving · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 58,
+        "lemma": "save",
+        "canonicalId": 59,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "68": {
+      "relation": {
+        "kind": "grammar",
+        "label": "provide → provided · 独立连词用法",
+        "note": "红宝书明确标为 conj.，同义词为 if；不是普通过去式。",
+        "lemmaId": 67,
+        "lemma": "provide",
+        "canonicalId": 68,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "174": {
+      "relation": {
+        "kind": "derived",
+        "label": "begin → beginning · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 173,
+        "lemma": "begin",
+        "canonicalId": 174,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "210": {
+      "relation": {
+        "kind": "derived",
+        "label": "find → finding · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5139,
+        "lemma": "find",
+        "canonicalId": 210,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "247": {
+      "relation": {
+        "kind": "derived",
+        "label": "economy → economics · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 248,
+        "lemma": "economy",
+        "canonicalId": 247,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "317": {
+      "relation": {
+        "kind": "derived",
+        "label": "lead → leading · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 315,
+        "lemma": "lead",
+        "canonicalId": 317,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "395": {
+      "relation": {
+        "kind": "derived",
+        "label": "mean → meaning · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 394,
+        "lemma": "mean",
+        "canonicalId": 395,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "396": {
+      "relation": {
+        "kind": "lexicalized",
+        "label": "means · 词义已固化",
+        "note": "与 mean 保留词形关联，但已有独立含义和复习进度。",
+        "lemmaId": 394,
+        "lemma": "mean",
+        "canonicalId": 396,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "400": {
+      "relation": {
+        "kind": "derived",
+        "label": "open → opening · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5312,
+        "lemma": "open",
+        "canonicalId": 400,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "474": {
+      "relation": {
+        "kind": "derived",
+        "label": "understand → understanding · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 473,
+        "lemma": "understand",
+        "canonicalId": 474,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "555": {
+      "relation": {
+        "kind": "derived",
+        "label": "complicate → complicated · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 554,
+        "lemma": "complicate",
+        "canonicalId": 555,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "628": {
+      "relation": {
+        "kind": "derived",
+        "label": "feel → feeling · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5136,
+        "lemma": "feel",
+        "canonicalId": 628,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "631": {
+      "relation": {
+        "kind": "lexicalized",
+        "label": "goods · 词义已固化",
+        "note": "与 good 保留词形关联，但已有独立含义和复习进度。",
+        "lemmaId": 5158,
+        "lemma": "good",
+        "canonicalId": 631,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "686": {
+      "relation": {
+        "kind": "grammar",
+        "label": "follow → following · 独立语法用法",
+        "note": "红宝书作为独立 adj. 词条收录，单独安排复习。",
+        "lemmaId": 685,
+        "lemma": "follow",
+        "canonicalId": 686,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "819": {
+      "relation": {
+        "kind": "derived",
+        "label": "advance → advanced · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 818,
+        "lemma": "advance",
+        "canonicalId": 819,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "926": {
+      "relation": {
+        "kind": "derived",
+        "label": "limit → limited · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 924,
+        "lemma": "limit",
+        "canonicalId": 926,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "949": {
+      "relation": {
+        "kind": "derived",
+        "label": "set → setting · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 947,
+        "lemma": "set",
+        "canonicalId": 949,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1124": {
+      "relation": {
+        "kind": "derived",
+        "label": "train → training · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1123,
+        "lemma": "train",
+        "canonicalId": 1124,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1185": {
+      "relation": {
+        "kind": "derived",
+        "label": "precede → preceding · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1182,
+        "lemma": "precede",
+        "canonicalId": 1185,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1196": {
+      "relation": {
+        "kind": "lexicalized",
+        "label": "remains · 词义已固化",
+        "note": "与 remain 保留词形关联，但已有独立含义和复习进度。",
+        "lemmaId": 1194,
+        "lemma": "remain",
+        "canonicalId": 1196,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1432": {
+      "relation": {
+        "kind": "derived",
+        "label": "strike → striking · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1431,
+        "lemma": "strike",
+        "canonicalId": 1432,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1635": {
+      "relation": {
+        "kind": "derived",
+        "label": "proceed → proceeding · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1634,
+        "lemma": "proceed",
+        "canonicalId": 1635,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1734": {
+      "relation": {
+        "kind": "derived",
+        "label": "promise → promising · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1733,
+        "lemma": "promise",
+        "canonicalId": 1734,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "1878": {
+      "relation": {
+        "kind": "derived",
+        "label": "marry → married · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5248,
+        "lemma": "marry",
+        "canonicalId": 1878,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2123": {
+      "relation": {
+        "kind": "derived",
+        "label": "hear → hearing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5170,
+        "lemma": "hear",
+        "canonicalId": 2123,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2165": {
+      "relation": {
+        "kind": "derived",
+        "label": "bear → bearing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2163,
+        "lemma": "bear",
+        "canonicalId": 2165,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2173": {
+      "relation": {
+        "kind": "derived",
+        "label": "read → reading · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5350,
+        "lemma": "read",
+        "canonicalId": 2173,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2181": {
+      "relation": {
+        "kind": "grammar",
+        "label": "beside → besides · 独立语法用法",
+        "note": "红宝书作为独立 prep. 词条收录，单独安排复习。",
+        "lemmaId": 2180,
+        "lemma": "beside",
+        "canonicalId": 2181,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2225": {
+      "relation": {
+        "kind": "grammar",
+        "label": "regard → regarding · 独立语法用法",
+        "note": "红宝书作为独立 prep. 词条收录，单独安排复习。",
+        "lemmaId": 2224,
+        "lemma": "regard",
+        "canonicalId": 2225,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2265": {
+      "relation": {
+        "kind": "derived",
+        "label": "skill → skilled · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2264,
+        "lemma": "skill",
+        "canonicalId": 2265,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "2506": {
+      "correctedWord": "passersby",
+      "relation": {
+        "kind": "inflection",
+        "label": "passerby → passersby · 特殊复数",
+        "note": "复数加在核心词 passer 上；同组展示连字符变体 passer-by。",
+        "lemma": "passerby",
+        "canonicalId": 2506,
+        "independent": true,
+        "confidence": "source-confirmed"
+      },
+      "evidence": "高清正文印刷页 244（PDF 第 251 页）：passersby，复数形式"
+    },
+    "3138": {
+      "relation": {
+        "kind": "derived",
+        "label": "miss → missing · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3136,
+        "lemma": "miss",
+        "canonicalId": 3138,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3456": {
+      "relation": {
+        "kind": "lexicalized",
+        "label": "clothes · 词义已固化",
+        "note": "与 cloth 保留词形关联，但已有独立含义和复习进度。",
+        "lemmaId": 3454,
+        "lemma": "cloth",
+        "canonicalId": 3456,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3457": {
+      "relation": {
+        "kind": "lexicalized",
+        "label": "clothing · 词义已固化",
+        "note": "与 cloth 保留词形关联，但已有独立含义和复习进度。",
+        "lemmaId": 3454,
+        "lemma": "cloth",
+        "canonicalId": 3457,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3473": {
+      "relation": {
+        "kind": "derived",
+        "label": "engineer → engineering · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3472,
+        "lemma": "engineer",
+        "canonicalId": 3473,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3510": {
+      "relation": {
+        "kind": "derived",
+        "label": "greet → greeting · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3509,
+        "lemma": "greet",
+        "canonicalId": 3510,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3815": {
+      "relation": {
+        "kind": "derived",
+        "label": "draw → drawing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3812,
+        "lemma": "draw",
+        "canonicalId": 3815,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3930": {
+      "relation": {
+        "kind": "derived",
+        "label": "live → living · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5236,
+        "lemma": "live",
+        "canonicalId": 3930,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "3980": {
+      "relation": {
+        "kind": "derived",
+        "label": "out → outing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5318,
+        "lemma": "out",
+        "canonicalId": 3980,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4441": {
+      "relation": {
+        "kind": "derived",
+        "label": "bowl → bowling · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 4008,
+        "lemma": "bowl",
+        "canonicalId": 4441,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4614": {
+      "relation": {
+        "kind": "derived",
+        "label": "dwell → dwelling · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 4218,
+        "lemma": "dwell",
+        "canonicalId": 4614,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4627": {
+      "relation": {
+        "kind": "derived",
+        "label": "end → ending · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 570,
+        "lemma": "end",
+        "canonicalId": 4627,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4637": {
+      "relation": {
+        "kind": "derived",
+        "label": "excite → exciting · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 4636,
+        "lemma": "excite",
+        "canonicalId": 4637,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4731": {
+      "relation": {
+        "kind": "derived",
+        "label": "interest → interesting · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1844,
+        "lemma": "interest",
+        "canonicalId": 4731,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4832": {
+      "relation": {
+        "kind": "derived",
+        "label": "paint → painting · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2882,
+        "lemma": "paint",
+        "canonicalId": 4832,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "4975": {
+      "relation": {
+        "kind": "derived",
+        "label": "stock → stocking · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1427,
+        "lemma": "stock",
+        "canonicalId": 4975,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5065": {
+      "relation": {
+        "kind": "derived",
+        "label": "will → willing · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5513,
+        "lemma": "will",
+        "canonicalId": 5065,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5254": {
+      "relation": {
+        "kind": "derived",
+        "label": "meet → meeting · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2313,
+        "lemma": "meet",
+        "canonicalId": 5254,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5404": {
+      "relation": {
+        "kind": "contrast",
+        "label": "易混词 · sometime / sometimes",
+        "note": "sometimes 表示“有时”，与 sometime“某时”分开记忆。",
+        "lemmaId": 5403,
+        "lemma": "sometime",
+        "canonicalId": 5404,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5413": {
+      "relation": {
+        "kind": "derived",
+        "label": "spell → spelling · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5412,
+        "lemma": "spell",
+        "canonicalId": 5413,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5447": {
+      "relation": {
+        "kind": "pronoun",
+        "label": "their → theirs · 独立代词形式",
+        "note": "词性和句法功能独立，保留为单独学习项。",
+        "lemmaId": 5446,
+        "lemma": "their",
+        "canonicalId": 5447,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5465": {
+      "relation": {
+        "kind": "derived",
+        "label": "tire → tired · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3107,
+        "lemma": "tire",
+        "canonicalId": 5465,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5534": {
+      "relation": {
+        "kind": "pronoun",
+        "label": "your → yours · 独立代词形式",
+        "note": "词性和句法功能独立，保留为单独学习项。",
+        "lemmaId": 5533,
+        "lemma": "your",
+        "canonicalId": 5534,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5600": {
+      "relation": {
+        "kind": "derived",
+        "label": "bank → banking · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 4407,
+        "lemma": "bank",
+        "canonicalId": 5600,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5606": {
+      "relation": {
+        "kind": "derived",
+        "label": "bias → biased · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 596,
+        "lemma": "bias",
+        "canonicalId": 5606,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5618": {
+      "relation": {
+        "kind": "derived",
+        "label": "bless → blessing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3347,
+        "lemma": "bless",
+        "canonicalId": 5618,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5624": {
+      "relation": {
+        "kind": "derived",
+        "label": "brand → branding · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 751,
+        "lemma": "brand",
+        "canonicalId": 5624,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5771": {
+      "relation": {
+        "kind": "derived",
+        "label": "electronic → electronics · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 4622,
+        "lemma": "electronic",
+        "canonicalId": 5771,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5810": {
+      "relation": {
+        "kind": "derived",
+        "label": "file → filing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2324,
+        "lemma": "file",
+        "canonicalId": 5810,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5828": {
+      "relation": {
+        "kind": "derived",
+        "label": "fund → funding · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1411,
+        "lemma": "fund",
+        "canonicalId": 5828,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "5936": {
+      "relation": {
+        "kind": "derived",
+        "label": "inherit → inherited · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2307,
+        "lemma": "inherit",
+        "canonicalId": 5936,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6011": {
+      "relation": {
+        "kind": "derived",
+        "label": "line → lining · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5232,
+        "lemma": "line",
+        "canonicalId": 6011,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6069": {
+      "relation": {
+        "kind": "derived",
+        "label": "mine → mining · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 3589,
+        "lemma": "mine",
+        "canonicalId": 6069,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6174": {
+      "relation": {
+        "kind": "derived",
+        "label": "parent → parenting · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 5323,
+        "lemma": "parent",
+        "canonicalId": 6174,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6177": {
+      "correctedWord": "passer-by",
+      "relation": {
+        "kind": "variant",
+        "label": "passer-by · 连字符变体",
+        "note": "与 passerby / passersby 共用学习项，不重复进入每日新词。",
+        "lemmaId": 2506,
+        "lemma": "passerby",
+        "canonicalId": 2506,
+        "independent": false,
+        "confidence": "source-confirmed"
+      },
+      "evidence": "高清正文印刷页 415（PDF 第 422 页）：passer-by，连字符拼写"
+    },
+    "6203": {
+      "relation": {
+        "kind": "derived",
+        "label": "phrase → phrasing · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 935,
+        "lemma": "phrase",
+        "canonicalId": 6203,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6320": {
+      "relation": {
+        "kind": "derived",
+        "label": "school → schooling · 派生词",
+        "note": "红宝书以独立 n. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2965,
+        "lemma": "school",
+        "canonicalId": 6320,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6342": {
+      "relation": {
+        "kind": "derived",
+        "label": "sight → sighted · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 2353,
+        "lemma": "sight",
+        "canonicalId": 6342,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6374": {
+      "relation": {
+        "kind": "derived",
+        "label": "stand → standing · 派生词",
+        "note": "红宝书以独立 adj. 词条收录，关联词族但不合并掌握度。",
+        "lemmaId": 1323,
+        "lemma": "stand",
+        "canonicalId": 6374,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    },
+    "6412": {
+      "relation": {
+        "kind": "grammar",
+        "label": "suppose → supposing · 独立语法用法",
+        "note": "红宝书作为独立 conj. 词条收录，单独安排复习。",
+        "lemmaId": 1584,
+        "lemma": "suppose",
+        "canonicalId": 6412,
+        "independent": true,
+        "confidence": "confirmed"
+      }
+    }
+  },
+  "audit": {
+    "sourceCorrections": [
+      {
+        "id": 2506,
+        "extractedWord": "passerby",
+        "correctedWord": "passersby",
+        "evidence": "高清正文印刷页 244（PDF 第 251 页）：passersby，复数形式"
+      },
+      {
+        "id": 6177,
+        "extractedWord": "passerby",
+        "correctedWord": "passer-by",
+        "evidence": "高清正文印刷页 415（PDF 第 422 页）：passer-by，连字符拼写"
+      }
+    ],
+    "homographs": [
+      {
+        "normalized": "march",
+        "entries": [
+          {
+            "id": 1875,
+            "word": "march",
+            "meaning": "vi. vt. ⻬步走 vi. 前进;游行示威 vt. 使同行,强迫 (某人) 一起走 n. 示威游行;行军;推进;进行曲"
+          },
+          {
+            "id": 5245,
+            "word": "March",
+            "meaning": "n. 三月"
+          }
+        ]
+      },
+      {
+        "normalized": "may",
+        "entries": [
+          {
+            "id": 2043,
+            "word": "may",
+            "meaning": "modal. 可能,也许;可以 n. 山楂花"
+          },
+          {
+            "id": 5250,
+            "word": "May",
+            "meaning": "n. 五月;梅 (女子名)"
+          }
+        ]
+      }
+    ],
+    "excludedFalseRelations": [
+      {
+        "id": 4835,
+        "word": "pants",
+        "reason": "与动词 pant 仅为表面拼写相似，不建立词族关系"
+      },
+      {
+        "id": 5122,
+        "word": "evening",
+        "reason": "与 even 仅为表面拼写相似，不建立词族关系"
+      }
+    ],
+    "broaderCandidates": [
+      {
+        "wordId": 23,
+        "word": "journalist",
+        "baseId": 22,
+        "base": "journal",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 26,
+        "word": "judgement",
+        "baseId": 25,
+        "base": "judge",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 34,
+        "word": "largely",
+        "baseId": 5219,
+        "base": "large",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 88,
+        "word": "barely",
+        "baseId": 87,
+        "base": "bare",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 95,
+        "word": "career",
+        "baseId": 4487,
+        "base": "care",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 96,
+        "word": "careful",
+        "baseId": 4487,
+        "base": "care",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 103,
+        "word": "cater",
+        "baseId": 4494,
+        "base": "cat",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 145,
+        "word": "thoughtful",
+        "baseId": 144,
+        "base": "thought",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 159,
+        "word": "witness",
+        "baseId": 157,
+        "base": "wit",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 225,
+        "word": "basement",
+        "baseId": 224,
+        "base": "base",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 238,
+        "word": "dealer",
+        "baseId": 237,
+        "base": "deal",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 265,
+        "word": "fairly",
+        "baseId": 264,
+        "base": "fair",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 282,
+        "word": "shoulder",
+        "baseId": 5382,
+        "base": "should",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 284,
+        "word": "shower",
+        "baseId": 283,
+        "base": "show",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 304,
+        "word": "illness",
+        "baseId": 303,
+        "base": "ill",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 326,
+        "word": "management",
+        "baseId": 325,
+        "base": "manage",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 341,
+        "word": "offer",
+        "baseId": 5302,
+        "base": "off",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 353,
+        "word": "partly",
+        "baseId": 347,
+        "base": "part",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 373,
+        "word": "payment",
+        "baseId": 372,
+        "base": "pay",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 468,
+        "word": "underestimate",
+        "baseId": 1152,
+        "base": "estimate",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 470,
+        "word": "underlie",
+        "baseId": 3054,
+        "base": "lie",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 472,
+        "word": "underline",
+        "baseId": 5232,
+        "base": "line",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 473,
+        "word": "understand",
+        "baseId": 1323,
+        "base": "stand",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 474,
+        "word": "understanding",
+        "baseId": 6374,
+        "base": "standing",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 475,
+        "word": "undertake",
+        "baseId": 442,
+        "base": "take",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 476,
+        "word": "uneasy",
+        "baseId": 5113,
+        "base": "easy",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 477,
+        "word": "unemployment",
+        "baseId": 566,
+        "base": "employment",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 484,
+        "word": "unlike",
+        "baseId": 5231,
+        "base": "like",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 485,
+        "word": "unlikely",
+        "baseId": 652,
+        "base": "likely",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 485,
+        "word": "unlikely",
+        "baseId": 484,
+        "base": "unlike",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 486,
+        "word": "unusual",
+        "baseId": 5488,
+        "base": "usual",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 565,
+        "word": "employer",
+        "baseId": 563,
+        "base": "employ",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 566,
+        "word": "employment",
+        "baseId": 563,
+        "base": "employ",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 581,
+        "word": "specialist",
+        "baseId": 580,
+        "base": "special",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 612,
+        "word": "department",
+        "baseId": 2406,
+        "base": "depart",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 622,
+        "word": "fearful",
+        "baseId": 621,
+        "base": "fear",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 633,
+        "word": "government",
+        "baseId": 632,
+        "base": "govern",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 645,
+        "word": "highly",
+        "baseId": 4706,
+        "base": "high",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 652,
+        "word": "likely",
+        "baseId": 5231,
+        "base": "like",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 666,
+        "word": "bother",
+        "baseId": 4440,
+        "base": "both",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 682,
+        "word": "engagement",
+        "baseId": 681,
+        "base": "engage",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 775,
+        "word": "former",
+        "baseId": 771,
+        "base": "form",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 789,
+        "word": "recommend",
+        "baseId": 848,
+        "base": "commend",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 790,
+        "word": "recover",
+        "baseId": 1818,
+        "base": "cover",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 802,
+        "word": "socialism",
+        "baseId": 801,
+        "base": "social",
+        "rules": [
+          "suffix:ism"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 875,
+        "word": "merely",
+        "baseId": 874,
+        "base": "mere",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 886,
+        "word": "ponder",
+        "baseId": 4872,
+        "base": "pond",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 943,
+        "word": "recent",
+        "baseId": 2542,
+        "base": "cent",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 951,
+        "word": "settlement",
+        "baseId": 950,
+        "base": "settle",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 979,
+        "word": "organism",
+        "baseId": 977,
+        "base": "organ",
+        "rules": [
+          "suffix:ism"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 987,
+        "word": "rarely",
+        "baseId": 986,
+        "base": "rare",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 992,
+        "word": "react",
+        "baseId": 669,
+        "base": "act",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1056,
+        "word": "presently",
+        "baseId": 1055,
+        "base": "present",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1057,
+        "word": "preserve",
+        "baseId": 944,
+        "base": "serve",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1058,
+        "word": "preside",
+        "baseId": 2349,
+        "base": "side",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1067,
+        "word": "reliable",
+        "baseId": 1444,
+        "base": "liable",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1079,
+        "word": "transaction",
+        "baseId": 670,
+        "base": "action",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1081,
+        "word": "transform",
+        "baseId": 771,
+        "base": "form",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1111,
+        "word": "dissolve",
+        "baseId": 807,
+        "base": "solve",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1140,
+        "word": "appointment",
+        "baseId": 1139,
+        "base": "appoint",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1145,
+        "word": "disease",
+        "baseId": 2798,
+        "base": "ease",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1162,
+        "word": "mislead",
+        "baseId": 315,
+        "base": "lead",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1170,
+        "word": "outer",
+        "baseId": 5318,
+        "base": "out",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1183,
+        "word": "precaution",
+        "baseId": 105,
+        "base": "caution",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1192,
+        "word": "remove",
+        "baseId": 3679,
+        "base": "move",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1194,
+        "word": "remain",
+        "baseId": 2867,
+        "base": "main",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1198,
+        "word": "remember",
+        "baseId": 2126,
+        "base": "member",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1199,
+        "word": "remind",
+        "baseId": 1502,
+        "base": "mind",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1230,
+        "word": "mostly",
+        "baseId": 5266,
+        "base": "most",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1241,
+        "word": "substance",
+        "baseId": 1326,
+        "base": "stance",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1279,
+        "word": "dismiss",
+        "baseId": 3136,
+        "base": "miss",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1280,
+        "word": "disorder",
+        "baseId": 3074,
+        "base": "order",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1282,
+        "word": "displace",
+        "baseId": 5337,
+        "base": "place",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1283,
+        "word": "display",
+        "baseId": 2059,
+        "base": "play",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1284,
+        "word": "distribute",
+        "baseId": 3776,
+        "base": "tribute",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1285,
+        "word": "distort",
+        "baseId": 6439,
+        "base": "tort",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1301,
+        "word": "preface",
+        "baseId": 258,
+        "base": "face",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1312,
+        "word": "reform",
+        "baseId": 771,
+        "base": "form",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1315,
+        "word": "relate",
+        "baseId": 2592,
+        "base": "late",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1317,
+        "word": "relationship",
+        "baseId": 1316,
+        "base": "relation",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1321,
+        "word": "overlook",
+        "baseId": 3867,
+        "base": "look",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1331,
+        "word": "statement",
+        "baseId": 1330,
+        "base": "state",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1365,
+        "word": "disable",
+        "baseId": 220,
+        "base": "able",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1366,
+        "word": "disappear",
+        "baseId": 1134,
+        "base": "appear",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1367,
+        "word": "disappoint",
+        "baseId": 1139,
+        "base": "appoint",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1369,
+        "word": "disclose",
+        "baseId": 765,
+        "base": "close",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1370,
+        "word": "discover",
+        "baseId": 1818,
+        "base": "cover",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1374,
+        "word": "holder",
+        "baseId": 1373,
+        "base": "hold",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1387,
+        "word": "overall",
+        "baseId": 2006,
+        "base": "all",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1388,
+        "word": "overcome",
+        "baseId": 3349,
+        "base": "come",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1389,
+        "word": "overlap",
+        "baseId": 2633,
+        "base": "lap",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1407,
+        "word": "fruitful",
+        "baseId": 5150,
+        "base": "fruit",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1419,
+        "word": "entertainment",
+        "baseId": 1418,
+        "base": "entertain",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1423,
+        "word": "transmission",
+        "baseId": 3139,
+        "base": "mission",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1425,
+        "word": "transplant",
+        "baseId": 1867,
+        "base": "plant",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1426,
+        "word": "transport",
+        "baseId": 4876,
+        "base": "port",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1503,
+        "word": "redeem",
+        "baseId": 118,
+        "base": "deem",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1540,
+        "word": "criticism",
+        "baseId": 1538,
+        "base": "critic",
+        "rules": [
+          "suffix:ism"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1559,
+        "word": "investment",
+        "baseId": 1558,
+        "base": "invest",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1581,
+        "word": "revenue",
+        "baseId": 5035,
+        "base": "venue",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1593,
+        "word": "research",
+        "baseId": 4930,
+        "base": "search",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1595,
+        "word": "refresh",
+        "baseId": 4161,
+        "base": "fresh",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1601,
+        "word": "replace",
+        "baseId": 5337,
+        "base": "place",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1603,
+        "word": "report",
+        "baseId": 4876,
+        "base": "port",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1604,
+        "word": "reporter",
+        "baseId": 3085,
+        "base": "porter",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1604,
+        "word": "reporter",
+        "baseId": 1603,
+        "base": "report",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1606,
+        "word": "request",
+        "baseId": 359,
+        "base": "quest",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1608,
+        "word": "requirement",
+        "baseId": 1607,
+        "base": "require",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1682,
+        "word": "overturn",
+        "baseId": 1524,
+        "base": "turn",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1688,
+        "word": "reverse",
+        "baseId": 1033,
+        "base": "verse",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1689,
+        "word": "review",
+        "baseId": 1126,
+        "base": "view",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1692,
+        "word": "reward",
+        "baseId": 2741,
+        "base": "ward",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1739,
+        "word": "reserve",
+        "baseId": 944,
+        "base": "serve",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1744,
+        "word": "resort",
+        "baseId": 813,
+        "base": "sort",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1745,
+        "word": "resource",
+        "baseId": 817,
+        "base": "source",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1754,
+        "word": "successful",
+        "baseId": 1753,
+        "base": "success",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1804,
+        "word": "restore",
+        "baseId": 1428,
+        "base": "store",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1805,
+        "word": "restrain",
+        "baseId": 1074,
+        "base": "strain",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1807,
+        "word": "restrict",
+        "baseId": 4982,
+        "base": "strict",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1842,
+        "word": "interact",
+        "baseId": 669,
+        "base": "act",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1843,
+        "word": "intercourse",
+        "baseId": 3801,
+        "base": "course",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1847,
+        "word": "international",
+        "baseId": 1382,
+        "base": "national",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1852,
+        "word": "lower",
+        "baseId": 1851,
+        "base": "low",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1870,
+        "word": "layer",
+        "baseId": 1869,
+        "base": "lay",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1887,
+        "word": "nearly",
+        "baseId": 5275,
+        "base": "near",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1898,
+        "word": "recall",
+        "baseId": 229,
+        "base": "call",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1899,
+        "word": "recollect",
+        "baseId": 840,
+        "base": "collect",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1903,
+        "word": "recycle",
+        "baseId": 4269,
+        "base": "cycle",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1908,
+        "word": "sheer",
+        "baseId": 5375,
+        "base": "she",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 1966,
+        "word": "childhood",
+        "baseId": 4511,
+        "base": "child",
+        "rules": [
+          "suffix:hood"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2022,
+        "word": "fellowship",
+        "baseId": 2021,
+        "base": "fellow",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2037,
+        "word": "kindness",
+        "baseId": 5210,
+        "base": "kind",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2060,
+        "word": "refine",
+        "baseId": 3480,
+        "base": "fine",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2064,
+        "word": "refund",
+        "baseId": 1411,
+        "base": "fund",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2066,
+        "word": "refuse",
+        "baseId": 4225,
+        "base": "fuse",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2081,
+        "word": "graceful",
+        "baseId": 2080,
+        "base": "grace",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2095,
+        "word": "charter",
+        "baseId": 2094,
+        "base": "chart",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2127,
+        "word": "membership",
+        "baseId": 2126,
+        "base": "member",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2148,
+        "word": "quarter",
+        "baseId": 2147,
+        "base": "quart",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2172,
+        "word": "reader",
+        "baseId": 5350,
+        "base": "read",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2226,
+        "word": "regardless",
+        "baseId": 2224,
+        "base": "regard",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2257,
+        "word": "unload",
+        "baseId": 4769,
+        "base": "load",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2266,
+        "word": "skillful",
+        "baseId": 2264,
+        "base": "skill",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2329,
+        "word": "relay",
+        "baseId": 1869,
+        "base": "lay",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2330,
+        "word": "release",
+        "baseId": 2208,
+        "base": "lease",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2340,
+        "word": "useful",
+        "baseId": 5487,
+        "base": "use",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2365,
+        "word": "unfold",
+        "baseId": 683,
+        "base": "fold",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2430,
+        "word": "helpful",
+        "baseId": 5172,
+        "base": "help",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2492,
+        "word": "faithful",
+        "baseId": 2491,
+        "base": "faith",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2519,
+        "word": "pavement",
+        "baseId": 2518,
+        "base": "pave",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2543,
+        "word": "center",
+        "baseId": 2542,
+        "base": "cent",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2593,
+        "word": "lately",
+        "baseId": 2592,
+        "base": "late",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2602,
+        "word": "reclaim",
+        "baseId": 661,
+        "base": "claim",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2610,
+        "word": "undoubtedly",
+        "baseId": 6476,
+        "base": "undoubted",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2611,
+        "word": "peaceful",
+        "baseId": 4842,
+        "base": "peace",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2620,
+        "word": "hardly",
+        "baseId": 2618,
+        "base": "hard",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2621,
+        "word": "hardship",
+        "baseId": 2618,
+        "base": "hard",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2718,
+        "word": "shipment",
+        "baseId": 5378,
+        "base": "ship",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2730,
+        "word": "tender",
+        "baseId": 457,
+        "base": "tend",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2773,
+        "word": "badly",
+        "baseId": 2772,
+        "base": "bad",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2823,
+        "word": "handful",
+        "baseId": 2821,
+        "base": "hand",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2847,
+        "word": "namely",
+        "baseId": 5274,
+        "base": "name",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2881,
+        "word": "painful",
+        "baseId": 2880,
+        "base": "pain",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2883,
+        "word": "painter",
+        "baseId": 2882,
+        "base": "paint",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2916,
+        "word": "uncover",
+        "baseId": 1818,
+        "base": "cover",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2929,
+        "word": "yearly",
+        "baseId": 5527,
+        "base": "year",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2957,
+        "word": "scarcely",
+        "baseId": 2956,
+        "base": "scarce",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2964,
+        "word": "scholarship",
+        "baseId": 2963,
+        "base": "scholar",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2978,
+        "word": "tanker",
+        "baseId": 2977,
+        "base": "tank",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2983,
+        "word": "undergraduate",
+        "baseId": 636,
+        "base": "graduate",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2984,
+        "word": "underground",
+        "baseId": 696,
+        "base": "ground",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2985,
+        "word": "undermine",
+        "baseId": 3589,
+        "base": "mine",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 2999,
+        "word": "deadly",
+        "baseId": 2997,
+        "base": "dead",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3015,
+        "word": "reassure",
+        "baseId": 1777,
+        "base": "assure",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3025,
+        "word": "recite",
+        "baseId": 660,
+        "base": "cite",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3027,
+        "word": "sober",
+        "baseId": 3026,
+        "base": "sob",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3071,
+        "word": "nonsense",
+        "baseId": 998,
+        "base": "sense",
+        "rules": [
+          "prefix:non"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3075,
+        "word": "orderly",
+        "baseId": 3074,
+        "base": "order",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3085,
+        "word": "porter",
+        "baseId": 4876,
+        "base": "port",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3090,
+        "word": "postage",
+        "baseId": 2753,
+        "base": "age",
+        "rules": [
+          "prefix:post"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3091,
+        "word": "poster",
+        "baseId": 3089,
+        "base": "post",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3092,
+        "word": "postman",
+        "baseId": 5242,
+        "base": "man",
+        "rules": [
+          "prefix:post"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3097,
+        "word": "renew",
+        "baseId": 2049,
+        "base": "new",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3100,
+        "word": "repair",
+        "baseId": 2884,
+        "base": "pair",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3101,
+        "word": "repay",
+        "baseId": 372,
+        "base": "pay",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3106,
+        "word": "repetition",
+        "baseId": 930,
+        "base": "petition",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3134,
+        "word": "mischief",
+        "baseId": 1965,
+        "base": "chief",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3135,
+        "word": "misfortune",
+        "baseId": 780,
+        "base": "fortune",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3138,
+        "word": "missing",
+        "baseId": 5384,
+        "base": "sing",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3144,
+        "word": "predominant",
+        "baseId": 1627,
+        "base": "dominant",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3147,
+        "word": "restless",
+        "baseId": 3146,
+        "base": "rest",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3218,
+        "word": "assignment",
+        "baseId": 3217,
+        "base": "assign",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3267,
+        "word": "prayer",
+        "baseId": 3266,
+        "base": "pray",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3273,
+        "word": "resign",
+        "baseId": 722,
+        "base": "sign",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3275,
+        "word": "resolution",
+        "baseId": 806,
+        "base": "solution",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3276,
+        "word": "resolve",
+        "baseId": 807,
+        "base": "solve",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3298,
+        "word": "timely",
+        "baseId": 3297,
+        "base": "time",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3302,
+        "word": "tower",
+        "baseId": 440,
+        "base": "tow",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3318,
+        "word": "discard",
+        "baseId": 4486,
+        "base": "card",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3320,
+        "word": "discharge",
+        "baseId": 601,
+        "base": "charge",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3340,
+        "word": "apartment",
+        "baseId": 1348,
+        "base": "apart",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3408,
+        "word": "represent",
+        "baseId": 1055,
+        "base": "present",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3412,
+        "word": "reproduce",
+        "baseId": 1639,
+        "base": "produce",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3413,
+        "word": "republic",
+        "baseId": 1571,
+        "base": "public",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3429,
+        "word": "weekly",
+        "baseId": 5499,
+        "base": "week",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3472,
+        "word": "engineer",
+        "baseId": 3471,
+        "base": "engine",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3479,
+        "word": "finally",
+        "baseId": 3478,
+        "base": "final",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3488,
+        "word": "inner",
+        "baseId": 4728,
+        "base": "inn",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3504,
+        "word": "remark",
+        "baseId": 1879,
+        "base": "mark",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3567,
+        "word": "equipment",
+        "baseId": 3566,
+        "base": "equip",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3578,
+        "word": "installment",
+        "baseId": 3576,
+        "base": "install",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3622,
+        "word": "counter",
+        "baseId": 3621,
+        "base": "count",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3623,
+        "word": "counterpart",
+        "baseId": 347,
+        "base": "part",
+        "rules": [
+          "prefix:counter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3627,
+        "word": "excitement",
+        "baseId": 4636,
+        "base": "excite",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3694,
+        "word": "worker",
+        "baseId": 3693,
+        "base": "work",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3739,
+        "word": "intermediate",
+        "baseId": 69,
+        "base": "mediate",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3742,
+        "word": "intersection",
+        "baseId": 2667,
+        "base": "section",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3744,
+        "word": "interview",
+        "baseId": 1126,
+        "base": "view",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3814,
+        "word": "drawer",
+        "baseId": 3812,
+        "base": "draw",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3846,
+        "word": "artist",
+        "baseId": 3840,
+        "base": "art",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3852,
+        "word": "distill",
+        "baseId": 5006,
+        "base": "till",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3866,
+        "word": "foreigner",
+        "baseId": 3865,
+        "base": "foreign",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3881,
+        "word": "pretext",
+        "baseId": 5440,
+        "base": "text",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3910,
+        "word": "translate",
+        "baseId": 2592,
+        "base": "late",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3911,
+        "word": "transparent",
+        "baseId": 5323,
+        "base": "parent",
+        "rules": [
+          "prefix:trans"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3913,
+        "word": "interface",
+        "baseId": 258,
+        "base": "face",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3928,
+        "word": "lively",
+        "baseId": 5236,
+        "base": "live",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3940,
+        "word": "discount",
+        "baseId": 3621,
+        "base": "count",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3941,
+        "word": "discourage",
+        "baseId": 3800,
+        "base": "courage",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3948,
+        "word": "dislike",
+        "baseId": 5231,
+        "base": "like",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3949,
+        "word": "dismay",
+        "baseId": 5250,
+        "base": "May",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3951,
+        "word": "dispose",
+        "baseId": 1454,
+        "base": "pose",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3952,
+        "word": "disposition",
+        "baseId": 1455,
+        "base": "position",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3965,
+        "word": "mistake",
+        "baseId": 442,
+        "base": "take",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3967,
+        "word": "misunderstand",
+        "baseId": 473,
+        "base": "understand",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3983,
+        "word": "retail",
+        "baseId": 4994,
+        "base": "tail",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3986,
+        "word": "retire",
+        "baseId": 3107,
+        "base": "tire",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3987,
+        "word": "retort",
+        "baseId": 6439,
+        "base": "tort",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3988,
+        "word": "retreat",
+        "baseId": 756,
+        "base": "treat",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 3991,
+        "word": "revolt",
+        "baseId": 5045,
+        "base": "volt",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4035,
+        "word": "friendly",
+        "baseId": 5147,
+        "base": "friend",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4036,
+        "word": "friendship",
+        "baseId": 5147,
+        "base": "friend",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4067,
+        "word": "overflow",
+        "baseId": 3382,
+        "base": "flow",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4068,
+        "word": "overhaul",
+        "baseId": 2580,
+        "base": "haul",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4069,
+        "word": "overhead",
+        "baseId": 5169,
+        "base": "head",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4070,
+        "word": "overhear",
+        "baseId": 5170,
+        "base": "hear",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4071,
+        "word": "overnight",
+        "baseId": 5282,
+        "base": "night",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4073,
+        "word": "overtake",
+        "baseId": 442,
+        "base": "take",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4074,
+        "word": "overthrow",
+        "baseId": 2363,
+        "base": "throw",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4075,
+        "word": "overtime",
+        "baseId": 3297,
+        "base": "time",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4177,
+        "word": "submarine",
+        "baseId": 1876,
+        "base": "marine",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4178,
+        "word": "submerge",
+        "baseId": 3062,
+        "base": "merge",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4242,
+        "word": "owner",
+        "baseId": 5320,
+        "base": "own",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4243,
+        "word": "ownership",
+        "baseId": 4242,
+        "base": "owner",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4263,
+        "word": "supermarket",
+        "baseId": 5246,
+        "base": "market",
+        "rules": [
+          "prefix:super"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4551,
+        "word": "corner",
+        "baseId": 3712,
+        "base": "corn",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4553,
+        "word": "costly",
+        "baseId": 3617,
+        "base": "cost",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4569,
+        "word": "customer",
+        "baseId": 4280,
+        "base": "custom",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4584,
+        "word": "dispatch",
+        "baseId": 369,
+        "base": "patch",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4598,
+        "word": "directly",
+        "baseId": 4597,
+        "base": "direct",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4600,
+        "word": "discourse",
+        "baseId": 3801,
+        "base": "course",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4617,
+        "word": "Easter",
+        "baseId": 2799,
+        "base": "east",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4646,
+        "word": "farmer",
+        "baseId": 4645,
+        "base": "farm",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4656,
+        "word": "flower",
+        "baseId": 3382,
+        "base": "flow",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4685,
+        "word": "goodness",
+        "baseId": 5158,
+        "base": "good",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4712,
+        "word": "hopeful",
+        "baseId": 5185,
+        "base": "hope",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4771,
+        "word": "locker",
+        "baseId": 4770,
+        "base": "lock",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4774,
+        "word": "lovely",
+        "baseId": 5239,
+        "base": "love",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4794,
+        "word": "movement",
+        "baseId": 3679,
+        "base": "move",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4826,
+        "word": "overcoat",
+        "baseId": 4538,
+        "base": "coat",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4877,
+        "word": "postcard",
+        "baseId": 4486,
+        "base": "card",
+        "rules": [
+          "prefix:post"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4880,
+        "word": "powerful",
+        "baseId": 1176,
+        "base": "power",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4884,
+        "word": "preposition",
+        "baseId": 1455,
+        "base": "position",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4886,
+        "word": "pretend",
+        "baseId": 457,
+        "base": "tend",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4892,
+        "word": "prisoner",
+        "baseId": 4891,
+        "base": "prison",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4912,
+        "word": "really",
+        "baseId": 2013,
+        "base": "ally",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4912,
+        "word": "really",
+        "baseId": 4911,
+        "base": "real",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4913,
+        "word": "record",
+        "baseId": 3709,
+        "base": "cord",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4917,
+        "word": "return",
+        "baseId": 1524,
+        "base": "turn",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4959,
+        "word": "speaker",
+        "baseId": 5411,
+        "base": "speak",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 4991,
+        "word": "sweater",
+        "baseId": 4289,
+        "base": "sweat",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5013,
+        "word": "tourist",
+        "baseId": 5012,
+        "base": "tour",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5048,
+        "word": "waiter",
+        "baseId": 5047,
+        "base": "wait",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5110,
+        "word": "early",
+        "baseId": 2795,
+        "base": "ear",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5196,
+        "word": "Internet",
+        "baseId": 2046,
+        "base": "net",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5298,
+        "word": "number",
+        "baseId": 3969,
+        "base": "numb",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5424,
+        "word": "subway",
+        "baseId": 503,
+        "base": "way",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5436,
+        "word": "teacher",
+        "baseId": 5435,
+        "base": "teach",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5484,
+        "word": "unless",
+        "baseId": 5227,
+        "base": "less",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5489,
+        "word": "usually",
+        "baseId": 5488,
+        "base": "usual",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5521,
+        "word": "wonderful",
+        "baseId": 433,
+        "base": "wonder",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5551,
+        "word": "aggressiveness",
+        "baseId": 525,
+        "base": "aggressive",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5643,
+        "word": "cautiousness",
+        "baseId": 106,
+        "base": "cautious",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5650,
+        "word": "childless",
+        "baseId": 4511,
+        "base": "child",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5651,
+        "word": "chiller",
+        "baseId": 1967,
+        "base": "chill",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5655,
+        "word": "citizenship",
+        "baseId": 2071,
+        "base": "citizen",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5664,
+        "word": "commitment",
+        "baseId": 853,
+        "base": "commit",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5667,
+        "word": "comparatively",
+        "baseId": 539,
+        "base": "comparative",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5680,
+        "word": "constantly",
+        "baseId": 1398,
+        "base": "constant",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5685,
+        "word": "continually",
+        "baseId": 1276,
+        "base": "continual",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5692,
+        "word": "counteract",
+        "baseId": 669,
+        "base": "act",
+        "rules": [
+          "prefix:counter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5693,
+        "word": "counterbalance",
+        "baseId": 223,
+        "base": "balance",
+        "rules": [
+          "prefix:counter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5695,
+        "word": "courtship",
+        "baseId": 1816,
+        "base": "court",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5729,
+        "word": "designer",
+        "baseId": 894,
+        "base": "design",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5735,
+        "word": "disapproval",
+        "baseId": 1265,
+        "base": "approval",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5736,
+        "word": "disbelief",
+        "baseId": 178,
+        "base": "belief",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5737,
+        "word": "disconcert",
+        "baseId": 3552,
+        "base": "concert",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5738,
+        "word": "discontinue",
+        "baseId": 1277,
+        "base": "continue",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5740,
+        "word": "disinfect",
+        "baseId": 2190,
+        "base": "infect",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5742,
+        "word": "disparity",
+        "baseId": 6175,
+        "base": "parity",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5744,
+        "word": "disregard",
+        "baseId": 2224,
+        "base": "regard",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5746,
+        "word": "dissatisfaction",
+        "baseId": 2944,
+        "base": "satisfaction",
+        "rules": [
+          "prefix:dis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5753,
+        "word": "doubtless",
+        "baseId": 1631,
+        "base": "doubt",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5765,
+        "word": "eagerness",
+        "baseId": 2794,
+        "base": "eager",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5769,
+        "word": "effectively",
+        "baseId": 252,
+        "base": "effective",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5788,
+        "word": "essentially",
+        "baseId": 1150,
+        "base": "essential",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5804,
+        "word": "fairness",
+        "baseId": 264,
+        "base": "fair",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5805,
+        "word": "falsehood",
+        "baseId": 3008,
+        "base": "false",
+        "rules": [
+          "suffix:hood"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5811,
+        "word": "fitness",
+        "baseId": 214,
+        "base": "fit",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5813,
+        "word": "flagship",
+        "baseId": 4652,
+        "base": "flag",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5822,
+        "word": "founder",
+        "baseId": 4662,
+        "base": "found",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5835,
+        "word": "geneticist",
+        "baseId": 4679,
+        "base": "genetic",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5872,
+        "word": "homeless",
+        "baseId": 4710,
+        "base": "home",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5879,
+        "word": "hunter",
+        "baseId": 4052,
+        "base": "hunt",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5883,
+        "word": "idealism",
+        "baseId": 16,
+        "base": "ideal",
+        "rules": [
+          "suffix:ism"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5912,
+        "word": "independently",
+        "baseId": 872,
+        "base": "independent",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5935,
+        "word": "inherently",
+        "baseId": 2306,
+        "base": "inherent",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5948,
+        "word": "insightful",
+        "baseId": 3047,
+        "base": "insight",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5952,
+        "word": "instantaneously",
+        "baseId": 3581,
+        "base": "instantaneous",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5958,
+        "word": "intensely",
+        "baseId": 1839,
+        "base": "intense",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5961,
+        "word": "interactive",
+        "baseId": 672,
+        "base": "active",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5963,
+        "word": "intermarriage",
+        "baseId": 5247,
+        "base": "marriage",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5964,
+        "word": "interpersonal",
+        "baseId": 768,
+        "base": "personal",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5965,
+        "word": "interplay",
+        "baseId": 2059,
+        "base": "play",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5967,
+        "word": "interprovincial",
+        "baseId": 6249,
+        "base": "provincial",
+        "rules": [
+          "prefix:inter"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5969,
+        "word": "interviewer",
+        "baseId": 3744,
+        "base": "interview",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5983,
+        "word": "jobless",
+        "baseId": 5204,
+        "base": "job",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5990,
+        "word": "kinship",
+        "baseId": 2036,
+        "base": "kin",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 5998,
+        "word": "legally",
+        "baseId": 318,
+        "base": "legal",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6000,
+        "word": "lender",
+        "baseId": 3495,
+        "base": "lend",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6012,
+        "word": "listener",
+        "baseId": 5234,
+        "base": "listen",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6035,
+        "word": "materialism",
+        "baseId": 390,
+        "base": "material",
+        "rules": [
+          "suffix:ism"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6040,
+        "word": "meaningful",
+        "baseId": 395,
+        "base": "meaning",
+        "rules": [
+          "suffix:ful"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6041,
+        "word": "meaningless",
+        "baseId": 395,
+        "base": "meaning",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6050,
+        "word": "mentally",
+        "baseId": 716,
+        "base": "mental",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6059,
+        "word": "mildly",
+        "baseId": 3393,
+        "base": "mild",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6061,
+        "word": "militantly",
+        "baseId": 1500,
+        "base": "militant",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6068,
+        "word": "minimalist",
+        "baseId": 6067,
+        "base": "minimal",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6071,
+        "word": "misconception",
+        "baseId": 1477,
+        "base": "conception",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6072,
+        "word": "misguide",
+        "baseId": 781,
+        "base": "guide",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6073,
+        "word": "misinformation",
+        "baseId": 1262,
+        "base": "information",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6074,
+        "word": "misinterpret",
+        "baseId": 1848,
+        "base": "interpret",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6075,
+        "word": "misinterpretation",
+        "baseId": 5966,
+        "base": "interpretation",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6076,
+        "word": "misplace",
+        "baseId": 5337,
+        "base": "place",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6077,
+        "word": "misuse",
+        "baseId": 5487,
+        "base": "use",
+        "rules": [
+          "prefix:mis"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6093,
+        "word": "mutually",
+        "baseId": 1561,
+        "base": "mutual",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6095,
+        "word": "narrowly",
+        "baseId": 1379,
+        "base": "narrow",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6099,
+        "word": "naturalist",
+        "baseId": 1385,
+        "base": "natural",
+        "rules": [
+          "suffix:ist"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6101,
+        "word": "neatly",
+        "baseId": 1888,
+        "base": "neat",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6117,
+        "word": "non- materialistic",
+        "baseId": 6036,
+        "base": "materialistic",
+        "rules": [
+          "prefix:non"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6118,
+        "word": "non-standard",
+        "baseId": 1324,
+        "base": "standard",
+        "rules": [
+          "prefix:non"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6119,
+        "word": "nonverbal",
+        "baseId": 1030,
+        "base": "verbal",
+        "rules": [
+          "prefix:non"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6140,
+        "word": "openly",
+        "baseId": 5312,
+        "base": "open",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6156,
+        "word": "overdue",
+        "baseId": 1549,
+        "base": "due",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6157,
+        "word": "overestimate",
+        "baseId": 1152,
+        "base": "estimate",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6158,
+        "word": "overly",
+        "baseId": 5319,
+        "base": "over",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6159,
+        "word": "overpay",
+        "baseId": 372,
+        "base": "pay",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6160,
+        "word": "overrule",
+        "baseId": 1703,
+        "base": "rule",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6161,
+        "word": "overshadow",
+        "baseId": 811,
+        "base": "shadow",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6162,
+        "word": "oversize",
+        "baseId": 5388,
+        "base": "size",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6163,
+        "word": "overstate",
+        "baseId": 1330,
+        "base": "state",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6164,
+        "word": "overstep",
+        "baseId": 1341,
+        "base": "step",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6166,
+        "word": "overvalue",
+        "baseId": 491,
+        "base": "value",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6168,
+        "word": "overwork",
+        "baseId": 3693,
+        "base": "work",
+        "rules": [
+          "prefix:over"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6189,
+        "word": "periodically",
+        "baseId": 967,
+        "base": "periodical",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6204,
+        "word": "physically",
+        "baseId": 936,
+        "base": "physical",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6214,
+        "word": "pointless",
+        "baseId": 1792,
+        "base": "point",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6218,
+        "word": "powerfully",
+        "baseId": 4880,
+        "base": "powerful",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6219,
+        "word": "powerless",
+        "baseId": 1176,
+        "base": "power",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6225,
+        "word": "prehistoric",
+        "baseId": 4707,
+        "base": "historic",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6226,
+        "word": "preoccupation",
+        "baseId": 336,
+        "base": "occupation",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6229,
+        "word": "presuppose",
+        "baseId": 1584,
+        "base": "suppose",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6231,
+        "word": "prewar",
+        "baseId": 5494,
+        "base": "war",
+        "rules": [
+          "prefix:pre"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6232,
+        "word": "priestly",
+        "baseId": 3760,
+        "base": "priest",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6234,
+        "word": "printer",
+        "baseId": 4890,
+        "base": "print",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6239,
+        "word": "professorship",
+        "baseId": 4893,
+        "base": "professor",
+        "rules": [
+          "suffix:ship"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6246,
+        "word": "pronouncement",
+        "baseId": 4077,
+        "base": "pronounce",
+        "rules": [
+          "suffix:ment"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6267,
+        "word": "randomly",
+        "baseId": 384,
+        "base": "random",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6269,
+        "word": "rasher",
+        "baseId": 2169,
+        "base": "rash",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6270,
+        "word": "reactor",
+        "baseId": 4360,
+        "base": "actor",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6271,
+        "word": "reaffirm",
+        "baseId": 830,
+        "base": "affirm",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6273,
+        "word": "rebuild",
+        "baseId": 1469,
+        "base": "build",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6275,
+        "word": "reconsider",
+        "baseId": 1105,
+        "base": "consider",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6276,
+        "word": "reconstruct",
+        "baseId": 1403,
+        "base": "construct",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6277,
+        "word": "recruiter",
+        "baseId": 792,
+        "base": "recruit",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6278,
+        "word": "redefine",
+        "baseId": 193,
+        "base": "define",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6279,
+        "word": "redirect",
+        "baseId": 4597,
+        "base": "direct",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6282,
+        "word": "re-evaluate",
+        "baseId": 1155,
+        "base": "evaluate",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6284,
+        "word": "regain",
+        "baseId": 270,
+        "base": "gain",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6286,
+        "word": "relatively",
+        "baseId": 1318,
+        "base": "relative",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6288,
+        "word": "remarry",
+        "baseId": 5248,
+        "base": "marry",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6292,
+        "word": "reorder",
+        "baseId": 3074,
+        "base": "order",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6297,
+        "word": "reproductive",
+        "baseId": 1642,
+        "base": "productive",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6298,
+        "word": "reshape",
+        "baseId": 954,
+        "base": "shape",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6303,
+        "word": "revision",
+        "baseId": 1095,
+        "base": "vision",
+        "rules": [
+          "prefix:re"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6306,
+        "word": "richness",
+        "baseId": 1693,
+        "base": "rich",
+        "rules": [
+          "suffix:ness"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6347,
+        "word": "simultaneously",
+        "baseId": 2234,
+        "base": "simultaneous",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6357,
+        "word": "sneaker",
+        "baseId": 3189,
+        "base": "sneak",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6388,
+        "word": "strangely",
+        "baseId": 3767,
+        "base": "strange",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6391,
+        "word": "strictly",
+        "baseId": 4982,
+        "base": "strict",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6392,
+        "word": "strikingly",
+        "baseId": 1432,
+        "base": "striking",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6399,
+        "word": "subconscious",
+        "baseId": 1275,
+        "base": "conscious",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6401,
+        "word": "submission",
+        "baseId": 3139,
+        "base": "mission",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6403,
+        "word": "subsequently",
+        "baseId": 1240,
+        "base": "subsequent",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6405,
+        "word": "substantially",
+        "baseId": 1242,
+        "base": "substantial",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6407,
+        "word": "subtitle",
+        "baseId": 427,
+        "base": "title",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6408,
+        "word": "suburban",
+        "baseId": 428,
+        "base": "urban",
+        "rules": [
+          "prefix:sub"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6409,
+        "word": "successfully",
+        "baseId": 1754,
+        "base": "successful",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6410,
+        "word": "suddenly",
+        "baseId": 4180,
+        "base": "sudden",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6415,
+        "word": "suspiciously",
+        "baseId": 1717,
+        "base": "suspicious",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6431,
+        "word": "thoughtless",
+        "baseId": 144,
+        "base": "thought",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6432,
+        "word": "thriller",
+        "baseId": 422,
+        "base": "thrill",
+        "rules": [
+          "suffix:er"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6433,
+        "word": "timeless",
+        "baseId": 3297,
+        "base": "time",
+        "rules": [
+          "suffix:less"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6455,
+        "word": "ultimately",
+        "baseId": 467,
+        "base": "ultimate",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6462,
+        "word": "unattractive",
+        "baseId": 4336,
+        "base": "attractive",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6463,
+        "word": "unaware",
+        "baseId": 1673,
+        "base": "aware",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6465,
+        "word": "unbiased",
+        "baseId": 5606,
+        "base": "biased",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6467,
+        "word": "uncertain",
+        "baseId": 111,
+        "base": "certain",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6469,
+        "word": "unclean",
+        "baseId": 4529,
+        "base": "clean",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6470,
+        "word": "uncontrollable",
+        "baseId": 5688,
+        "base": "controllable",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6472,
+        "word": "uncool",
+        "baseId": 3701,
+        "base": "cool",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6473,
+        "word": "undercut",
+        "baseId": 1667,
+        "base": "cut",
+        "rules": [
+          "prefix:under"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6474,
+        "word": "undesirable",
+        "baseId": 896,
+        "base": "desirable",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6477,
+        "word": "undue",
+        "baseId": 1549,
+        "base": "due",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6478,
+        "word": "uneconomic",
+        "baseId": 245,
+        "base": "economic",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6480,
+        "word": "uneven",
+        "baseId": 3858,
+        "base": "even",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6481,
+        "word": "unfairness",
+        "baseId": 5804,
+        "base": "fairness",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6482,
+        "word": "unfamiliar",
+        "baseId": 3010,
+        "base": "familiar",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6483,
+        "word": "unfashionable",
+        "baseId": 123,
+        "base": "fashionable",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6485,
+        "word": "unfeasible",
+        "baseId": 2112,
+        "base": "feasible",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6488,
+        "word": "uniformly",
+        "baseId": 2367,
+        "base": "uniform",
+        "rules": [
+          "suffix:ly"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6494,
+        "word": "unjust",
+        "baseId": 4739,
+        "base": "just",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6498,
+        "word": "unnatural",
+        "baseId": 1385,
+        "base": "natural",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6499,
+        "word": "unnecessarily",
+        "baseId": 6102,
+        "base": "necessarily",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6504,
+        "word": "unrealistic",
+        "baseId": 993,
+        "base": "realistic",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6505,
+        "word": "unreasonable",
+        "baseId": 942,
+        "base": "reasonable",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6508,
+        "word": "unrepresentative",
+        "baseId": 3409,
+        "base": "representative",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6509,
+        "word": "unseat",
+        "baseId": 4931,
+        "base": "seat",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6510,
+        "word": "unsettle",
+        "baseId": 950,
+        "base": "settle",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6511,
+        "word": "unsurprisingly",
+        "baseId": 6414,
+        "base": "surprisingly",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      },
+      {
+        "wordId": 6514,
+        "word": "unworthy",
+        "baseId": 437,
+        "base": "worthy",
+        "rules": [
+          "prefix:un"
+        ],
+        "decision": "audit-only"
+      }
+    ]
+  }
+}

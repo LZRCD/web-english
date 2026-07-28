@@ -7,6 +7,7 @@
   },
   "scripts": {
     "data:extract": "node scripts/extract-redbook.mjs",
+    "data:audit": "node scripts/audit-redbook.mjs",
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",

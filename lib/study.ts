@@ -1,3 +1,16 @@
+import { canonicalWordId } from "./redbook.ts";
+
+export type WordRelation = {
+  kind: "grammar" | "lexicalized" | "pronoun" | "derived" | "contrast" | "inflection" | "variant";
+  label: string;
+  note: string;
+  lemmaId?: number;
+  lemma?: string;
+  canonicalId: number;
+  independent: boolean;
+  confidence: "confirmed" | "source-confirmed";
+};
+
 export type Word = {
   word: string;
   phonetic?: string;
@@ -13,6 +26,7 @@ export type Word = {
   section?: string;
   unit?: number | string;
   sourcePage?: number;
+  relation?: WordRelation;
 };
 
 export type Review = {
@@ -41,7 +55,7 @@ export type StudyScope = "selection" | "all";
 export type StudyPositions = Record<string, number>;
 
 export type StoredState = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   reviews: Review[];
   favorites: SavedWord[];
   mistakes: MistakeRecord[];
@@ -57,7 +71,7 @@ export type StoredState = {
 };
 
 export const STORAGE_KEY = "wordloop-state";
-export const STORAGE_VERSION = 2;
+export const STORAGE_VERSION = 3;
 export const MAX_REVIEWS = 10000;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;
 
@@ -79,7 +93,7 @@ function storedWordId(item: Record<string, unknown>) {
   const keyMatch = typeof item.key === "string" ? item.key.match(/^redbook-(\d+)$/) : null;
   const value = item.wordId ?? item.id ?? word?.id ?? keyMatch?.[1];
   const id = Number(value);
-  return Number.isInteger(id) && id >= 1 && id <= 6550 ? id : null;
+  return Number.isInteger(id) && id >= 1 && id <= 6550 ? canonicalWordId(id) : null;
 }
 
 function normalizeSavedWord(value: unknown): SavedWord | null {
@@ -144,7 +158,9 @@ function normalizeReview(value: unknown): Review | null {
   const dueAt = validDate(item.dueAt)?.toISOString()
     ?? reviewDueAt(reviewedAt.toISOString(), rating);
   return {
-    wordId: Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550 ? wordId : undefined,
+    wordId: Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550
+      ? canonicalWordId(wordId)
+      : undefined,
     word: item.word.trim(),
     rating,
     dueAt,
@@ -239,7 +255,7 @@ export function dateKey(value: string | Date) {
 
 function reviewKey(review: Review) {
   return review.wordId
-    ? `id:${review.wordId}`
+    ? `id:${canonicalWordId(review.wordId)}`
     : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`;
 }
 
