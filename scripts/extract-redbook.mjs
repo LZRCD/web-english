@@ -12,6 +12,34 @@ const meaningPdf = path.join(listRoot, "2027考研英语红宝书（正序版）
 const structurePdf = path.join(resourceRoot, "27红宝书单词正序版.pdf");
 const outputFile = path.join(projectRoot, "public", "data", "redbook.json");
 
+const sourceGlyphReplacements = {
+  "㬵": "胶",
+  "⺠": "民",
+  "⻅": "见",
+  "⻆": "角",
+  "⻉": "贝",
+  "⻋": "车",
+  "⻓": "长",
+  "⻔": "门",
+  "⻘": "青",
+  "⻚": "页",
+  "⻛": "风",
+  "⻜": "飞",
+  "⻝": "食",
+  "⻢": "马",
+  "⻣": "骨",
+  "⻤": "鬼",
+  "⻥": "鱼",
+  "⻦": "鸟",
+  "⻨": "麦",
+  "⻩": "黄",
+  "⻬": "齐",
+  "⻮": "齿",
+  "⻰": "龙",
+};
+
+let normalizedSourceGlyphs = 0;
+
 function extractText(file) {
   return execFileSync(
     "pdftotext",
@@ -57,15 +85,22 @@ function parseSequentialEntries(text) {
   return entries;
 }
 
-function normalizeWord(word) {
+function normalizeLocationWord(word) {
   return word
-    .toLowerCase()
     .replace(/\(([^)]+)\)/g, "$1")
     .replace(/[^\p{L}\p{N}/-]/gu, "");
 }
 
+function normalizeMeaning(text) {
+  return text.replace(/[㬵⺠⻅⻆⻉⻋⻓⻔⻘⻚⻛⻜⻝⻢⻣⻤⻥⻦⻨⻩⻬⻮⻰]/gu, (glyph) => {
+    normalizedSourceGlyphs += 1;
+    return sourceGlyphReplacements[glyph];
+  });
+}
+
 function parseStructure(text) {
-  const lookup = new Map();
+  const exactLookup = new Map();
+  const caseInsensitiveLookup = new Map();
   let section = "必考词";
   let unit = 1;
 
@@ -98,16 +133,21 @@ function parseStructure(text) {
     const wordMatch = line.match(/^\d+\.\s*(\S.+?)\s*$/);
     if (!wordMatch) continue;
     const word = wordMatch[1].trim();
-    const normalized = normalizeWord(word);
+    const normalized = normalizeLocationWord(word);
     const resolvedUnit = section === "超纲词"
       ? (word.match(/[A-Za-z]/)?.[0] ?? "A").toUpperCase()
       : unit;
-    if (!lookup.has(normalized)) {
-      lookup.set(normalized, { section, unit: resolvedUnit });
+    const location = { section, unit: resolvedUnit };
+    if (!exactLookup.has(normalized)) {
+      exactLookup.set(normalized, location);
+    }
+    const caseInsensitiveWord = normalized.toLowerCase();
+    if (!caseInsensitiveLookup.has(caseInsensitiveWord)) {
+      caseInsensitiveLookup.set(caseInsensitiveWord, location);
     }
   }
 
-  return lookup;
+  return { exactLookup, caseInsensitiveLookup };
 }
 
 const englishEntries = parseSequentialEntries(extractText(englishPdf));
@@ -125,17 +165,21 @@ let inferredLocations = 0;
 
 const words = englishEntries.map((entry, offset) => {
   const word = entry.content.replace(/\s+/g, " ").trim();
-  const location = structure.get(normalizeWord(word));
+  const normalizedWord = normalizeLocationWord(word);
+  const location = structure.exactLookup.get(normalizedWord)
+    ?? structure.caseInsensitiveLookup.get(normalizedWord.toLowerCase());
   if (location) {
     previousLocation = location;
   } else {
     inferredLocations += 1;
   }
 
-  const meaning = meaningEntries[offset].content
-    .replace(/\s+/g, " ")
-    .replace(/\s+([,.;:，。；：])/g, "$1")
-    .trim();
+  const meaning = normalizeMeaning(
+    meaningEntries[offset].content
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.;:，。；：])/g, "$1")
+      .trim(),
+  );
 
   return {
     id: entry.index,
@@ -152,6 +196,13 @@ const sectionCounts = words.reduce((counts, item) => {
   return counts;
 }, {});
 
+const unresolvedGlyphEntries = words
+  .filter((item) => /[\u2E80-\u2EFF\u3B35]/u.test(item.meaning))
+  .map((item) => item.id);
+if (unresolvedGlyphEntries.length) {
+  throw new Error(`词义中仍有未正规化的 PDF 字形：${unresolvedGlyphEntries.join(", ")}`);
+}
+
 mkdirSync(path.dirname(outputFile), { recursive: true });
 writeFileSync(
   outputFile,
@@ -163,6 +214,7 @@ writeFileSync(
         generatedAt: new Date().toISOString(),
         sectionCounts,
         inferredLocations,
+        normalizedSourceGlyphs,
       },
       words,
     },
@@ -175,4 +227,5 @@ writeFileSync(
 console.log(`已生成 ${words.length} 个词条：${outputFile}`);
 console.log(`分组统计：${JSON.stringify(sectionCounts)}`);
 console.log(`沿用相邻词单元位置：${inferredLocations} 个`);
+console.log(`已正规化 PDF 异常字形：${normalizedSourceGlyphs} 处`);
 console.log("请继续运行 npm run data:audit，以高清正文修正冲突并生成词族审计。");

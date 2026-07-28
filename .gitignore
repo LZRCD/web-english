@@ -38,11 +38,15 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /.wrangler/
 /outputs/
 /work/
+/tmp/
 /.openai/dev-output.log
 /.openai/dev-error.log
+/docs/Typora_Hook_Log.txt
 /资源/
+/public/audio/
 /public/data/redbook.json

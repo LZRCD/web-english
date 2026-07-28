@@ -8,6 +8,7 @@
     "morphologicalCandidates": 70,
     "broaderRelationCandidates": 451,
     "sourceCorrections": 2,
+    "normalizedSourceGlyphs": 878,
     "unresolvedConfirmedSourceConflicts": 0,
     "sourceComparisonScope": "全量扫描 6550 个词条；对规则候选、同形词及资料冲突项逐项复核",
     "sourcePriority": [
@@ -884,7 +885,7 @@
           {
             "id": 1875,
             "word": "march",
-            "meaning": "vi. vt. ⻬步走 vi. 前进;游行示威 vt. 使同行,强迫 (某人) 一起走 n. 示威游行;行军;推进;进行曲"
+            "meaning": "vi. vt. 齐步走 vi. 前进;游行示威 vt. 使同行,强迫 (某人) 一起走 n. 示威游行;行军;推进;进行曲"
           },
           {
             "id": 5245,

@@ -264,6 +264,7 @@ const analysis = {
     morphologicalCandidates,
     broaderRelationCandidates: broaderCandidates.length,
     sourceCorrections: Object.keys(sourceCorrections).length,
+    normalizedSourceGlyphs: data.metadata.normalizedSourceGlyphs ?? 0,
     unresolvedConfirmedSourceConflicts: 0,
     sourceComparisonScope: "全量扫描 6550 个词条；对规则候选、同形词及资料冲突项逐项复核",
     sourcePriority: [
@@ -319,6 +320,7 @@ writeFileSync(reportFile, `# 红宝书 6550 词全量审计
 - 规则变形候选：${morphologicalCandidates}
 - 更广泛派生候选：${broaderCandidates.length}（逐条保存在分析 JSON，仅用于审计，不自动影响学习进度）
 - 高清正文确认的资料修正：${analysis.metadata.sourceCorrections}
+- PDF 异常字形正规化：${analysis.metadata.normalizedSourceGlyphs}
 - 已确认冲突中未解决项：${analysis.metadata.unresolvedConfirmedSourceConflicts}
 
 审计范围：${analysis.metadata.sourceComparisonScope}。

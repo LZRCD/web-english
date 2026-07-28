@@ -1,4 +1,27 @@
 import { canonicalWordId } from "./redbook.ts";
+import {
+  averageRetrievability,
+  rebuildStubbornWords,
+  rebuildWordProgress,
+  type Rating,
+  type ReviewEvent,
+  type SerializedFsrsCard,
+  type StubbornWordMap,
+  type StubbornWordRecord,
+  type StudySession,
+  type WordEnrichment,
+  type WordProgress,
+  type WordProgressMap,
+} from "./learning.ts";
+
+export type {
+  Rating,
+  ReviewEvent,
+  StudySession,
+  WordEnrichment,
+  WordProgress,
+  WordProgressMap,
+} from "./learning.ts";
 
 export type WordRelation = {
   kind: "grammar" | "lexicalized" | "pronoun" | "derived" | "contrast" | "inflection" | "variant";
@@ -29,15 +52,7 @@ export type Word = {
   relation?: WordRelation;
 };
 
-export type Review = {
-  wordId?: number;
-  word: string;
-  rating: number;
-  dueAt: string;
-  reviewedAt: string;
-  section?: string;
-  unit?: number | string;
-};
+export type Review = ReviewEvent;
 
 export type SavedWord = {
   wordId: number;
@@ -55,13 +70,20 @@ export type StudyScope = "selection" | "all";
 export type StudyPositions = Record<string, number>;
 
 export type StoredState = {
-  schemaVersion: 3;
+  schemaVersion: 5;
   reviews: Review[];
+  wordProgress: WordProgressMap;
   favorites: SavedWord[];
   mistakes: MistakeRecord[];
+  stubbornWords: StubbornWordMap;
   positions: StudyPositions;
+  activeSession?: StudySession;
+  enrichments: Record<number, WordEnrichment>;
   started: boolean;
   dailyGoal: number;
+  adaptiveNewWords: boolean;
+  minimumNewWords: number;
+  examDate: string;
   soundOn: boolean;
   studyMode: StudyMode;
   studyScope: StudyScope;
@@ -71,7 +93,7 @@ export type StoredState = {
 };
 
 export const STORAGE_KEY = "wordloop-state";
-export const STORAGE_VERSION = 3;
+export const STORAGE_VERSION = 5;
 export const MAX_REVIEWS = 10000;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;
 
@@ -122,6 +144,38 @@ function normalizeMistake(value: unknown): MistakeRecord | null {
   };
 }
 
+function normalizeStubbornWord(
+  value: unknown,
+  wordId: number,
+): StubbornWordRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const triggeredAt = validDate(item.triggeredAt);
+  const lastChangedAt = validDate(item.lastChangedAt);
+  if (
+    !triggeredAt
+    || !lastChangedAt
+    || !["again-3", "low-5"].includes(String(item.reason))
+  ) {
+    return null;
+  }
+  const active = item.active === true
+    && Date.now() - lastChangedAt.getTime() <= 30 * 24 * 60 * 60 * 1000;
+  return {
+    wordId: canonicalWordId(wordId),
+    active,
+    reason: item.reason as StubbornWordRecord["reason"],
+    triggeredAt: triggeredAt.toISOString(),
+    lastChangedAt: active
+      ? lastChangedAt.toISOString()
+      : validDate(item.resolvedAt)?.toISOString() ?? lastChangedAt.toISOString(),
+    triggerCount: Math.max(1, Number(item.triggerCount) || 1),
+    resolvedAt: active
+      ? undefined
+      : validDate(item.resolvedAt)?.toISOString() ?? lastChangedAt.toISOString(),
+  };
+}
+
 function uniqueByWordId<T extends SavedWord>(items: T[]) {
   const seen = new Set<number>();
   return items.filter((item) => {
@@ -131,12 +185,12 @@ function uniqueByWordId<T extends SavedWord>(items: T[]) {
   });
 }
 
-export function reviewDueAt(reviewedAt: string, rating: number) {
+export function reviewDueAt(reviewedAt: string, rating: Rating) {
   const reviewed = validDate(reviewedAt) ?? new Date();
   return new Date(reviewed.getTime() + REVIEW_INTERVALS[rating]).toISOString();
 }
 
-function normalizeReview(value: unknown): Review | null {
+function normalizeReview(value: unknown, index: number): Review | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
   const rating = Number(item.rating);
@@ -156,20 +210,182 @@ function normalizeReview(value: unknown): Review | null {
   }
   const wordId = Number(item.wordId);
   const dueAt = validDate(item.dueAt)?.toISOString()
-    ?? reviewDueAt(reviewedAt.toISOString(), rating);
+    ?? reviewDueAt(reviewedAt.toISOString(), rating as Rating);
+  const normalizedWordId = Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550
+    ? canonicalWordId(wordId)
+    : undefined;
+  const intervalMs = Number(item.intervalMs);
+  const recallMs = Number(item.recallMs);
+  const inferredInterval = Math.max(
+    10 * 60 * 1000,
+    new Date(dueAt).getTime() - reviewedAt.getTime(),
+  );
   return {
-    wordId: Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550
-      ? canonicalWordId(wordId)
-      : undefined,
+    id: typeof item.id === "string" && item.id
+      ? item.id
+      : `legacy:${normalizedWordId ?? item.word}:${reviewedAt.toISOString()}:${index}`,
+    wordId: normalizedWordId,
     word: item.word.trim(),
-    rating,
+    rating: rating as Rating,
+    kind: item.kind === "new" ? "new" : "review",
+    intervalMs: Number.isFinite(intervalMs) && intervalMs > 0
+      ? intervalMs
+      : inferredInterval,
     dueAt,
     reviewedAt: reviewedAt.toISOString(),
+    recallMs: Number.isFinite(recallMs) && recallMs >= 0
+      ? Math.round(recallMs)
+      : undefined,
     section,
     unit: typeof item.unit === "string" || typeof item.unit === "number"
       ? item.unit
       : undefined,
   };
+}
+
+type NormalizedWordProgress = Omit<WordProgress, "fsrsCard"> & {
+  fsrsCard?: SerializedFsrsCard;
+};
+
+function normalizeFsrsCard(value: unknown): SerializedFsrsCard | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const item = value as Record<string, unknown>;
+  const due = validDate(item.due);
+  const lastReview = validDate(item.lastReview);
+  const state = Number(item.state);
+  const numericFields = [
+    "stability",
+    "difficulty",
+    "elapsedDays",
+    "scheduledDays",
+    "learningSteps",
+    "reps",
+    "lapses",
+  ] as const;
+  if (
+    !due
+    || !Number.isInteger(state)
+    || state < 0
+    || state > 3
+    || numericFields.some((field) => !Number.isFinite(Number(item[field])))
+  ) {
+    return undefined;
+  }
+  return {
+    due: due.toISOString(),
+    stability: Number(item.stability),
+    difficulty: Number(item.difficulty),
+    elapsedDays: Number(item.elapsedDays),
+    scheduledDays: Number(item.scheduledDays),
+    learningSteps: Number(item.learningSteps),
+    reps: Number(item.reps),
+    lapses: Number(item.lapses),
+    state,
+    lastReview: lastReview?.toISOString(),
+  };
+}
+
+function normalizeWordProgress(
+  value: unknown,
+  wordId: number,
+): NormalizedWordProgress | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const firstLearnedAt = validDate(item.firstLearnedAt);
+  const lastReviewedAt = validDate(item.lastReviewedAt);
+  const nextDueAt = validDate(item.nextDueAt);
+  const lastRating = Number(item.lastRating);
+  if (
+    !firstLearnedAt
+    || !lastReviewedAt
+    || !nextDueAt
+    || !Number.isInteger(lastRating)
+    || lastRating < 0
+    || lastRating > 3
+  ) {
+    return null;
+  }
+  const intervalMs = Number(item.intervalMs);
+  return {
+    wordId: canonicalWordId(wordId),
+    status: item.status === "mastered"
+      ? "mastered"
+      : item.status === "reviewing"
+        ? "reviewing"
+        : "learning",
+    firstLearnedAt: firstLearnedAt.toISOString(),
+    lastReviewedAt: lastReviewedAt.toISOString(),
+    nextDueAt: nextDueAt.toISOString(),
+    lastRating: lastRating as Rating,
+    reviewCount: Math.max(1, Number(item.reviewCount) || 1),
+    successCount: Math.max(0, Number(item.successCount) || 0),
+    lapseCount: Math.max(0, Number(item.lapseCount) || 0),
+    consecutiveSuccesses: Math.max(0, Number(item.consecutiveSuccesses) || 0),
+    intervalMs: Number.isFinite(intervalMs) && intervalMs > 0
+      ? intervalMs
+      : Math.max(10 * 60 * 1000, nextDueAt.getTime() - lastReviewedAt.getTime()),
+    fsrsCard: normalizeFsrsCard(item.fsrsCard),
+    ...(validDate(item.weakResolvedAt)
+      ? { weakResolvedAt: validDate(item.weakResolvedAt)!.toISOString() }
+      : {}),
+  };
+}
+
+function normalizeSession(value: unknown): StudySession | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.id !== "string"
+    || typeof item.title !== "string"
+    || !["today", "favorites", "mistakes", "search"].includes(String(item.kind))
+    || !Array.isArray(item.wordIds)
+  ) {
+    return undefined;
+  }
+  const wordIds = item.wordIds
+    .map(Number)
+    .filter((wordId) => Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550)
+    .map(canonicalWordId)
+    .filter((wordId, index, items) => items.indexOf(wordId) === index);
+  return {
+    id: item.id,
+    kind: item.kind as StudySession["kind"],
+    title: item.title,
+    wordIds,
+    index: Math.min(wordIds.length, Math.max(0, Number(item.index) || 0)),
+    createdAt: validDate(item.createdAt)?.toISOString() ?? new Date(0).toISOString(),
+  };
+}
+
+function normalizeEnrichments(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<number, WordEnrichment> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const wordId = canonicalWordId(Number(key));
+    if (
+      !Number.isInteger(wordId)
+      || wordId < 1
+      || wordId > 6550
+      || !raw
+      || typeof raw !== "object"
+    ) {
+      continue;
+    }
+    const item = raw as Record<string, unknown>;
+    if (!["redbook", "dictionary", "ai"].includes(String(item.source))) continue;
+    result[wordId] = {
+      phonetic: typeof item.phonetic === "string" ? item.phonetic : undefined,
+      sentence: typeof item.sentence === "string" ? item.sentence : undefined,
+      translation: typeof item.translation === "string" ? item.translation : undefined,
+      collocations: Array.isArray(item.collocations)
+        ? item.collocations.filter((entry): entry is string => typeof entry === "string").slice(0, 4)
+        : undefined,
+      source: item.source as WordEnrichment["source"],
+      generatedAt: validDate(item.generatedAt)?.toISOString(),
+      verified: item.verified === true,
+    };
+  }
+  return result;
 }
 
 export function buildStudyKey(
@@ -186,6 +402,7 @@ export function buildStudyKey(
 
 export function parseStoredState(raw: string): StoredState {
   const state = JSON.parse(raw) as Record<string, unknown>;
+  const sourceVersion = Number(state.schemaVersion) || 1;
   const studyMode: StudyMode = state.studyMode === "shuffled" ? "shuffled" : "ordered";
   const studyScope: StudyScope = state.studyScope === "all" ? "all" : "selection";
   const shuffleSeed = Number.isFinite(state.shuffleSeed) ? Number(state.shuffleSeed) : 1;
@@ -214,13 +431,66 @@ export function parseStoredState(raw: string): StoredState {
       shuffleSeed,
     )] = legacyIndex;
   }
+  const normalizedReviews = (Array.isArray(state.reviews) ? state.reviews : [])
+    .map(normalizeReview)
+    .filter((item): item is Review => item !== null)
+    .slice(-MAX_REVIEWS);
+  if (sourceVersion < 4) {
+    const seen = new Set<number>();
+    for (const review of normalizedReviews) {
+      if (!review.wordId) continue;
+      review.kind = seen.has(review.wordId) ? "review" : "new";
+      seen.add(review.wordId);
+    }
+  }
+  const normalizedProgress = state.wordProgress && typeof state.wordProgress === "object"
+    ? Object.fromEntries(
+        Object.entries(state.wordProgress as Record<string, unknown>)
+          .map(([key, value]) => {
+            const wordId = Number(key);
+            return [canonicalWordId(wordId), normalizeWordProgress(value, wordId)];
+          })
+          .filter((entry): entry is [number, NormalizedWordProgress] =>
+            Number.isInteger(entry[0]) && entry[1] !== null),
+      )
+    : {};
+  const storedProgressIsFsrs = sourceVersion >= STORAGE_VERSION
+    && (Object.keys(normalizedProgress).length > 0 || normalizedReviews.length === 0)
+    && Object.values(normalizedProgress).every((item) => item.fsrsCard !== undefined);
+  const wordProgress: WordProgressMap = storedProgressIsFsrs
+    ? Object.fromEntries(
+        Object.entries(normalizedProgress)
+          .map(([wordId, item]) => [wordId, item as WordProgress]),
+      )
+    : rebuildWordProgress(normalizedReviews);
+  if (!storedProgressIsFsrs) {
+    for (const [wordId, item] of Object.entries(normalizedProgress)) {
+      if (item.weakResolvedAt && wordProgress[Number(wordId)]) {
+        wordProgress[Number(wordId)].weakResolvedAt = item.weakResolvedAt;
+      }
+    }
+  }
+  const storedStubbornWords: StubbornWordMap = state.stubbornWords
+    && typeof state.stubbornWords === "object"
+    ? Object.fromEntries(
+        Object.entries(state.stubbornWords as Record<string, unknown>)
+          .map(([key, value]) => {
+            const wordId = canonicalWordId(Number(key));
+            return [wordId, normalizeStubbornWord(value, wordId)];
+          })
+          .filter((entry): entry is [number, StubbornWordRecord] =>
+            Number.isInteger(entry[0]) && entry[1] !== null),
+      )
+    : {};
+  const stubbornWords = {
+    ...storedStubbornWords,
+    ...rebuildStubbornWords(normalizedReviews),
+  };
 
   return {
     schemaVersion: STORAGE_VERSION,
-    reviews: (Array.isArray(state.reviews) ? state.reviews : [])
-      .map(normalizeReview)
-      .filter((item): item is Review => item !== null)
-      .slice(-MAX_REVIEWS),
+    reviews: normalizedReviews,
+    wordProgress,
     favorites: uniqueByWordId(
       (Array.isArray(state.favorites) ? state.favorites : [])
         .map(normalizeSavedWord)
@@ -231,11 +501,22 @@ export function parseStoredState(raw: string): StoredState {
         .map(normalizeMistake)
         .filter((item): item is MistakeRecord => item !== null),
     ),
+    stubbornWords,
     positions,
+    activeSession: normalizeSession(state.activeSession),
+    enrichments: normalizeEnrichments(state.enrichments),
     started: state.started === true,
     dailyGoal: [10, 20, 30, 50].includes(Number(state.dailyGoal))
       ? Number(state.dailyGoal)
       : 20,
+    adaptiveNewWords: state.adaptiveNewWords !== false,
+    minimumNewWords: [0, 5, 10].includes(Number(state.minimumNewWords))
+      ? Number(state.minimumNewWords)
+      : 5,
+    examDate: typeof state.examDate === "string"
+      && /^\d{4}-\d{2}-\d{2}$/.test(state.examDate)
+      ? state.examDate
+      : "",
     soundOn: state.soundOn !== false,
     studyMode,
     studyScope,
@@ -259,13 +540,20 @@ function reviewKey(review: Review) {
     : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`;
 }
 
-export function learningStats(reviews: Review[], now = new Date()) {
+export function learningStats(
+  reviews: Review[],
+  progressOrNow: WordProgressMap | Date = rebuildWordProgress(reviews),
+  currentTime = new Date(),
+) {
+  const progress = progressOrNow instanceof Date
+    ? rebuildWordProgress(reviews)
+    : progressOrNow;
+  const now = progressOrNow instanceof Date ? progressOrNow : currentTime;
   const today = dateKey(now);
-  const todayWords = new Set(
-    reviews
-      .filter((review) => dateKey(review.reviewedAt) === today)
-      .map(reviewKey),
-  );
+  const todayReviews = reviews.filter((review) => dateKey(review.reviewedAt) === today);
+  const todayWords = new Set(todayReviews.map(reviewKey));
+  const newCount = todayReviews.filter((review) => review.kind === "new").length;
+  const reviewCount = todayReviews.length - newCount;
 
   const activeDates = new Set(reviews.map((review) => dateKey(review.reviewedAt)));
   const cursor = new Date(now);
@@ -276,25 +564,19 @@ export function learningStats(reviews: Review[], now = new Date()) {
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  const latestByWord = new Map<string, Review>();
-  for (const review of reviews) {
-    const key = reviewKey(review);
-    const previous = latestByWord.get(key);
-    if (!previous || previous.reviewedAt < review.reviewedAt) {
-      latestByWord.set(key, review);
-    }
-  }
-  const due = [...latestByWord.values()].filter(
-    (review) => new Date(review.dueAt).getTime() <= now.getTime(),
-  );
+  const dueCount = Object.values(progress).filter(
+    (item) => new Date(item.nextDueAt).getTime() <= now.getTime(),
+  ).length;
 
   return {
     todayDone: todayWords.size,
+    newCount,
+    reviewCount,
+    completionCount: todayReviews.length,
+    coveredCount: todayWords.size,
     streak,
-    dueCount: due.length,
-    memoryStrength: reviews.length
-      ? Math.round((reviews.filter((review) => review.rating > 1).length / reviews.length) * 100)
-      : 0,
+    dueCount,
+    retrievability: averageRetrievability(progress, now),
   };
 }
 

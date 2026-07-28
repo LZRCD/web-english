@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
+async function requestApp(request = new Request("http://localhost/", {
+  headers: { accept: "text/html" },
+})) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", {
-      headers: { accept: "text/html" },
-    }),
+    request,
     {
       ASSETS: {
         fetch: async () => new Response("Not found", { status: 404 }),
@@ -24,7 +24,7 @@ async function render() {
 }
 
 test("服务端渲染词环红宝书加载页", async () => {
-  const response = await render();
+  const response = await requestApp();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
@@ -55,8 +55,14 @@ test("本地红宝书词库包含完整的 6550 条词目", async () => {
     基础词: 3680,
     超纲词: 1014,
   });
-  assert.equal(new Set(words.map((word) => word.id)).size, 6550);
+  assert.deepEqual(words.map((word) => word.id), Array.from({ length: 6550 }, (_, index) => index + 1));
   assert.ok(words.every((word) => word.word && word.meaning && word.section && word.unit));
+  assert.equal(words[5244].word, "March");
+  assert.equal(words[5244].unit, 31);
+  assert.equal(words[5249].word, "May");
+  assert.equal(words[5249].unit, 31);
+  assert.match(words[1874].meaning, /齐步走/);
+  assert.ok(words.every((word) => !/[\u2E80-\u2EFF\u3B35]/u.test(word.meaning)));
 });
 
 test("全量审计保留 6550 条来源并生成 6549 个学习项", async () => {
@@ -69,6 +75,7 @@ test("全量审计保留 6550 条来源并生成 6549 个学习项", async () =>
   assert.equal(analysis.metadata.auditedEntries, 6550);
   assert.equal(analysis.metadata.learningItemCount, 6549);
   assert.equal(analysis.metadata.unresolvedConfirmedSourceConflicts, 0);
+  assert.equal(analysis.metadata.normalizedSourceGlyphs, 878);
   assert.equal(analysis.entries["68"].relation.kind, "grammar");
   assert.equal(analysis.entries["68"].relation.independent, true);
   assert.equal(analysis.entries["2506"].correctedWord, "passersby");
@@ -77,11 +84,50 @@ test("全量审计保留 6550 条来源并生成 6549 个学习项", async () =>
   assert.equal(analysis.entries["6177"].relation.independent, false);
 });
 
+test("红宝书原声音频经逐词 ASR 校对并对低置信度片段使用 TTS 回退", async () => {
+  const raw = await readFile(
+    new URL("../public/data/audio-index.json", import.meta.url),
+    "utf8",
+  );
+  const index = JSON.parse(raw);
+  const entries = Object.entries(index.entries);
+
+  assert.equal(index.metadata.scope, "2027 红宝书全套配套音频");
+  assert.equal(index.metadata.sourceFileCount, 66);
+  assert.equal(index.metadata.sourceWordCount, 6550);
+  assert.equal(index.metadata.indexedWordCount, 6326);
+  assert.equal(index.metadata.validation.needsReviewFileCount, 0);
+  assert.equal(index.metadata.validation.fallbackWordCount, 224);
+  assert.equal(index.metadata.asrValidation.checkedWordCount, 6540);
+  assert.equal(index.metadata.asrValidation.verifiedOriginalCount, 6326);
+  assert.equal(index.metadata.asrValidation.lowConfidenceFallbackCount, 214);
+  assert.equal(entries.length, 6326);
+  assert.equal(entries[0][1].file, "/audio/redbook/required-unit-01.mp3");
+  assert.ok(entries.every(([, clip]) => clip.start < clip.end));
+  assert.ok(entries.every(([, clip]) => clip.end - clip.start <= 6));
+  assert.ok(entries.every(([, clip]) => clip.confidence === "asr-verified"));
+  assert.equal(index.entries["295"], undefined);
+  assert.equal(index.entries["296"], undefined);
+  assert.equal(index.entries["2551"], undefined);
+  assert.equal(index.entries["2552"], undefined);
+  assert.equal(index.entries["1036"].file, "/audio/redbook/required-unit-15.mp3");
+  assert.equal(index.entries["1114"].file, "/audio/redbook/required-unit-15.mp3");
+  assert.equal(index.entries["1169"], undefined);
+  assert.equal(index.entries["1174"], undefined);
+  assert.equal(
+    index.metadata.files.find(
+      (file) => file.file === "/audio/redbook/required-unit-15.mp3",
+    ).lastIndexedWord,
+    "exclusive",
+  );
+});
+
 test("全书乱序与本地状态保存已接入学习流程", async () => {
-  const [page, study, coach] = await Promise.all([
+  const [page, study, coach, enrich] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/study.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/coach/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/enrich/route.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(study, /type StudyScope = "selection" \| "all"/);
@@ -90,12 +136,25 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /已打乱 \$\{learningItemCount\} 个学习项/);
   assert.match(page, /redbook-analysis\.json/);
   assert.match(page, /word-relation/);
-  assert.match(page, /localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(page, /loadStoredState\(\)/);
+  assert.match(page, /saveStoredState\(persistedState\)/);
   assert.match(page, /buildActivityCalendar\(reviews, activityRange/);
   assert.match(page, /activityRangeLabels/);
   assert.match(page, /selectedActivityDate/);
   assert.match(page, /回到今天/);
-  assert.match(study, /STORAGE_VERSION = 3/);
+  assert.match(study, /STORAGE_VERSION = 5/);
   assert.match(coach, /AbortSignal\.timeout\(15000\)/);
+  assert.match(page, /function undoLastRating/);
+  assert.match(page, /function startTodaySession/);
+  assert.match(page, /function startFavoriteSession/);
+  assert.match(page, /function startMistakeSession/);
+  assert.match(page, /buildExamPlan/);
+  assert.match(page, /FSRS 可提取率/);
+  assert.match(page, /playRecordedWord/);
+  assert.match(page, /浏览器 TTS 回退/);
+  assert.match(page, /全局查词/);
+  assert.match(page, /导出备份/);
+  assert.match(enrich, /未配置云端模型/);
+  assert.match(enrich, /collocations/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);
 });
