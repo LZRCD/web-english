@@ -884,15 +884,83 @@ select:focus-visible {
   margin-bottom: 24px;
 }
 
-.activity-panel .panel-title > div {
+.activity-heading {
   display: flex;
   align-items: baseline;
   gap: 9px;
 }
 
-.activity-panel .panel-title small {
+.activity-heading small {
   color: #9aa098;
   font-size: 9px;
+  font-family: "Courier New", monospace;
+}
+
+.activity-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.activity-panel-tools > span {
+  color: #939991;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.activity-controls,
+.activity-range,
+.activity-nav {
+  display: flex;
+  align-items: center;
+}
+
+.activity-controls {
+  gap: 7px;
+}
+
+.activity-range,
+.activity-nav {
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.activity-controls button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: transparent;
+  color: #7d857d;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.activity-range button.active {
+  background: var(--surface);
+  color: #277f5c;
+  box-shadow: 0 2px 8px rgba(31, 42, 35, 0.08);
+}
+
+.activity-nav button {
+  min-width: 26px;
+  padding-inline: 6px;
+  font-size: 12px;
+}
+
+.activity-controls button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.activity-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.activity-controls button.activity-today {
+  padding-inline: 4px;
+  color: #318c66;
 }
 
 .activity-scroll {
@@ -918,11 +986,24 @@ select:focus-visible {
 }
 
 .activity-cell {
+  appearance: none;
+  padding: 0;
   border: 1px solid rgba(21, 24, 32, 0.025);
+  cursor: pointer;
+  transition: transform 120ms ease, outline-color 120ms ease;
+}
+
+.activity-cell:hover {
+  transform: scale(1.18);
 }
 
 .activity-cell.today {
   outline: 1px solid #1f6f50;
+  outline-offset: 2px;
+}
+
+.activity-cell.selected {
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -947,6 +1028,85 @@ select:focus-visible {
 
 .activity-legend span:first-child { margin-right: 3px; }
 .activity-legend span:last-child { margin-left: 3px; }
+
+.activity-detail {
+  padding: 18px 26px 22px;
+  border-top: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, rgba(85, 201, 150, 0.045), transparent 36%),
+    var(--surface);
+}
+
+.activity-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.activity-detail-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.activity-detail-head strong {
+  font: 500 15px/1 "Courier New", monospace;
+}
+
+.activity-detail-head span {
+  color: #8f968e;
+  font-size: 10px;
+}
+
+.activity-detail-head > button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: #858d85;
+  cursor: pointer;
+}
+
+.activity-word-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+}
+
+.activity-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #dfe5df;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.activity-word::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #58bc8c;
+}
+
+.activity-word.rating-0::before,
+.activity-word.rating-1::before {
+  background: #d99b8c;
+}
+
+.activity-word strong {
+  font: 500 12px/1 Georgia, serif;
+}
+
+.activity-word small {
+  color: #90978f;
+  font-size: 8px;
+}
 
 .panel-title {
   padding: 22px 26px;
@@ -1699,6 +1859,17 @@ kbd {
     padding-inline: 18px;
   }
 
+  .activity-panel .panel-title {
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .activity-panel-tools {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .saved-word-card {
     grid-template-columns: 48px minmax(0, 1fr);
     gap: 14px;
@@ -1802,6 +1973,24 @@ kbd {
 
   .saved-word-actions {
     flex-wrap: wrap;
+  }
+
+  .activity-panel .panel-title {
+    display: grid;
+  }
+
+  .activity-panel-tools {
+    align-items: flex-start;
+  }
+
+  .activity-controls {
+    flex-wrap: wrap;
+  }
+
+  .activity-detail-head > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
   }
 }
 

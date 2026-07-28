@@ -88,6 +88,30 @@ test("学习热力图按每天不同单词数分级", () => {
   assert.equal(calendar.at(-1)?.level, 4);
 });
 
+test("学习热力图可查看历史区间且不会延伸到未来", () => {
+  const reviews: Review[] = [
+    {
+      wordId: 1,
+      word: "history",
+      rating: 2,
+      reviewedAt: "2026-07-20T02:00:00.000Z",
+      dueAt: "2026-07-24T02:00:00.000Z",
+      section: "必考词",
+      unit: 1,
+    },
+  ];
+
+  const calendar = buildActivityCalendar(
+    reviews,
+    7,
+    new Date("2026-07-20T12:00:00.000Z"),
+  );
+  assert.equal(calendar[0].date, "2026-07-14");
+  assert.equal(calendar.at(-1)?.date, "2026-07-20");
+  assert.equal(calendar.at(-1)?.count, 1);
+  assert.ok(calendar.every((day) => day.date <= "2026-07-20"));
+});
+
 test("释义中的词性只展示一次", () => {
   assert.deepEqual(splitMeaning("vt. vi. 放弃;抛弃"), {
     part: "vt. vi.",

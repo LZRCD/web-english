@@ -71,7 +71,10 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /setStudyScope\("all"\)/);
   assert.match(page, /已打乱红宝书全部 6550 词/);
   assert.match(page, /localStorage\.setItem\(STORAGE_KEY/);
-  assert.match(page, /buildActivityCalendar\(reviews, 140/);
+  assert.match(page, /buildActivityCalendar\(reviews, activityRange/);
+  assert.match(page, /activityRangeLabels/);
+  assert.match(page, /selectedActivityDate/);
+  assert.match(page, /回到今天/);
   assert.match(study, /STORAGE_VERSION = 2/);
   assert.match(coach, /AbortSignal\.timeout\(15000\)/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);

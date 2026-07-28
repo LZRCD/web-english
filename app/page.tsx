@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   buildActivityCalendar,
   buildStudyKey,
+  dateKey,
   formatDueTime,
   learningStats,
   MAX_REVIEWS,
@@ -22,6 +23,7 @@ import {
 } from "../lib/study";
 
 type RedbookStatus = "loading" | "ready" | "error";
+type ActivityRange = 140 | 182 | 365;
 
 type RedbookData = {
   metadata: {
@@ -40,6 +42,11 @@ const SECTION_META = [
 
 const ratingLabels = ["忘记", "模糊", "认识", "熟练"];
 const ratingIntervals = ["10 分钟", "1 天", "4 天", "12 天"];
+const activityRangeLabels: Record<ActivityRange, string> = {
+  140: "20 周",
+  182: "半年",
+  365: "一年",
+};
 const REDBOOK_PLACEHOLDER: Word = {
   word: "红宝书",
   meaning: "正在载入本地词库",
@@ -107,6 +114,9 @@ export default function Home() {
   const [redbookStatus, setRedbookStatus] = useState<RedbookStatus>("loading");
   const [selectedSection, setSelectedSection] = useState("必考词");
   const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
+  const [activityRange, setActivityRange] = useState<ActivityRange>(365);
+  const [activityOffset, setActivityOffset] = useState(0);
+  const [selectedActivityDate, setSelectedActivityDate] = useState("");
 
   const filteredStudyWords = useMemo(() => {
     if (redbookStatus !== "ready") return [];
@@ -135,10 +145,35 @@ export default function Home() {
     () => learningStats(reviews, new Date(clock)),
     [clock, reviews],
   );
+  const activityEndTime = useMemo(() => {
+    const end = new Date(clock);
+    end.setDate(end.getDate() - activityOffset);
+    return end.getTime();
+  }, [activityOffset, clock]);
   const activityDays = useMemo(
-    () => buildActivityCalendar(reviews, 140, new Date(clock)),
-    [clock, reviews],
+    () => buildActivityCalendar(reviews, activityRange, new Date(activityEndTime)),
+    [activityEndTime, activityRange, reviews],
   );
+  const activityDateRange = activityDays.length
+    ? `${activityDays[0].date.replaceAll("-", ".")} — ${activityDays.at(-1)?.date.replaceAll("-", ".")}`
+    : "";
+  const selectedDayReviews = useMemo(() => {
+    if (!selectedActivityDate) return [];
+    const latestByWord = new Map<string, Review>();
+    for (const review of reviews) {
+      if (dateKey(review.reviewedAt) !== selectedActivityDate) continue;
+      const key = review.wordId !== undefined
+        ? `id:${review.wordId}`
+        : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`;
+      const previous = latestByWord.get(key);
+      if (!previous || previous.reviewedAt < review.reviewedAt) {
+        latestByWord.set(key, review);
+      }
+    }
+    return [...latestByWord.values()].sort((first, second) =>
+      second.reviewedAt.localeCompare(first.reviewedAt));
+  }, [reviews, selectedActivityDate]);
+  const selectedWeakCount = selectedDayReviews.filter((review) => review.rating <= 1).length;
   const todayDone = Math.min(stats.todayDone, dailyGoal);
   const progress = Math.round((todayDone / dailyGoal) * 100);
   const recentReviews = useMemo(() => [...reviews].reverse().slice(0, 8), [reviews]);
@@ -769,17 +804,81 @@ export default function Home() {
             </div>
             <section className="activity-panel" aria-labelledby="activity-title">
               <div className="panel-title">
-                <div><h2 id="activity-title">背诵日历</h2><small>最近 20 周</small></div>
-                <span>{activityDays.filter((day) => day.count > 0).length} 个学习日</span>
+                <div className="activity-heading">
+                  <h2 id="activity-title">背诵日历</h2>
+                  <small>{activityDateRange}</small>
+                </div>
+                <div className="activity-panel-tools">
+                  <span>{activityDays.filter((day) => day.count > 0).length} 个学习日</span>
+                  <div className="activity-controls" aria-label="背诵日历范围">
+                    <div className="activity-range">
+                      {(Object.keys(activityRangeLabels).map(Number) as ActivityRange[]).map((range) => (
+                        <button
+                          type="button"
+                          className={activityRange === range ? "active" : ""}
+                          key={range}
+                          aria-pressed={activityRange === range}
+                          onClick={() => {
+                            setActivityRange(range);
+                            setActivityOffset(0);
+                            setSelectedActivityDate("");
+                          }}
+                        >
+                          {activityRangeLabels[range]}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="activity-nav">
+                      <button
+                        type="button"
+                        aria-label="查看更早日期"
+                        title="查看更早日期"
+                        onClick={() => {
+                          setActivityOffset((offset) => offset + activityRange);
+                          setSelectedActivityDate("");
+                        }}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="查看更近日期"
+                        title="查看更近日期"
+                        disabled={activityOffset === 0}
+                        onClick={() => {
+                          setActivityOffset((offset) => Math.max(0, offset - activityRange));
+                          setSelectedActivityDate("");
+                        }}
+                      >
+                        →
+                      </button>
+                    </div>
+                    {activityOffset > 0 && (
+                      <button
+                        type="button"
+                        className="activity-today"
+                        onClick={() => {
+                          setActivityOffset(0);
+                          setSelectedActivityDate("");
+                        }}
+                      >
+                        回到今天
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="activity-scroll">
-                <div className="activity-grid" role="img" aria-label="最近 20 周每日背诵数量">
-                  {activityDays.map((day, index) => (
-                    <span
+                <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
+                  {activityDays.map((day) => (
+                    <button
+                      type="button"
                       key={day.date}
-                      className={`activity-cell level-${day.level}${index === activityDays.length - 1 ? " today" : ""}`}
+                      className={`activity-cell level-${day.level}${day.date === dateKey(new Date(clock)) ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
                       title={`${day.date} · ${day.count} 词`}
                       aria-label={`${day.date}，背诵 ${day.count} 个单词`}
+                      aria-pressed={day.date === selectedActivityDate}
+                      onClick={() => setSelectedActivityDate((date) => date === day.date ? "" : day.date)}
                     />
                   ))}
                 </div>
@@ -789,6 +888,40 @@ export default function Home() {
                   <span>多</span>
                 </div>
               </div>
+              {selectedActivityDate && (
+                <div className="activity-detail" aria-live="polite">
+                  <div className="activity-detail-head">
+                    <div>
+                      <strong>{selectedActivityDate.replaceAll("-", ".")}</strong>
+                      <span>
+                        {selectedDayReviews.length
+                          ? `${selectedDayReviews.length} 个单词 · ${selectedWeakCount} 个薄弱`
+                          : "当天没有学习记录"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="关闭日期详情"
+                      onClick={() => setSelectedActivityDate("")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {selectedDayReviews.length > 0 && (
+                    <div className="activity-word-list">
+                      {selectedDayReviews.map((review) => (
+                        <span
+                          className={`activity-word rating-${review.rating}`}
+                          key={`${review.wordId ?? review.word}-${review.reviewedAt}`}
+                        >
+                          <strong>{review.word}</strong>
+                          <small>{ratingLabels[review.rating]}</small>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
             <div className="history-panel">
               <div className="panel-title"><h2>最近学习</h2><span>{reviews.length} 次记忆记录</span></div>
