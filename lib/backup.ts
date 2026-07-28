@@ -46,6 +46,17 @@ export function parseBackupDocument(raw: string) {
   ) {
     throw new Error("不是有效的词环备份文件");
   }
+  // 校验 exportedAt 是否为有效日期
+  if (Number.isNaN(new Date(value.exportedAt).getTime())) {
+    throw new Error("备份文件导出日期无效");
+  }
+  // 拒绝未来 schema 版本
+  const STORAGE_VERSION = 5;
+  if (typeof value.schemaVersion === "number" && value.schemaVersion > STORAGE_VERSION) {
+    throw new Error(
+      `备份文件来自更新版本的词环（v${value.schemaVersion}），当前版本为 v${STORAGE_VERSION}，请升级后再导入`,
+    );
+  }
   return value as BackupDocument;
 }
 

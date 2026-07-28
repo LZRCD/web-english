@@ -69,6 +69,7 @@ import {
 } from "../lib/backup";
 import {
   loadStoredState,
+  onRemoteChange,
   saveStoredState,
   saveStoredStateImmediate,
 } from "../lib/storage";
@@ -76,6 +77,7 @@ import {
   buildLearningInsights,
   buildReviewForecast,
 } from "../lib/insights";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import {
   buildLocalCoach,
   cleanSelectedText,
@@ -244,6 +246,8 @@ export default function Home() {
   const [automaticBackups, setAutomaticBackups] = useState<AutomaticBackup[]>([]);
   const [enrichmentLoading, setEnrichmentLoading] = useState(false);
   const [selectionLookup, setSelectionLookup] = useState<SelectionLookup>();
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSaveTime, setLastSaveTime] = useState(0);
   const importInputRef = useRef<HTMLInputElement>(null);
   const recordedAudioRef = useRef<HTMLAudioElement>(null);
   const lookupAbortRef = useRef<AbortController | null>(null);
@@ -340,12 +344,14 @@ export default function Home() {
     () => buildReviewForecast(wordProgress, new Date(clock), 7),
     [clock, wordProgress],
   );
+  // 展示用自动顽固词计算（不进入写盘链路，每次 load 时从 reviews 重建即可）
   const stubbornWords = useMemo(
     () => ({
       ...stubbornHistory,
-      ...rebuildStubbornWords(reviews, new Date(clock)),
+      ...rebuildStubbornWords(reviews, new Date()),
     }),
-    [clock, reviews, stubbornHistory],
+    // 不依赖 clock：自动顽固词消解在评分时触发，无需每分钟重算
+    [reviews, stubbornHistory],
   );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
@@ -538,13 +544,14 @@ export default function Home() {
         : studyScope === "all"
         ? `全书乱序 · ${current.section ?? "红宝书"} ${current.unit ? `Unit ${current.unit}` : ""}`
         : `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
+  // 持久化快照：仅保存用户手动标记的顽固词，自动计算的顽固词在每次 load 时从 reviews 重建
   const persistedState = useMemo<StoredState>(() => ({
     schemaVersion: STORAGE_VERSION,
     reviews,
     wordProgress,
     favorites,
     mistakes,
-    stubbornWords,
+    stubbornWords: stubbornHistory,
     positions,
     activeSession,
     enrichments,
@@ -579,7 +586,7 @@ export default function Home() {
     shuffleSeed,
     soundOn,
     started,
-    stubbornWords,
+    stubbornHistory,
     studyMode,
     studyScope,
     wordProgress,
@@ -683,11 +690,19 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       if (!("indexedDB" in window)) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
+        setSaveStatus("saved");
+        setLastSaveTime(Date.now());
         return;
       }
+      setSaveStatus("saving");
       saveStoredState(persistedState)
-        .then(() => localStorage.removeItem(STORAGE_KEY))
+        .then(() => {
+          setSaveStatus("saved");
+          setLastSaveTime(Date.now());
+          localStorage.removeItem(STORAGE_KEY);
+        })
         .catch(() => {
+          setSaveStatus("error");
           localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
           setToast("本地存储写入失败，已降级到浏览器缓存，建议导出备份");
           setTimeout(() => setToast(""), 4000);
@@ -707,6 +722,58 @@ export default function Home() {
     return () => {
       active = false;
     };
+  }, [hydrated]);
+
+  // 跨标签页数据同步：收到远程变更通知时重新加载数据
+  // 搜索弹窗焦点陷阱 + 滚动锁定 + 焦点恢复
+  useEffect(() => {
+    if (!searchOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    // 锁定 body 滚动
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // 焦点陷阱
+    const panel = document.querySelector(".search-panel") as HTMLElement | null;
+    if (!panel) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    panel.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      panel.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = originalOverflow;
+      // 恢复焦点
+      previousFocus?.focus?.();
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!hydrated || !("indexedDB" in window)) return;
+    return onRemoteChange(() => {
+      loadStoredState().then((remoteState) => {
+        if (remoteState) {
+          applyStoredState(remoteState);
+          setToast("数据已在其他标签页更新，已同步最新状态");
+          setTimeout(() => setToast(""), 3000);
+        }
+      }).catch(() => {});
+    });
   }, [hydrated]);
 
   useEffect(() => {
@@ -840,43 +907,99 @@ export default function Home() {
     });
   }, [revealed]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSearchOpen(false);
-        setAiOpen(false);
-        setSelectionLookup(undefined);
-        lookupAbortRef.current?.abort();
-        return;
-      }
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        if (!started) beginLearning();
-        else if (activeView === "learn" && redbookReady) setRevealed(true);
-      }
-      if (event.key.toLowerCase() === "a" && started) setAiOpen((value) => !value);
-      if (
-        event.key.toLowerCase() === "e"
-        && started
-        && activeView === "learn"
-        && revealed
-        && redbookReady
-        && !current.sentence
-        && !enrichmentLoading
-      ) {
-        enrichCurrentWord();
-      }
-      if (event.key.toLowerCase() === "f" && started && activeView === "learn") toggleFavorite();
-      if (event.key.toLowerCase() === "z" && ratingUndo) undoLastRating();
-      if (event.key === "/") {
-        event.preventDefault();
-        setSearchOpen(true);
-      }
-      if (revealed && ["1", "2", "3", "4"].includes(event.key)) rateWord(Number(event.key) - 1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  // 键盘快捷键使用的 refs（避免每次渲染重注册监听器）
+  const startedRef = useRef(started);
+  const activeViewRef = useRef(activeView);
+  const redbookReadyRef = useRef(redbookReady);
+  const revealedRef = useRef(revealed);
+  const currentRef = useRef(current);
+  const enrichmentLoadingRef = useRef(enrichmentLoading);
+  const ratingUndoRef = useRef(ratingUndo);
+  const aiOpenRef = useRef(aiOpen);
+  const searchOpenRef = useRef(searchOpen);
+  const selectionLookupRef = useRef(selectionLookup);
+  startedRef.current = started;
+  activeViewRef.current = activeView;
+  redbookReadyRef.current = redbookReady;
+  revealedRef.current = revealed;
+  currentRef.current = current;
+  enrichmentLoadingRef.current = enrichmentLoading;
+  ratingUndoRef.current = ratingUndo;
+  aiOpenRef.current = aiOpen;
+  searchOpenRef.current = searchOpen;
+  selectionLookupRef.current = selectionLookup;
+
+  useKeyboardShortcuts({
+    paused: () => aiOpenRef.current || searchOpenRef.current || selectionLookupRef.current !== undefined,
+    shortcuts: [
+      {
+        key: "Escape",
+        action: () => {
+          setSearchOpen(false);
+          setAiOpen(false);
+          setSelectionLookup(undefined);
+          lookupAbortRef.current?.abort();
+        },
+      },
+      {
+        key: "Space",
+        action: () => {
+          if (!startedRef.current) beginLearning();
+          else if (activeViewRef.current === "learn" && redbookReadyRef.current) setRevealed(true);
+        },
+      },
+      {
+        key: "a",
+        when: () => startedRef.current,
+        action: () => setAiOpen((value) => !value),
+      },
+      {
+        key: "e",
+        when: () =>
+          startedRef.current
+          && activeViewRef.current === "learn"
+          && revealedRef.current
+          && redbookReadyRef.current
+          && !currentRef.current.sentence
+          && !enrichmentLoadingRef.current,
+        action: () => enrichCurrentWord(),
+      },
+      {
+        key: "f",
+        when: () => startedRef.current && activeViewRef.current === "learn",
+        action: () => toggleFavorite(),
+      },
+      {
+        key: "z",
+        when: () => !!ratingUndoRef.current,
+        action: () => undoLastRating(),
+      },
+      {
+        key: "/",
+        allowInFormFields: true, // 搜索快捷键在输入框内也应工作
+        action: () => setSearchOpen(true),
+      },
+      {
+        key: "1",
+        when: () => revealedRef.current,
+        action: () => rateWord(0),
+      },
+      {
+        key: "2",
+        when: () => revealedRef.current,
+        action: () => rateWord(1),
+      },
+      {
+        key: "3",
+        when: () => revealedRef.current,
+        action: () => rateWord(2),
+      },
+      {
+        key: "4",
+        when: () => revealedRef.current,
+        action: () => rateWord(3),
+      },
+    ],
   });
 
   function applyStoredState(state: StoredState) {
@@ -972,7 +1095,12 @@ export default function Home() {
       }
       const items = await saveAutomaticBackup(persistedState, "manual");
       setAutomaticBackups(items);
-      applyStoredState(parseStoredState(JSON.stringify(backup.document.state)));
+      const restoredState = parseStoredState(JSON.stringify(backup.document.state));
+      applyStoredState(restoredState);
+      // 立即落盘，不等待 150ms 防抖
+      if ("indexedDB" in window) {
+        await saveStoredStateImmediate(restoredState);
+      }
       setToast("已恢复自动备份，恢复前状态也已保存");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "自动备份恢复失败");
@@ -2552,6 +2680,13 @@ export default function Home() {
                       ? `最近自动快照：${new Date(automaticBackups[0].createdAt).toLocaleString("zh-CN")}`
                       : "每天自动保存快照，也可导出为 JSON 文件"}
                   </small>
+                  {saveStatus !== "idle" && (
+                    <small className={`save-status save-status--${saveStatus}`}>
+                      {saveStatus === "saving" && "保存中…"}
+                      {saveStatus === "saved" && `已保存 ${new Date(lastSaveTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`}
+                      {saveStatus === "error" && "⚠ 保存失败，请立即导出备份"}
+                    </small>
+                  )}
                 </span>
                 <div>
                   <button type="button" onClick={exportBackup}>导出备份</button>
@@ -2672,7 +2807,7 @@ export default function Home() {
         </section>
       )}
 
-      <aside className={aiOpen ? "coach-panel open" : "coach-panel"} aria-label="AI 记忆教练">
+      <aside className={aiOpen ? "coach-panel open" : "coach-panel"} aria-label="AI 记忆教练" inert={!aiOpen}>
         <div className="coach-head">
           <div><span className="coach-badge">AI</span><div><strong>记忆教练</strong><small>围绕 {current.word}</small></div></div>
           <button onClick={() => setAiOpen(false)} aria-label="关闭 AI 教练">×</button>

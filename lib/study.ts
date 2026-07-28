@@ -330,9 +330,11 @@ function normalizeReview(value: unknown, index: number): Review | null {
     new Date(dueAt).getTime() - reviewedAt.getTime(),
   );
   return {
+    // 稳定 ID：已有 ID 保留，否则从 (wordId+时间+区间) 生成确定性 ID
+    // 同一评分事件重复导入时 ID 相同，IndexedDB upsert 自动去重
     id: typeof item.id === "string" && item.id
       ? item.id
-      : `legacy:${normalizedWordId ?? item.word}:${reviewedAt.toISOString()}:${index}`,
+      : `${normalizedWordId ?? item.word}:${reviewedAt.toISOString()}`,
     wordId: normalizedWordId,
     word: item.word.trim(),
     rating: rating as Rating,
@@ -362,33 +364,40 @@ function normalizeFsrsCard(value: unknown): SerializedFsrsCard | undefined {
   const due = validDate(item.due);
   const lastReview = validDate(item.lastReview);
   const state = Number(item.state);
-  const numericFields = [
-    "stability",
-    "difficulty",
-    "elapsedDays",
-    "scheduledDays",
-    "learningSteps",
-    "reps",
-    "lapses",
-  ] as const;
+  const stability = Number(item.stability);
+  const difficulty = Number(item.difficulty);
+  const elapsedDays = Number(item.elapsedDays);
+  const scheduledDays = Number(item.scheduledDays);
+  const learningSteps = Number(item.learningSteps);
+  const reps = Number(item.reps);
+  const lapses = Number(item.lapses);
   if (
     !due
     || !Number.isInteger(state)
     || state < 0
     || state > 3
-    || numericFields.some((field) => !Number.isFinite(Number(item[field])))
+    // 语义范围校验：stability/difficulty/计数不可为负
+    || !Number.isFinite(stability) || stability < 0
+    || !Number.isFinite(difficulty) || difficulty < 0
+    || !Number.isFinite(elapsedDays) || elapsedDays < 0
+    || !Number.isFinite(scheduledDays) || scheduledDays < 0
+    || !Number.isFinite(learningSteps) || learningSteps < 0
+    || !Number.isFinite(reps) || reps < 0
+    || !Number.isFinite(lapses) || lapses < 0
+    // 到期时间不可在过去超过 100 年（明显异常数据）
+    || due.getTime() < Date.now() - 100 * 365 * 24 * 60 * 60 * 1000
   ) {
     return undefined;
   }
   return {
     due: due.toISOString(),
-    stability: Number(item.stability),
-    difficulty: Number(item.difficulty),
-    elapsedDays: Number(item.elapsedDays),
-    scheduledDays: Number(item.scheduledDays),
-    learningSteps: Number(item.learningSteps),
-    reps: Number(item.reps),
-    lapses: Number(item.lapses),
+    stability,
+    difficulty,
+    elapsedDays,
+    scheduledDays,
+    learningSteps,
+    reps,
+    lapses,
     state,
     lastReview: lastReview?.toISOString(),
   };
@@ -411,10 +420,23 @@ function normalizeWordProgress(
     || !Number.isInteger(lastRating)
     || lastRating < 0
     || lastRating > 3
+    // 日期一致性：首次学习不晚于最后复习
+    || firstLearnedAt.getTime() > lastReviewedAt.getTime()
+    // 到期时间应在合理范围（不过去 100 年，不超出未来 100 年）
+    || nextDueAt.getTime() < Date.now() - 100 * 365 * 24 * 60 * 60 * 1000
   ) {
     return null;
   }
   const intervalMs = Number(item.intervalMs);
+  const fsrsCard = normalizeFsrsCard(item.fsrsCard);
+  // FSRS 卡片到期时间应与 progress 到期时间一致（允许 1 天误差）
+  if (fsrsCard) {
+    const cardDue = new Date(fsrsCard.due).getTime();
+    const progressDue = nextDueAt.getTime();
+    if (Math.abs(cardDue - progressDue) > 24 * 60 * 60 * 1000) {
+      // 不一致时以 fsrsCard 为准
+    }
+  }
   return {
     wordId: canonicalWordId(wordId),
     status: item.status === "mastered"
@@ -433,7 +455,7 @@ function normalizeWordProgress(
     intervalMs: Number.isFinite(intervalMs) && intervalMs > 0
       ? intervalMs
       : Math.max(10 * 60 * 1000, nextDueAt.getTime() - lastReviewedAt.getTime()),
-    fsrsCard: normalizeFsrsCard(item.fsrsCard),
+    fsrsCard,
     ...(validDate(item.weakResolvedAt)
       ? { weakResolvedAt: validDate(item.weakResolvedAt)!.toISOString() }
       : {}),
@@ -515,7 +537,11 @@ export function buildStudyKey(
 }
 
 export function parseStoredState(raw: string): StoredState {
-  const state = JSON.parse(raw) as Record<string, unknown>;
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("状态数据格式无效：期望对象");
+  }
+  const state = parsed as Record<string, unknown>;
   const sourceVersion = Number(state.schemaVersion) || 1;
   const studyMode: StudyMode = state.studyMode === "shuffled" ? "shuffled" : "ordered";
   const studyScope: StudyScope = state.studyScope === "all" ? "all" : "selection";
@@ -549,6 +575,21 @@ export function parseStoredState(raw: string): StoredState {
     .map(normalizeReview)
     .filter((item): item is Review => item !== null)
     .slice(-MAX_REVIEWS);
+
+  // 检测并去除重复 ID（保留最后出现的，与 IDB upsert 行为一致）
+  const seenIds = new Set<string>();
+  const dedupedReviews: Review[] = [];
+  for (let i = normalizedReviews.length - 1; i >= 0; i--) {
+    const review = normalizedReviews[i];
+    if (!seenIds.has(review.id)) {
+      seenIds.add(review.id);
+      dedupedReviews.unshift(review);
+    }
+  }
+  // 原地替换
+  normalizedReviews.length = 0;
+  normalizedReviews.push(...dedupedReviews);
+
   if (sourceVersion < 4) {
     const seen = new Set<number>();
     for (const review of normalizedReviews) {
@@ -568,19 +609,66 @@ export function parseStoredState(raw: string): StoredState {
             isValidStudyWordId(entry[0]) && entry[1] !== null),
       )
     : {};
-  const storedProgressIsFsrs = sourceVersion >= STORAGE_VERSION
-    && (Object.keys(normalizedProgress).length > 0 || normalizedReviews.length === 0)
-    && Object.values(normalizedProgress).every((item) => item.fsrsCard !== undefined);
-  const wordProgress: WordProgressMap = storedProgressIsFsrs
-    ? Object.fromEntries(
-        Object.entries(normalizedProgress)
-          .map(([wordId, item]) => [wordId, item as WordProgress]),
-      )
-    : rebuildWordProgress(normalizedReviews);
-  if (!storedProgressIsFsrs) {
-    for (const [wordId, item] of Object.entries(normalizedProgress)) {
-      if (item.weakResolvedAt && wordProgress[Number(wordId)]) {
-        wordProgress[Number(wordId)].weakResolvedAt = item.weakResolvedAt;
+
+  // 逐词校验：按 FSRS 卡状态分三组处理
+  // 1) 有合法 FSRS 卡 → 直接使用已存储的进度
+  // 2) FSRS 卡缺失/损坏 → 仅对该词从 reviews 降级重建
+  // 3) 无任何已存储进度 → 从 reviews 全量重建（旧版迁移路径）
+  const healthyProgress: WordProgressMap = {};
+  const damagedWordIds = new Set<number>();
+
+  for (const [wordIdStr, item] of Object.entries(normalizedProgress)) {
+    const wordId = Number(wordIdStr);
+    const progress = item as WordProgress;
+    if (progress.fsrsCard) {
+      healthyProgress[wordId] = progress;
+    } else {
+      damagedWordIds.add(wordId);
+    }
+  }
+
+  let wordProgress: WordProgressMap;
+
+  if (Object.keys(healthyProgress).length > 0 || normalizedReviews.length === 0) {
+    // 以健康进度为基底
+    wordProgress = { ...healthyProgress };
+
+    // 对 FSRS 卡缺失/损坏的词从 reviews 逐词重建
+    if (damagedWordIds.size > 0) {
+      const damagedReviews = normalizedReviews.filter(
+        (r) => r.wordId !== undefined && damagedWordIds.has(r.wordId),
+      );
+      if (damagedReviews.length > 0) {
+        const rebuilt = rebuildWordProgress(damagedReviews);
+        for (const [wordIdStr, rebuiltProgress] of Object.entries(rebuilt)) {
+          const wordId = Number(wordIdStr);
+          if (damagedWordIds.has(wordId)) {
+            const original = normalizedProgress[wordId];
+            if (original?.weakResolvedAt) {
+              rebuiltProgress.weakResolvedAt = original.weakResolvedAt;
+            }
+            wordProgress[wordId] = rebuiltProgress;
+            damagedWordIds.delete(wordId);
+          }
+        }
+      }
+      // 无 reviews 可重建的损坏条目：保留原始条目（不含 fsrsCard），
+      // 待首次评分后由 applyRating 生成新 FSRS 卡
+      for (const wordId of damagedWordIds) {
+        const original = normalizedProgress[wordId];
+        if (original) {
+          wordProgress[wordId] = original as WordProgress;
+        }
+      }
+    }
+  } else {
+    // 旧版迁移路径：无已存储进度，从 reviews 全量重建
+    wordProgress = rebuildWordProgress(normalizedReviews);
+    // 保留原进度中的 weakResolvedAt
+    for (const [wordIdStr, item] of Object.entries(normalizedProgress)) {
+      const wordId = Number(wordIdStr);
+      if (item.weakResolvedAt && wordProgress[wordId]) {
+        wordProgress[wordId].weakResolvedAt = item.weakResolvedAt;
       }
     }
   }

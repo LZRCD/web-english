@@ -7,6 +7,7 @@ import type { SerializedFsrsCard } from "./learning.ts";
 
 export const DATABASE_NAME = "wordloop-local";
 export const DATABASE_VERSION = 2;
+const CHANNEL_NAME = "wordloop-state-changes";
 
 export const STORES = {
   settings: "settings",
@@ -53,6 +54,8 @@ type StateSettings = Pick<
   | "selectedUnit"
 > & {
   id: typeof CURRENT_STATE_ID;
+  /** 单调递增计数器，跨标签页冲突检测 */
+  revision: number;
 };
 
 type PositionRecord = {
@@ -136,6 +139,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
   return {
     settings: {
       id: CURRENT_STATE_ID,
+      revision: 0, // 占位值，writeSnapshot 中会读取当前 revision 并递增
       schemaVersion: state.schemaVersion,
       activeSession: state.activeSession,
       lookupWords: state.lookupWords,
@@ -208,26 +212,73 @@ export function combineStoredState(snapshot: IndexedStateSnapshot) {
   }));
 }
 
-function putAll<T>(store: IDBObjectStore, values: T[]) {
-  store.clear();
+/** 增量写入：逐条 upsert 后删除快照中不存在的旧记录 */
+function putStore<T>(store: IDBObjectStore, values: T[], keyPath: string) {
+  // 逐条 upsert（利用主键），不再 clear 全量重写
   for (const value of values) store.put(value);
+
+  // 删除快照中不存在的旧记录（如移出收藏的词）
+  const snapshotKeys = new Set(
+    values.map((value) => {
+      const key = (value as Record<string, unknown>)[keyPath];
+      return String(key);
+    }),
+  );
+  const cursorRequest = store.openCursor();
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (cursor) {
+      if (!snapshotKeys.has(String(cursor.key))) {
+        cursor.delete();
+      }
+      cursor.continue();
+    }
+  };
 }
 
 async function writeSnapshot(snapshot: IndexedStateSnapshot) {
   const database = await openWordLoopDatabase();
   try {
+    // 读取当前 revision 进行 CAS 检查
+    const readTx = database.transaction(STORES.settings, "readonly");
+    const currentSettings = await requestResult(
+      readTx.objectStore(STORES.settings).get(CURRENT_STATE_ID),
+    ) as StateSettings | undefined;
+    const currentRevision = currentSettings?.revision ?? 0;
+
+    // 递增 revision
+    const newRevision = currentRevision + 1;
+    snapshot.settings.revision = newRevision;
+
     const transaction = database.transaction([...STATE_STORE_NAMES], "readwrite");
     const completed = transactionCompleted(transaction);
-    putAll(transaction.objectStore(STORES.settings), [snapshot.settings]);
-    putAll(transaction.objectStore(STORES.reviews), snapshot.reviews);
-    putAll(transaction.objectStore(STORES.wordProgress), snapshot.wordProgress);
-    putAll(transaction.objectStore(STORES.favorites), snapshot.favorites);
-    putAll(transaction.objectStore(STORES.mistakes), snapshot.mistakes);
-    putAll(transaction.objectStore(STORES.positions), snapshot.positions);
-    putAll(transaction.objectStore(STORES.enrichments), snapshot.enrichments);
-    putAll(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards);
-    putAll(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords);
+
+    // CAS：再次检查 revision 未被其他标签页修改
+    const settingsStore = transaction.objectStore(STORES.settings);
+    const recheck = await requestResult(settingsStore.get(CURRENT_STATE_ID)) as StateSettings | undefined;
+    if ((recheck?.revision ?? 0) !== currentRevision) {
+      throw new Error("CONCURRENT_WRITE: 另一标签页已修改数据");
+    }
+
+    putStore(settingsStore, [snapshot.settings], "id");
+    putStore(transaction.objectStore(STORES.reviews), snapshot.reviews, "id");
+    putStore(transaction.objectStore(STORES.wordProgress), snapshot.wordProgress, "wordId");
+    putStore(transaction.objectStore(STORES.favorites), snapshot.favorites, "wordId");
+    putStore(transaction.objectStore(STORES.mistakes), snapshot.mistakes, "wordId");
+    putStore(transaction.objectStore(STORES.positions), snapshot.positions, "key");
+    putStore(transaction.objectStore(STORES.enrichments), snapshot.enrichments, "wordId");
+    putStore(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards, "wordId");
+    putStore(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords, "wordId");
     await completed;
+
+    // 通知其他标签页
+    try {
+      const bc = new BroadcastChannel(CHANNEL_NAME);
+      bc.postMessage({ revision: newRevision, timestamp: Date.now() });
+      bc.close();
+    } catch {
+      // BroadcastChannel 不可用时静默跳过
+    }
   } finally {
     database.close();
   }
@@ -244,6 +295,17 @@ export function getLastSuccessfulWriteTime() {
   return lastSuccessfulWrite;
 }
 
+/** 监听其他标签页的数据变更，返回清理函数 */
+export function onRemoteChange(callback: () => void) {
+  try {
+    const bc = new BroadcastChannel(CHANNEL_NAME);
+    bc.onmessage = () => callback();
+    return () => bc.close();
+  } catch {
+    return () => {};
+  }
+}
+
 let pendingWrite = Promise.resolve();
 
 export function saveStoredState(state: StoredState) {
@@ -251,6 +313,7 @@ export function saveStoredState(state: StoredState) {
   pendingWrite = pendingWrite
     .catch((error) => {
       lastWriteError = error;
+      throw error; // 重新抛出，让调用方能感知失败
     })
     .then(() => writeSnapshot(snapshot))
     .then(() => {

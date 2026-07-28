@@ -5,6 +5,7 @@ const CANONICAL_WORD_IDS: Record<number, number> = {
 };
 
 export function canonicalWordId(wordId: number) {
+  if (!Number.isFinite(wordId)) return wordId;
   return CANONICAL_WORD_IDS[wordId] ?? wordId;
 }
 

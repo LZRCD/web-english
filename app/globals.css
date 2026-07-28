@@ -2121,6 +2121,20 @@ select:focus-visible {
   font-size: 10px;
 }
 
+.save-status {
+  display: block;
+  margin-top: 2px;
+}
+.save-status--saving {
+  color: #8f6600;
+}
+.save-status--saved {
+  color: #318c66;
+}
+.save-status--error {
+  color: #c44536;
+}
+
 .backup-settings > div {
   display: flex;
   flex-wrap: wrap;
