@@ -8,6 +8,7 @@
   "scripts": {
     "data:extract": "node scripts/extract-redbook.mjs",
     "data:audit": "node scripts/audit-redbook.mjs",
+    "dictionary:build": "node scripts/build-ecdict-shards.mjs",
     "audio:index": "node scripts/build-audio-index.mjs",
     "audio:validate": "python scripts/validate-audio-index.py",
     "audio:apply-validation": "node scripts/apply-audio-remap.mjs",

@@ -13,7 +13,7 @@ import { canonicalWordId } from "./redbook.ts";
 export type Rating = 0 | 1 | 2 | 3;
 export type ReviewKind = "new" | "review";
 export type MemoryStatus = "learning" | "reviewing" | "mastered";
-export type SessionKind = "today" | "favorites" | "mistakes" | "search";
+export type SessionKind = "today" | "favorites" | "mistakes" | "search" | "lookups";
 
 export type ReviewEvent = {
   id: string;
@@ -86,6 +86,7 @@ export type WordEnrichment = {
   sentence?: string;
   translation?: string;
   collocations?: string[];
+  targetMeanings?: string[];
   source: "redbook" | "dictionary" | "ai";
   generatedAt?: string;
   verified?: boolean;

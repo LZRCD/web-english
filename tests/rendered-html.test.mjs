@@ -65,6 +65,23 @@ test("本地红宝书词库包含完整的 6550 条词目", async () => {
   assert.ok(words.every((word) => !/[\u2E80-\u2EFF\u3B35]/u.test(word.meaning)));
 });
 
+test("ECDICT 离线辞典按首字母分片并保留音标", async () => {
+  const metadata = JSON.parse(await readFile(
+    new URL("../public/data/dictionary/metadata.json", import.meta.url),
+    "utf8",
+  ));
+  const shard = JSON.parse(await readFile(
+    new URL("../public/data/dictionary/i.json", import.meta.url),
+    "utf8",
+  ));
+
+  assert.equal(metadata.name, "ECDICT");
+  assert.ok(metadata.entries > 700000);
+  assert.equal(shard.intensive[0], "intensive");
+  assert.ok(shard.intensive[1]);
+  assert.match(shard.intensive[2], /密集|加强|强化/);
+});
+
 test("全量审计保留 6550 条来源并生成 6549 个学习项", async () => {
   const raw = await readFile(
     new URL("../public/data/redbook-analysis.json", import.meta.url),
@@ -150,8 +167,15 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /function startMistakeSession/);
   assert.match(page, /buildExamPlan/);
   assert.match(page, /FSRS 可提取率/);
+  assert.match(page, /下次复习/);
+  assert.doesNotMatch(page, /词表来源/);
   assert.match(page, /playRecordedWord/);
   assert.match(page, /浏览器 TTS 回退/);
+  assert.match(page, /aria-keyshortcuts="E"/);
+  assert.match(page, /<kbd>E<\/kbd> 内容补充/);
+  assert.match(page, /function submitReinforcement/);
+  assert.match(page, /趁答案还在短时记忆里，再主动提取一次/);
+  assert.match(page, /reinforcementRating === null \? "rating-bar visible"/);
   assert.match(page, /全局查词/);
   assert.match(page, /导出备份/);
   assert.match(enrich, /未配置云端模型/);

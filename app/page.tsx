@@ -1,6 +1,14 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   isPrimaryLearningWord,
   REDBOOK_SOURCE_TOTAL,
@@ -11,11 +19,14 @@ import {
   dateKey,
   formatDueTime,
   learningStats,
+  lookupWordId,
   MAX_REVIEWS,
   parseStoredState,
   splitMeaning,
   STORAGE_KEY,
   STORAGE_VERSION,
+  type FamiliarMeaningMap,
+  type LookupWord,
   type MistakeRecord,
   type Review,
   type SavedWord,
@@ -109,6 +120,23 @@ type RedbookAnalysisData = {
   }>;
 };
 
+type LookupResult = Omit<LookupWord, "id" | "addedAt">;
+type DictionaryEntry = [displayWord: string, phonetic: string, translation: string];
+type DictionaryShard = Record<string, DictionaryEntry>;
+
+type SelectionLookup = {
+  query: string;
+  context: string;
+  x: number;
+  y: number;
+  status: "idle" | "loading" | "ready" | "error";
+  result?: LookupResult;
+  cached?: boolean;
+  error?: string;
+};
+
+type ReinforcementRating = 0 | 1;
+
 const SECTION_META = [
   { name: "必考词", detail: "26 个单元", total: 1856, color: "mint", marker: "必" },
   { name: "基础词", detail: "31 个单元", total: 3680, color: "blue", marker: "基" },
@@ -131,6 +159,51 @@ const REDBOOK_PLACEHOLDER: Word = {
   meaning: "正在载入本地词库",
   section: "2027 考研英语",
 };
+const LOOKUP_CACHE_KEY = "wordloop-selection-lookups-v1";
+const DICTIONARY_BASE_PATH = "/data/dictionary";
+
+function cleanSelectedText(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[\s"'“”‘’()[\]{}.,，。;；:：!?！？]+/, "")
+    .replace(/[\s"'“”‘’()[\]{}.,，。;；:：!?！？]+$/, "")
+    .slice(0, 160);
+}
+
+function splitSenseItems(value: string) {
+  const items: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const character of value) {
+    if ("([{（【".includes(character)) depth += 1;
+    if (")]}）】".includes(character)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && /[;；,，]/.test(character)) {
+      if (current.trim()) items.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  if (current.trim()) items.push(current.trim());
+  return items;
+}
+
+function readLookupCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOOKUP_CACHE_KEY) ?? "{}") as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, LookupResult>;
+  } catch {
+    return {};
+  }
+}
+
+function formatDictionaryPhonetic(value: string) {
+  const phonetic = value.trim();
+  if (!phonetic) return "";
+  return /^[\/\[].*[\/\]]$/.test(phonetic) ? phonetic : `/${phonetic}/`;
+}
 
 function wordKey(word: Word) {
   return word.id !== undefined
@@ -158,6 +231,17 @@ function formatRecallTime(recallMs: number) {
   return seconds < 10 ? `${seconds.toFixed(1)} 秒` : `${Math.round(seconds)} 秒`;
 }
 
+function maskWord(value: string) {
+  return value.replace(/\b([a-z])([a-z]*)\b/gi, (_, first: string, rest: string) =>
+    `${first}${"·".repeat(rest.length)}`);
+}
+
+function clozeSentence(sentence: string, word: string) {
+  const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const cloze = sentence.replace(new RegExp(escapedWord, "gi"), "＿＿＿＿");
+  return cloze === sentence ? "" : cloze;
+}
+
 function buildLocalCoach(word: Word, prompt: string) {
   const relationHint = word.relation
     ? `词族提示：${word.relation.label}。${word.relation.note}`
@@ -183,15 +267,18 @@ export default function Home() {
   const [wordProgress, setWordProgress] = useState<WordProgressMap>({});
   const [activeSession, setActiveSession] = useState<StudySession>();
   const [enrichments, setEnrichments] = useState<Record<number, WordEnrichment>>({});
+  const [dictionaryPhonetics, setDictionaryPhonetics] = useState<Record<number, string>>({});
   const [ratingUndo, setRatingUndo] = useState<RatingUndo>();
   const [undoVisible, setUndoVisible] = useState(false);
   const [favorites, setFavorites] = useState<SavedWord[]>([]);
   const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
+  const [lookupWords, setLookupWords] = useState<LookupWord[]>([]);
+  const [familiarMeanings, setFamiliarMeanings] = useState<FamiliarMeaningMap>({});
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
   const [studyScope, setStudyScope] = useState<StudyScope>("selection");
   const [shuffleSeed, setShuffleSeed] = useState(1);
-  const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn">("favorites");
+  const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -205,6 +292,10 @@ export default function Home() {
   const [minimumNewWords, setMinimumNewWords] = useState(5);
   const [examDate, setExamDate] = useState("");
   const [recallStartedAt, setRecallStartedAt] = useState<number | null>(null);
+  const [reinforcementRating, setReinforcementRating] = useState<ReinforcementRating | null>(null);
+  const [reinforcementInput, setReinforcementInput] = useState("");
+  const [reinforcementFeedback, setReinforcementFeedback] = useState("");
+  const [reinforcementRecallMs, setReinforcementRecallMs] = useState<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const [toast, setToast] = useState("");
   const [redbookWords, setRedbookWords] = useState<Word[]>([]);
@@ -221,13 +312,35 @@ export default function Home() {
   const [selectedSearchIds, setSelectedSearchIds] = useState<number[]>([]);
   const [automaticBackups, setAutomaticBackups] = useState<AutomaticBackup[]>([]);
   const [enrichmentLoading, setEnrichmentLoading] = useState(false);
+  const [selectionLookup, setSelectionLookup] = useState<SelectionLookup>();
   const importInputRef = useRef<HTMLInputElement>(null);
   const recordedAudioRef = useRef<HTMLAudioElement>(null);
+  const lookupAbortRef = useRef<AbortController | null>(null);
+  const lookupCacheRef = useRef<Record<string, LookupResult>>({});
+  const dictionaryShardCacheRef = useRef<Record<string, DictionaryShard>>({});
+  const reinforcementInputRef = useRef<HTMLInputElement>(null);
 
-  const wordById = useMemo(
-    () => new Map(redbookWords.map((word) => [word.id, word])),
-    [redbookWords],
-  );
+  const lookupStudyWords = useMemo<Word[]>(() => lookupWords.map((item) => ({
+    id: item.id,
+    word: item.query,
+    phonetic: item.phonetic,
+    part: item.part,
+    meaning: `${item.part.replace(/\.+$/, "")}. ${item.meaning}`,
+    sentence: item.note,
+    section: "划词集",
+    unit: "自选",
+  })), [lookupWords]);
+  const wordById = useMemo(() => new Map(
+    [...redbookWords, ...lookupStudyWords].map((word) => [word.id, word]),
+  ), [lookupStudyWords, redbookWords]);
+  const wordByText = useMemo(() => {
+    const entries = new Map<string, Word>();
+    for (const word of redbookWords) {
+      const key = word.word.trim().toLowerCase();
+      if (!entries.has(key)) entries.set(key, word);
+    }
+    return entries;
+  }, [redbookWords]);
   const filteredStudyWords = useMemo(() => {
     if (redbookStatus !== "ready") return [];
     const learningWords = redbookWords.filter((word) => isPrimaryLearningWord(word.id));
@@ -267,10 +380,15 @@ export default function Home() {
   const currentEnrichment = currentBase?.id === undefined
     ? undefined
     : enrichments[currentBase.id];
+  const currentDictionaryPhonetic = currentBase?.id === undefined
+    ? ""
+    : dictionaryPhonetics[currentBase.id] ?? "";
   const current = currentBase
     ? {
         ...currentBase,
-        phonetic: currentEnrichment?.phonetic ?? currentBase.phonetic,
+        phonetic: currentBase.phonetic
+          || currentDictionaryPhonetic
+          || undefined,
         sentence: currentEnrichment?.sentence ?? currentBase.sentence,
         translation: currentEnrichment?.translation ?? currentBase.translation,
         collocation: currentEnrichment?.collocations?.join(" · ") ?? currentBase.collocation,
@@ -412,7 +530,24 @@ export default function Home() {
     });
   }, [redbookWords, selectedSection]);
   const currentMeaning = splitMeaning(current.meaning);
-  const currentPart = current.part ?? currentMeaning.part;
+  const currentSenses = current.part
+    ? [{ part: current.part, meaning: currentMeaning.meaning }]
+    : currentMeaning.senses;
+  const currentFamiliarMeanings = new Set(
+    current.id === undefined ? [] : familiarMeanings[current.id] ?? [],
+  );
+  const currentMeaningItems = [
+    ...new Set(currentSenses.flatMap((sense) => splitSenseItems(sense.meaning))),
+  ];
+  const unfamiliarMeanings = currentMeaningItems.filter(
+    (meaning) => !currentFamiliarMeanings.has(meaning),
+  );
+  const reinforcementSentence = current.sentence
+    ? clozeSentence(current.sentence, current.word)
+    : "";
+  const reinforcementMeaning = unfamiliarMeanings[0]
+    ?? currentMeaningItems[0]
+    ?? currentMeaning.meaning;
   const favoriteWords = useMemo(
     () => favorites
       .map((item) => ({ ...item, word: wordById.get(item.wordId) }))
@@ -474,6 +609,8 @@ export default function Home() {
     positions,
     activeSession,
     enrichments,
+    lookupWords,
+    familiarMeanings,
     started,
     dailyGoal,
     adaptiveNewWords,
@@ -491,7 +628,9 @@ export default function Home() {
     dailyGoal,
     examDate,
     enrichments,
+    familiarMeanings,
     favorites,
+    lookupWords,
     mistakes,
     minimumNewWords,
     positions,
@@ -656,16 +795,66 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    lookupCacheRef.current = readLookupCache();
+  }, []);
+
+  useEffect(() => {
+    if (
+      currentBase?.id === undefined
+      || !currentBase.word
+      || currentBase.phonetic
+      || currentDictionaryPhonetic
+    ) return;
+    let active = true;
+    findInLocalDictionary(currentBase.word)
+      .then((result) => {
+        if (active && result?.phonetic) {
+          setDictionaryPhonetics((items) => ({
+            ...items,
+            [currentBase.id!]: result.phonetic,
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [
+    currentBase?.id,
+    currentBase?.phonetic,
+    currentBase?.word,
+    currentDictionaryPhonetic,
+  ]);
+
+  useEffect(() => {
+    if (!selectionLookup) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".selection-lookup")) return;
+      lookupAbortRef.current?.abort();
+      setSelectionLookup(undefined);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [selectionLookup]);
+
   useEffect(() => () => {
     recordedAudioRef.current?.pause();
     window.speechSynthesis?.cancel();
+    lookupAbortRef.current?.abort();
   }, []);
+
+  useEffect(() => {
+    lookupAbortRef.current?.abort();
+    queueMicrotask(() => setSelectionLookup(undefined));
+  }, [current.id]);
 
   useEffect(() => {
     if (activeSession?.kind !== "today") return;
     const dueNow = dueWordIds(wordProgress, new Date(clock));
-    const remaining = new Set(activeSession.wordIds.slice(activeSession.index));
-    const additions = dueNow.filter((wordId) => !remaining.has(wordId));
+    const queued = new Set(activeSession.wordIds);
+    const additions = dueNow.filter((wordId) => !queued.has(wordId));
     if (!additions.length) return;
     queueMicrotask(() => setActiveSession((session) =>
       session?.kind === "today"
@@ -694,10 +883,27 @@ export default function Home() {
   }, [current.id, redbookReady, started]);
 
   useEffect(() => {
+    if (reinforcementRating === null) return;
+    reinforcementInputRef.current?.focus();
+  }, [reinforcementRating]);
+
+  useEffect(() => {
+    if (revealed) return;
+    queueMicrotask(() => {
+      setReinforcementRating(null);
+      setReinforcementInput("");
+      setReinforcementFeedback("");
+      setReinforcementRecallMs(null);
+    });
+  }, [revealed]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSearchOpen(false);
         setAiOpen(false);
+        setSelectionLookup(undefined);
+        lookupAbortRef.current?.abort();
         return;
       }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -707,6 +913,17 @@ export default function Home() {
         else if (activeView === "learn" && redbookReady) setRevealed(true);
       }
       if (event.key.toLowerCase() === "a" && started) setAiOpen((value) => !value);
+      if (
+        event.key.toLowerCase() === "e"
+        && started
+        && activeView === "learn"
+        && revealed
+        && redbookReady
+        && !current.sentence
+        && !enrichmentLoading
+      ) {
+        enrichCurrentWord();
+      }
       if (event.key.toLowerCase() === "f" && started && activeView === "learn") toggleFavorite();
       if (event.key.toLowerCase() === "z" && ratingUndo) undoLastRating();
       if (event.key === "/") {
@@ -725,6 +942,8 @@ export default function Home() {
     setPositions(state.positions);
     setActiveSession(state.activeSession);
     setEnrichments(state.enrichments);
+    setLookupWords(state.lookupWords);
+    setFamiliarMeanings(state.familiarMeanings);
     setStarted(state.started);
     setDailyGoal(state.dailyGoal);
     setAdaptiveNewWords(state.adaptiveNewWords);
@@ -875,7 +1094,7 @@ export default function Home() {
     if (!playRecordedWord(current)) speakWithTts(current);
   }
 
-  function rateWord(rating: number) {
+  function rateWord(rating: number, skipReinforcement = false) {
     if (
       !redbookReady
       || current.id === undefined
@@ -883,10 +1102,20 @@ export default function Home() {
       || rating > 3
       || sessionComplete
     ) return;
-    const now = new Date().toISOString();
-    const recallMs = recallStartedAt === null
+    const measuredRecallMs = recallStartedAt === null
       ? undefined
       : Math.max(0, Date.now() - recallStartedAt);
+    if (rating <= 1 && !skipReinforcement && reinforcementRating === null) {
+      setReinforcementRating(rating as ReinforcementRating);
+      setReinforcementInput("");
+      setReinforcementFeedback("");
+      setReinforcementRecallMs(measuredRecallMs ?? null);
+      return;
+    }
+    const now = new Date().toISOString();
+    const recallMs = skipReinforcement && reinforcementRecallMs !== null
+      ? reinforcementRecallMs
+      : measuredRecallMs;
     const typedRating = rating as 0 | 1 | 2 | 3;
     const previousProgress = wordProgress[current.id];
     const previousMistake = mistakes.find((item) => item.wordId === current.id);
@@ -936,6 +1165,10 @@ export default function Home() {
       ? ""
       : ` · 用时 ${formatRecallTime(recallMs)}${recallMs >= 15000 ? "，回忆偏慢" : ""}`;
     setToast(`${ratingLabels[typedRating]} · ${formatInterval(result.review.intervalMs)}后复习${recallMessage} · Z 撤销`);
+    setReinforcementRating(null);
+    setReinforcementInput("");
+    setReinforcementFeedback("");
+    setReinforcementRecallMs(null);
     setRevealed(false);
     if (activeSession) {
       setActiveSession((session) => session
@@ -1083,6 +1316,10 @@ export default function Home() {
     );
   }
 
+  function startLookupSession(wordIds = lookupWords.map((item) => item.id)) {
+    startSession("lookups", "划词集复习", wordIds);
+  }
+
   function startSearchSession() {
     const ids = selectedSearchIds.length
       ? selectedSearchIds
@@ -1115,6 +1352,22 @@ export default function Home() {
     setTimeout(() => setToast(""), 1600);
   }
 
+  function toggleMeaningFamiliar(meaning: string) {
+    if (current.id === undefined) return;
+    setFamiliarMeanings((items) => {
+      const existing = items[current.id!] ?? [];
+      const next = existing.includes(meaning)
+        ? existing.filter((item) => item !== meaning)
+        : [...existing, meaning];
+      if (!next.length) {
+        return Object.fromEntries(
+          Object.entries(items).filter(([wordId]) => Number(wordId) !== current.id),
+        );
+      }
+      return { ...items, [current.id!]: next };
+    });
+  }
+
   function focusSavedWord(word: Word) {
     const section = word.section ?? selectedSection;
     const unit = word.unit ?? "all";
@@ -1130,6 +1383,254 @@ export default function Home() {
   function speakNext() {
     const nextWord = studyWords[(wordIndex + 1) % Math.max(1, studyWords.length)] ?? REDBOOK_PLACEHOLDER;
     if (!playRecordedWord(nextWord)) speakWithTts(nextWord);
+  }
+
+  async function handleTextSelection(event: ReactMouseEvent<HTMLElement>) {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, textarea, select, a")) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
+
+    const query = cleanSelectedText(selection.toString());
+    if (!query || !/[A-Za-z]/.test(query)) return;
+    const rangeBox = range.getBoundingClientRect();
+    if (!rangeBox.width && !rangeBox.height) return;
+    const popupWidth = Math.min(360, window.innerWidth - 24);
+    const x = Math.min(
+      window.innerWidth - popupWidth / 2 - 12,
+      Math.max(popupWidth / 2 + 12, rangeBox.left + rangeBox.width / 2),
+    );
+    const popupHeight = 220;
+    const y = rangeBox.bottom + 12 + popupHeight <= window.innerHeight
+      ? rangeBox.bottom + 12
+      : Math.max(12, rangeBox.top - popupHeight - 12);
+    const commonNode = range.commonAncestorContainer;
+    const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
+      ? commonNode as Element
+      : commonNode.parentElement;
+    const contextElement = commonElement?.closest(
+      ".meaning-row, .context-block, .collocation-block, .word-face",
+    );
+    const context = (contextElement?.textContent ?? current.sentence ?? current.meaning)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 500);
+
+    lookupAbortRef.current?.abort();
+    setSelectionLookup({ query, context, x, y, status: "idle" });
+  }
+
+  function saveLookupWord(result: LookupResult) {
+    setLookupWords((items) => {
+      const existing = items.find(
+        (item) => item.query.toLowerCase() === result.query.toLowerCase(),
+      );
+      return [
+        {
+          ...result,
+          id: existing?.id ?? lookupWordId(result.query),
+          addedAt: existing?.addedAt ?? new Date().toISOString(),
+        },
+        ...items.filter((item) => item.query.toLowerCase() !== result.query.toLowerCase()),
+      ].slice(0, 200);
+    });
+  }
+
+  async function findInLocalDictionary(query: string): Promise<LookupResult | null> {
+    if (!/^[A-Za-z][A-Za-z '-]*$/.test(query)) return null;
+    const shardName = query[0].toLowerCase();
+    let shard = dictionaryShardCacheRef.current[shardName];
+    if (!shard) {
+      const response = await fetch(`${DICTIONARY_BASE_PATH}/${shardName}.json`);
+      if (!response.ok) return null;
+      shard = await response.json() as DictionaryShard;
+      dictionaryShardCacheRef.current[shardName] = shard;
+    }
+    const entry = shard[query.toLowerCase()];
+    if (!entry) return null;
+    return {
+      query: entry[0],
+      kind: entry[0].includes(" ") ? "phrase" : "word",
+      phonetic: formatDictionaryPhonetic(entry[1]),
+      phoneticSource: "dictionary",
+      part: "本地词典",
+      meaning: entry[2].replace(/\\n/g, "；").replace(/\s*;\s*/g, "；"),
+      note: "ECDICT 离线释义",
+      source: "dictionary",
+    };
+  }
+
+  async function translateSelection(options: { forceAi?: boolean } = {}) {
+    if (!selectionLookup || selectionLookup.status === "loading") return;
+    const { query, context, x, y } = selectionLookup;
+    const normalizedQuery = query.toLowerCase();
+    const localWord = wordByText.get(normalizedQuery);
+    if (localWord && !options.forceAi) {
+      const parsed = splitMeaning(localWord.meaning);
+      const dictionaryResult = localWord.phonetic
+        ? null
+        : await findInLocalDictionary(query).catch(() => null);
+      const phonetic = localWord.phonetic || dictionaryResult?.phonetic || "";
+      if (localWord.id !== undefined && phonetic) {
+        setDictionaryPhonetics((items) => ({ ...items, [localWord.id!]: phonetic }));
+      }
+      const result: LookupResult = {
+        query: localWord.word,
+        kind: localWord.word.includes(" ") ? "phrase" : "word",
+        phonetic,
+        phoneticSource: localWord.phonetic ? "redbook" : phonetic ? "dictionary" : undefined,
+        part: localWord.part ?? parsed.part,
+        meaning: parsed.meaning,
+        note: `${localWord.section ?? "红宝书"}${localWord.unit ? ` · Unit ${localWord.unit}` : ""}`,
+        source: "redbook",
+      };
+      saveLookupWord(result);
+      setSelectionLookup({
+        query,
+        context,
+        x,
+        y,
+        status: "ready",
+        result,
+      });
+      return;
+    }
+
+    const savedLookup = lookupWords.find(
+      (item) => item.query.toLowerCase() === normalizedQuery,
+    );
+    if (savedLookup && !options.forceAi) {
+      const dictionaryResult = savedLookup.source === "ai"
+        ? await findInLocalDictionary(query).catch(() => null)
+        : null;
+      const result: LookupResult = {
+        query: savedLookup.query,
+        kind: savedLookup.kind,
+        phonetic: savedLookup.source === "ai"
+          ? dictionaryResult?.phonetic ?? ""
+          : savedLookup.phonetic,
+        phoneticSource: savedLookup.source === "ai"
+          ? dictionaryResult?.phoneticSource
+          : savedLookup.phoneticSource,
+        part: savedLookup.part,
+        meaning: savedLookup.meaning,
+        note: savedLookup.note,
+        source: savedLookup.source,
+      };
+      setSelectionLookup({
+        query,
+        context,
+        x,
+        y,
+        status: "ready",
+        result,
+        cached: true,
+      });
+      return;
+    }
+
+    const cacheKey = JSON.stringify([normalizedQuery, context.toLowerCase()]);
+    const cached = lookupCacheRef.current[cacheKey];
+    if (cached && (!options.forceAi || cached.source === "ai")) {
+      const trustedCached = cached.source === "ai"
+        ? {
+            ...cached,
+            phonetic: selectionLookup.result?.phonetic || (
+              cached.phoneticSource ? cached.phonetic : ""
+            ),
+            phoneticSource: selectionLookup.result?.phoneticSource
+              ?? cached.phoneticSource,
+          }
+        : cached;
+      saveLookupWord(trustedCached);
+      setSelectionLookup({
+        query,
+        context,
+        x,
+        y,
+        status: "ready",
+        result: trustedCached,
+        cached: true,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    lookupAbortRef.current = controller;
+    setSelectionLookup({ query, context, x, y, status: "loading" });
+    try {
+      if (!options.forceAi) {
+        const dictionaryResult = await findInLocalDictionary(query);
+        if (dictionaryResult) {
+          saveLookupWord(dictionaryResult);
+          setSelectionLookup({
+            query,
+            context,
+            x,
+            y,
+            status: "ready",
+            result: dictionaryResult,
+          });
+          return;
+        }
+      }
+      const response = await fetch("/api/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: query, context }),
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(30000),
+        ]),
+      });
+      const data = await response.json() as LookupResult & { error?: string };
+      if (!response.ok || data.source !== "ai") {
+        throw new Error(data.error ?? "划词查询失败");
+      }
+      const trustedResult: LookupResult = {
+        ...data,
+        phonetic: selectionLookup.result?.phonetic || "",
+        phoneticSource: selectionLookup.result?.phoneticSource,
+      };
+      const entries = Object.entries({
+        ...lookupCacheRef.current,
+        [cacheKey]: trustedResult,
+      }).slice(-120);
+      lookupCacheRef.current = Object.fromEntries(entries);
+      localStorage.setItem(LOOKUP_CACHE_KEY, JSON.stringify(lookupCacheRef.current));
+      saveLookupWord(trustedResult);
+      setSelectionLookup({ query, context, x, y, status: "ready", result: trustedResult });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setSelectionLookup({
+        query,
+        context,
+        x,
+        y,
+        status: "error",
+        error: error instanceof Error ? error.message : "划词查询失败",
+      });
+    }
+  }
+
+  function submitReinforcement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (reinforcementRating === null) return;
+    const answer = reinforcementInput.trim().toLocaleLowerCase();
+    const expected = current.word.trim().toLocaleLowerCase();
+    if (answer !== expected) {
+      setReinforcementFeedback(`还差一点，按词形 ${maskWord(current.word)} 再拼一次`);
+      reinforcementInputRef.current?.select();
+      return;
+    }
+    rateWord(reinforcementRating, true);
+  }
+
+  function skipReinforcement() {
+    if (reinforcementRating === null) return;
+    rateWord(reinforcementRating, true);
   }
 
   async function askCoach(prompt: string) {
@@ -1158,20 +1659,29 @@ export default function Home() {
 
   async function enrichCurrentWord() {
     if (current.id === undefined || enrichmentLoading) return;
+    if (!unfamiliarMeanings.length) {
+      setToast("所有中文义项都已标记熟练，请先取消一个义项");
+      setTimeout(() => setToast(""), 2400);
+      return;
+    }
     setEnrichmentLoading(true);
     try {
       const response = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: current.word, meaning: current.meaning }),
-        signal: AbortSignal.timeout(25000),
+        body: JSON.stringify({
+          word: current.word,
+          meaning: unfamiliarMeanings.join("；"),
+          familiarMeanings: [...currentFamiliarMeanings],
+        }),
+        signal: AbortSignal.timeout(30000),
       });
       const data = await response.json() as WordEnrichment & { error?: string };
       if (!response.ok || data.source !== "ai") {
         throw new Error(data.error ?? "内容补充失败");
       }
       setEnrichments((items) => ({ ...items, [current.id!]: data }));
-      setToast("已缓存 AI 生成的音标、例句和搭配");
+      setToast(`已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "内容补充失败");
     } finally {
@@ -1340,8 +1850,9 @@ export default function Home() {
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <article
-                className={`${revealed ? "word-card revealed" : "word-card"}${redbookReady ? "" : " loading"}`}
+                className={`${revealed ? "word-card revealed" : "word-card"}${reinforcementRating === null ? "" : " reinforcing"}${redbookReady ? "" : " loading"}`}
                 aria-busy={redbookStatus === "loading"}
+                onMouseUp={handleTextSelection}
               >
                 <div className="word-heading">
                   <p className="word-count">
@@ -1376,18 +1887,45 @@ export default function Home() {
                   </div>
                 </div>
                 <button className="word-face" onClick={() => redbookReady && setRevealed(true)} disabled={!redbookReady} aria-label="显示单词释义">
-                  <h1>{current.word}</h1>
-                  <p>{redbookReady ? (current.phonetic ?? `NO. ${String(current.id ?? wordIndex + 1).padStart(4, "0")}`) : "LOCAL VOCABULARY"}</p>
+                  <h1>{reinforcementRating === null ? current.word : maskWord(current.word)}</h1>
+                  <p>
+                    {redbookReady
+                      ? reinforcementRating === null
+                        ? (current.phonetic || "\u00A0")
+                        : `${current.word.replace(/\s/g, "").length} LETTERS`
+                      : "LOCAL VOCABULARY"}
+                  </p>
                   {!redbookReady
                     ? <span>{redbookStatus === "loading" ? "正在读取 6550 个考研词汇…" : "未能读取本地红宝书词库"}</span>
                     : !revealed && <span>先在脑中回忆，再点击查看</span>}
                 </button>
 
-                {revealed && redbookReady && (
+                {revealed && redbookReady && reinforcementRating === null && (
                   <div className="meaning-panel">
                     <div className="meaning-main">
-                      <span>{currentPart}</span>
-                      <strong>{currentMeaning.meaning}</strong>
+                      {currentSenses.map((sense) => (
+                        <div className="meaning-row" key={sense.part}>
+                          <span>{sense.part}</span>
+                          <div className="meaning-sense-list">
+                            {splitSenseItems(sense.meaning).map((meaning) => {
+                              const familiar = currentFamiliarMeanings.has(meaning);
+                              return (
+                                <button
+                                  type="button"
+                                  className={familiar ? "meaning-sense familiar" : "meaning-sense"}
+                                  key={meaning}
+                                  onClick={() => toggleMeaningFamiliar(meaning)}
+                                  aria-pressed={familiar}
+                                  title={familiar ? "取消熟练标记" : "标记为熟练义项"}
+                                >
+                                  {meaning}
+                                  {familiar && <small>✓ 熟练</small>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                     {current.relation && (
                       <div className={`word-relation relation-${current.relation.kind}`}>
@@ -1403,15 +1941,40 @@ export default function Home() {
                         <p className="context-sentence">{current.sentence}</p>
                         <p className="context-translation">{current.translation}</p>
                         {currentEnrichment && (
-                          <small className="content-source">
-                            {currentEnrichment.source === "ai" ? "AI 生成 · 已缓存 · 未人工核验" : "词典内容"}
-                          </small>
+                          <div className="content-meta">
+                            <small className="content-source">
+                              {currentEnrichment.source === "ai" ? "AI 生成 · 已缓存 · 未人工核验" : "词典内容"}
+                              {currentEnrichment.targetMeanings?.length
+                                ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
+                                : ""}
+                            </small>
+                            {currentEnrichment.source === "ai" && (
+                              <button
+                                type="button"
+                                onClick={enrichCurrentWord}
+                                disabled={enrichmentLoading || !unfamiliarMeanings.length}
+                              >
+                                {enrichmentLoading ? "重写中…" : "按未熟练义项重写"}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     ) : (
-                      <button className="context-block context-ai" onClick={enrichCurrentWord} disabled={enrichmentLoading}>
-                        <span>内容补充</span>
-                        <p>{enrichmentLoading ? "正在生成并校验格式…" : "生成并缓存音标、原创语境例句与常用搭配"}</p>
+                      <button
+                        className="context-block context-ai"
+                        onClick={enrichCurrentWord}
+                        disabled={enrichmentLoading || !unfamiliarMeanings.length}
+                        aria-keyshortcuts="E"
+                      >
+                        <span>内容补充 <kbd>E</kbd></span>
+                        <p>
+                          {!unfamiliarMeanings.length
+                            ? "全部中文义项已标记熟练"
+                            : enrichmentLoading
+                            ? "正在按未熟练义项生成并校验格式…"
+                            : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
+                        </p>
                       </button>
                     )}
                     {current.collocation && (
@@ -1423,7 +1986,14 @@ export default function Home() {
                     <div className="word-details">
                       <div><span>所在分组</span><strong>{current.section ?? selectedSection} · Unit {current.unit ?? selectedUnit}</strong></div>
                       <div><span>词汇序号</span><strong>NO. {current.id ?? wordIndex + 1}</strong></div>
-                      <div><span>词表来源</span><strong>{current.sourcePage ? `正序中文词表第 ${current.sourcePage} 页` : current.family}</strong></div>
+                      <div>
+                        <span>下次复习</span>
+                        <strong>
+                          {currentProgress
+                            ? formatDueTime(currentProgress.nextDueAt, new Date(clock))
+                            : "首次学习"}
+                        </strong>
+                      </div>
                       {currentProgress && (
                         <div>
                           <span>FSRS 可提取率</span>
@@ -1433,13 +2003,60 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+                {revealed && redbookReady && reinforcementRating !== null && (
+                  <form className="reinforcement-panel" onSubmit={submitReinforcement}>
+                    <div className="reinforcement-heading">
+                      <span>{reinforcementRating === 0 ? "忘记后再认" : "模糊后加固"}</span>
+                      <strong>趁答案还在短时记忆里，再主动提取一次</strong>
+                    </div>
+                    <div className="reinforcement-cue">
+                      <small>{reinforcementSentence ? "语境填空" : "核心含义"}</small>
+                      <p>{reinforcementSentence || reinforcementMeaning}</p>
+                      {reinforcementRating === 0 && (current.relation || current.root) && (
+                        <em>{current.relation?.label ?? `词根提示：${current.root}`}</em>
+                      )}
+                    </div>
+                    <label className="reinforcement-input">
+                      <span>输入完整单词</span>
+                      <input
+                        ref={reinforcementInputRef}
+                        value={reinforcementInput}
+                        onChange={(event) => {
+                          setReinforcementInput(event.target.value);
+                          setReinforcementFeedback("");
+                        }}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        aria-describedby="reinforcement-feedback"
+                      />
+                    </label>
+                    <div className="reinforcement-actions">
+                      <button type="submit" disabled={!reinforcementInput.trim()}>完成强化</button>
+                      <button type="button" className="quiet" onClick={skipReinforcement}>暂时跳过</button>
+                    </div>
+                    <p
+                      id="reinforcement-feedback"
+                      className={reinforcementFeedback ? "reinforcement-feedback error" : "reinforcement-feedback"}
+                      aria-live="polite"
+                    >
+                      {reinforcementFeedback || "只增加这一道短题，完成后自动进入下一词"}
+                    </p>
+                  </form>
+                )}
               </article>
               <div className="orbit-label orbit-label-bottom">
-                {!redbookReady ? "LOCAL · REDBOOK" : revealed ? "根据真实记忆感受评分" : "SPACE · 查看释义"}
+                {!redbookReady
+                  ? "LOCAL · REDBOOK"
+                  : reinforcementRating !== null
+                    ? "RETRIEVE · 再提取一次"
+                    : revealed
+                      ? "根据真实记忆感受评分"
+                      : "SPACE · 查看释义"}
               </div>
             </div>
 
-            <div className={revealed && redbookReady ? "rating-bar visible" : "rating-bar"}>
+            <div className={revealed && redbookReady && reinforcementRating === null ? "rating-bar visible" : "rating-bar"}>
               {ratingLabels.map((label, index) => (
                 <button key={label} onClick={() => rateWord(index)}>
                   <span>{index + 1}</span>
@@ -1509,11 +2126,13 @@ export default function Home() {
                 <span><strong>{favoriteWords.length}</strong> 个收藏</span>
                 <span><strong>{mistakeWords.length}</strong> 个错词</span>
                 <span><strong>{stubbornWordList.length}</strong> 个顽固词</span>
+                <span><strong>{lookupWords.length}</strong> 个划词</span>
               </div>
               <div className="wordbook-batch-actions">
                 <button onClick={startFavoriteSession} disabled={!favoriteWords.length}>复习全部收藏</button>
                 <button onClick={startMistakeSession} disabled={!mistakeWords.length}>强化当前错词</button>
                 <button onClick={startStubbornSession} disabled={!stubbornWordList.length}>顽固词专项</button>
+                <button onClick={() => startLookupSession()} disabled={!lookupWords.length}>学习划词集</button>
               </div>
             </div>
             <div className="wordbook-tabs" role="tablist" aria-label="词本分类">
@@ -1540,6 +2159,14 @@ export default function Home() {
                 onClick={() => setWordbookTab("stubborn")}
               >
                 顽固词 <span>{stubbornWordList.length}</span>
+              </button>
+              <button
+                role="tab"
+                aria-selected={wordbookTab === "lookups"}
+                className={wordbookTab === "lookups" ? "active" : ""}
+                onClick={() => setWordbookTab("lookups")}
+              >
+                划词集 <span>{lookupWords.length}</span>
               </button>
             </div>
             <div className="saved-word-grid">
@@ -1602,6 +2229,37 @@ export default function Home() {
                   </div>
                 </article>
               ))}
+              {wordbookTab === "lookups" && lookupWords.map((item) => (
+                <article className="saved-word-card lookup-word-card" key={item.query.toLowerCase()}>
+                  <div className="saved-word-mark">↳</div>
+                  <div className="saved-word-copy">
+                    <div>
+                      <h2>{item.query}</h2>
+                      <span>{item.phonetic || item.part}</span>
+                    </div>
+                    <p>{item.meaning}</p>
+                    <small>
+                      {item.part}
+                      {item.note ? ` · ${item.note}` : ""}
+                      {" · "}{item.source === "redbook"
+                        ? "红宝书"
+                        : item.source === "dictionary"
+                          ? "ECDICT 本地辞典"
+                          : "DS Flash"}
+                    </small>
+                  </div>
+                  <div className="saved-word-actions">
+                    <button onClick={() => startLookupSession([item.id])}>去学习</button>
+                    <button
+                      className="quiet"
+                      onClick={() => setLookupWords((items) =>
+                        items.filter((word) => word.query.toLowerCase() !== item.query.toLowerCase()))}
+                    >
+                      移除
+                    </button>
+                  </div>
+                </article>
+              ))}
               {wordbookTab === "favorites" && favoriteWords.length === 0 && (
                 <div className="wordbook-empty">
                   <span>◇</span>
@@ -1624,6 +2282,14 @@ export default function Home() {
                   <h2>没有活跃顽固词</h2>
                   <p>连续成功 3 次或 30 天没有新的低评分会自动退出专项。</p>
                   <button onClick={() => setActiveView("learn")}>继续学习</button>
+                </div>
+              )}
+              {wordbookTab === "lookups" && lookupWords.length === 0 && (
+                <div className="wordbook-empty">
+                  <span>↳</span>
+                  <h2>还没有划词记录</h2>
+                  <p>在学习卡正文中划选英文，点击“翻译”后会自动收进这里。</p>
+                  <button onClick={() => setActiveView("learn")}>去划词</button>
                 </div>
               )}
             </div>
@@ -1906,12 +2572,95 @@ export default function Home() {
                 <span><kbd>Z</kbd> 撤销最近评分</span>
                 <span><kbd>/</kbd> 全局查词</span>
                 <span><kbd>F</kbd> 收藏单词</span>
+                <span><kbd>E</kbd> 内容补充</span>
                 <span><kbd>A</kbd> AI 教练</span>
               </div>
             </div>
           </div>
         )}
       </section>
+
+      {selectionLookup && (
+        <section
+          className="selection-lookup"
+          style={{ left: selectionLookup.x, top: selectionLookup.y }}
+          role="dialog"
+          aria-label={`划词查询：${selectionLookup.query}`}
+          aria-live="polite"
+        >
+          <div className="selection-lookup-head">
+            <span>
+              划词查义
+              {selectionLookup.result?.source === "redbook"
+                ? " · 红宝书"
+                : selectionLookup.result?.source === "dictionary"
+                  ? " · ECDICT · 本地"
+                : selectionLookup.cached
+                  ? " · DS FLASH · 已缓存"
+                  : selectionLookup.status === "idle"
+                    ? " · 待查询"
+                    : " · DS FLASH"}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                lookupAbortRef.current?.abort();
+                setSelectionLookup(undefined);
+              }}
+              aria-label="关闭划词查询"
+            >
+              ×
+            </button>
+          </div>
+          <div className="selection-lookup-query">
+            <strong>{selectionLookup.result?.query ?? selectionLookup.query}</strong>
+            {selectionLookup.result?.phonetic && <small>{selectionLookup.result.phonetic}</small>}
+          </div>
+          {selectionLookup.status === "idle" && (
+            <button
+              className="selection-lookup-action"
+              type="button"
+              onClick={() => translateSelection()}
+            >
+              <span>翻译</span>
+              <small>查询后自动加入划词集</small>
+            </button>
+          )}
+          {selectionLookup.status === "loading" && (
+            <p className="selection-lookup-state">
+              <i aria-hidden="true" />
+              正在结合上下文判断词义…
+            </p>
+          )}
+          {selectionLookup.status === "error" && (
+            <div className="selection-lookup-error">
+              <p>{selectionLookup.error}</p>
+              <button type="button" onClick={() => translateSelection()}>重试</button>
+            </div>
+          )}
+          {selectionLookup.status === "ready" && selectionLookup.result && (
+            <>
+              <div className="selection-lookup-meaning">
+                <span>{selectionLookup.result.part}</span>
+                <p>{selectionLookup.result.meaning}</p>
+              </div>
+              {selectionLookup.result.note && (
+                <small className="selection-lookup-note">{selectionLookup.result.note}</small>
+              )}
+              <small className="selection-lookup-saved">已加入划词集</small>
+              {selectionLookup.result.source === "dictionary" && (
+                <button
+                  className="selection-lookup-context"
+                  type="button"
+                  onClick={() => translateSelection({ forceAi: true })}
+                >
+                  让 DS 结合当前语境辨义
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <aside className={aiOpen ? "coach-panel open" : "coach-panel"} aria-label="AI 记忆教练">
         <div className="coach-head">

@@ -4,6 +4,7 @@ import {
   buildActivityCalendar,
   buildStudyKey,
   learningStats,
+  lookupWordId,
   parseStoredState,
   splitMeaning,
   type Review,
@@ -119,6 +120,52 @@ test("v5 迁移把 passer-by 旧记录归到 passersby 学习项", () => {
   assert.deepEqual(state.favorites.map((item) => item.wordId), [2506]);
   assert.deepEqual(state.mistakes.map((item) => item.wordId), [2506]);
   assert.deepEqual(state.reviews.map((item) => item.wordId), [2506]);
+});
+
+test("划词集单词保留音标、熟练义项并可进入独立复习会话", () => {
+  const wordId = lookupWordId("intensive");
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    lookupWords: [{
+      id: wordId,
+      query: "intensive",
+      kind: "word",
+      phonetic: "/ɪnˈtensɪv/",
+      part: "adj.",
+      meaning: "密集的；强化的",
+      note: "ECDICT 离线释义",
+      source: "dictionary",
+      addedAt: "2026-07-28T10:00:00.000Z",
+    }, {
+      id: lookupWordId("contextualized"),
+      query: "contextualized",
+      kind: "word",
+      phonetic: "/AI-generated/",
+      part: "adj.",
+      meaning: "置于语境中的",
+      note: "旧缓存",
+      source: "ai",
+      addedAt: "2026-07-28T10:00:00.000Z",
+    }],
+    familiarMeanings: {
+      [wordId]: ["密集的"],
+    },
+    activeSession: {
+      id: "lookups:test",
+      kind: "lookups",
+      title: "划词集复习",
+      wordIds: [wordId, wordId],
+      index: 0,
+      createdAt: "2026-07-28T10:00:00.000Z",
+    },
+  }));
+
+  assert.equal(state.lookupWords[0].phonetic, "/ɪnˈtensɪv/");
+  assert.equal(state.lookupWords[0].source, "dictionary");
+  assert.equal(state.lookupWords[1].phonetic, "");
+  assert.deepEqual(state.familiarMeanings[wordId], ["密集的"]);
+  assert.deepEqual(state.activeSession?.wordIds, [wordId]);
+  assert.equal(state.activeSession?.kind, "lookups");
 });
 
 test("今日、连续天数和到期数量来自真实日期", () => {
@@ -524,9 +571,22 @@ test("释义中的词性只展示一次", () => {
   assert.deepEqual(splitMeaning("vt. vi. 放弃;抛弃"), {
     part: "vt. vi.",
     meaning: "放弃;抛弃",
+    senses: [
+      { part: "vt.", meaning: "放弃;抛弃" },
+      { part: "vi.", meaning: "放弃;抛弃" },
+    ],
   });
   assert.deepEqual(splitMeaning("modal. 可以;可能"), {
     part: "modal.",
     meaning: "可以;可能",
+    senses: [{ part: "modal.", meaning: "可以;可能" }],
+  });
+  assert.deepEqual(splitMeaning("adv. prep. 穿过,从一边到另一边;在 对面 prep. 遍及"), {
+    part: "adv. prep.",
+    meaning: "穿过,从一边到另一边;在 对面；遍及",
+    senses: [
+      { part: "adv.", meaning: "穿过,从一边到另一边;在 对面" },
+      { part: "prep.", meaning: "穿过,从一边到另一边;在 对面；遍及" },
+    ],
   });
 });

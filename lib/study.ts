@@ -65,6 +65,21 @@ export type MistakeRecord = SavedWord & {
   lastMistakeAt: string;
 };
 
+export type LookupWord = {
+  id: number;
+  query: string;
+  kind: "word" | "phrase" | "sentence";
+  phonetic: string;
+  phoneticSource?: "redbook" | "dictionary";
+  part: string;
+  meaning: string;
+  note: string;
+  source: "redbook" | "dictionary" | "ai";
+  addedAt: string;
+};
+
+export type FamiliarMeaningMap = Record<number, string[]>;
+
 export type StudyMode = "ordered" | "shuffled";
 export type StudyScope = "selection" | "all";
 export type StudyPositions = Record<string, number>;
@@ -79,6 +94,8 @@ export type StoredState = {
   positions: StudyPositions;
   activeSession?: StudySession;
   enrichments: Record<number, WordEnrichment>;
+  lookupWords: LookupWord[];
+  familiarMeanings: FamiliarMeaningMap;
   started: boolean;
   dailyGoal: number;
   adaptiveNewWords: boolean;
@@ -96,6 +113,7 @@ export const STORAGE_KEY = "wordloop-state";
 export const STORAGE_VERSION = 5;
 export const MAX_REVIEWS = 10000;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;
+export const CUSTOM_WORD_ID_START = 1_000_000;
 
 const REVIEW_INTERVALS = [
   10 * 60 * 1000,
@@ -110,12 +128,27 @@ function validDate(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export function isValidStudyWordId(value: unknown): value is number {
+  return Number.isSafeInteger(value)
+    && Number(value) >= 1
+    && (Number(value) <= 6550 || Number(value) >= CUSTOM_WORD_ID_START);
+}
+
+export function lookupWordId(query: string) {
+  let hash = 2166136261;
+  for (const character of query.trim().toLowerCase()) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return CUSTOM_WORD_ID_START + (hash >>> 0);
+}
+
 function storedWordId(item: Record<string, unknown>) {
   const word = item.word as Record<string, unknown> | undefined;
   const keyMatch = typeof item.key === "string" ? item.key.match(/^redbook-(\d+)$/) : null;
   const value = item.wordId ?? item.id ?? word?.id ?? keyMatch?.[1];
   const id = Number(value);
-  return Number.isInteger(id) && id >= 1 && id <= 6550 ? canonicalWordId(id) : null;
+  return isValidStudyWordId(id) ? canonicalWordId(id) : null;
 }
 
 function normalizeSavedWord(value: unknown): SavedWord | null {
@@ -142,6 +175,82 @@ function normalizeMistake(value: unknown): MistakeRecord | null {
     lastMistakeAt:
       validDate(item.lastMistakeAt)?.toISOString() ?? saved.addedAt,
   };
+}
+
+function normalizeLookupWord(value: unknown): LookupWord | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const query = typeof item.query === "string" ? item.query.trim().slice(0, 160) : "";
+  const meaning = typeof item.meaning === "string" ? item.meaning.trim() : "";
+  if (!query || !meaning || !["word", "phrase", "sentence"].includes(String(item.kind))) {
+    return null;
+  }
+  return {
+    id: isValidStudyWordId(Number(item.id))
+      ? canonicalWordId(Number(item.id))
+      : lookupWordId(query),
+    query,
+    kind: item.kind as LookupWord["kind"],
+    phonetic: (
+      item.source !== "ai"
+      || item.phoneticSource === "redbook"
+      || item.phoneticSource === "dictionary"
+    ) && typeof item.phonetic === "string"
+      ? item.phonetic.trim()
+      : "",
+    phoneticSource: item.phoneticSource === "redbook"
+      || item.phoneticSource === "dictionary"
+      ? item.phoneticSource
+      : item.source === "redbook"
+        ? "redbook"
+        : item.source === "dictionary"
+          ? "dictionary"
+          : undefined,
+    part: typeof item.part === "string" && item.part.trim() ? item.part.trim() : "划词",
+    meaning,
+    note: typeof item.note === "string" ? item.note.trim() : "",
+    source: ["redbook", "dictionary", "ai"].includes(String(item.source))
+      ? item.source as LookupWord["source"]
+      : "ai",
+    addedAt: validDate(item.addedAt)?.toISOString() ?? new Date(0).toISOString(),
+  };
+}
+
+function normalizeLookupWords(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .map(normalizeLookupWord)
+    .filter((item): item is LookupWord => {
+      if (!item) return false;
+      const key = item.query.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 200);
+}
+
+function normalizeFamiliarMeanings(value: unknown): FamiliarMeaningMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, meanings]) => {
+        const wordId = canonicalWordId(Number(key));
+        const normalized = Array.isArray(meanings)
+          ? [...new Set(
+              meanings
+                .filter((item): item is string => typeof item === "string")
+                .map((item) => item.trim())
+                .filter(Boolean),
+            )].slice(0, 50)
+          : [];
+        return [wordId, normalized] as const;
+      })
+      .filter(([wordId, meanings]) =>
+        isValidStudyWordId(wordId)
+        && meanings.length > 0),
+  );
 }
 
 function normalizeStubbornWord(
@@ -204,14 +313,14 @@ function normalizeReview(value: unknown, index: number): Review | null {
     rating > 3 ||
     !reviewedAt ||
     !section ||
-    !REDBOOK_SECTIONS.includes(section as (typeof REDBOOK_SECTIONS)[number])
+    ![...REDBOOK_SECTIONS, "划词集"].includes(section)
   ) {
     return null;
   }
   const wordId = Number(item.wordId);
   const dueAt = validDate(item.dueAt)?.toISOString()
     ?? reviewDueAt(reviewedAt.toISOString(), rating as Rating);
-  const normalizedWordId = Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550
+  const normalizedWordId = isValidStudyWordId(wordId)
     ? canonicalWordId(wordId)
     : undefined;
   const intervalMs = Number(item.intervalMs);
@@ -337,14 +446,14 @@ function normalizeSession(value: unknown): StudySession | undefined {
   if (
     typeof item.id !== "string"
     || typeof item.title !== "string"
-    || !["today", "favorites", "mistakes", "search"].includes(String(item.kind))
+    || !["today", "favorites", "mistakes", "search", "lookups"].includes(String(item.kind))
     || !Array.isArray(item.wordIds)
   ) {
     return undefined;
   }
   const wordIds = item.wordIds
     .map(Number)
-    .filter((wordId) => Number.isInteger(wordId) && wordId >= 1 && wordId <= 6550)
+    .filter(isValidStudyWordId)
     .map(canonicalWordId)
     .filter((wordId, index, items) => items.indexOf(wordId) === index);
   return {
@@ -363,9 +472,7 @@ function normalizeEnrichments(value: unknown) {
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
     const wordId = canonicalWordId(Number(key));
     if (
-      !Number.isInteger(wordId)
-      || wordId < 1
-      || wordId > 6550
+      !isValidStudyWordId(wordId)
       || !raw
       || typeof raw !== "object"
     ) {
@@ -379,6 +486,13 @@ function normalizeEnrichments(value: unknown) {
       translation: typeof item.translation === "string" ? item.translation : undefined,
       collocations: Array.isArray(item.collocations)
         ? item.collocations.filter((entry): entry is string => typeof entry === "string").slice(0, 4)
+        : undefined,
+      targetMeanings: Array.isArray(item.targetMeanings)
+        ? item.targetMeanings
+            .filter((entry): entry is string => typeof entry === "string")
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .slice(0, 30)
         : undefined,
       source: item.source as WordEnrichment["source"],
       generatedAt: validDate(item.generatedAt)?.toISOString(),
@@ -451,7 +565,7 @@ export function parseStoredState(raw: string): StoredState {
             return [canonicalWordId(wordId), normalizeWordProgress(value, wordId)];
           })
           .filter((entry): entry is [number, NormalizedWordProgress] =>
-            Number.isInteger(entry[0]) && entry[1] !== null),
+            isValidStudyWordId(entry[0]) && entry[1] !== null),
       )
     : {};
   const storedProgressIsFsrs = sourceVersion >= STORAGE_VERSION
@@ -479,7 +593,7 @@ export function parseStoredState(raw: string): StoredState {
             return [wordId, normalizeStubbornWord(value, wordId)];
           })
           .filter((entry): entry is [number, StubbornWordRecord] =>
-            Number.isInteger(entry[0]) && entry[1] !== null),
+            isValidStudyWordId(entry[0]) && entry[1] !== null),
       )
     : {};
   const stubbornWords = {
@@ -505,6 +619,8 @@ export function parseStoredState(raw: string): StoredState {
     positions,
     activeSession: normalizeSession(state.activeSession),
     enrichments: normalizeEnrichments(state.enrichments),
+    lookupWords: normalizeLookupWords(state.lookupWords),
+    familiarMeanings: normalizeFamiliarMeanings(state.familiarMeanings),
     started: state.started === true,
     dailyGoal: [10, 20, 30, 50].includes(Number(state.dailyGoal))
       ? Number(state.dailyGoal)
@@ -619,12 +735,51 @@ export function formatDueTime(dueAt: string, now = new Date()) {
 }
 
 export function splitMeaning(value: string) {
-  const match = value.match(
-    /^((?:(?:adj|adv|n|v|vi|vt|prep|conj|pron|num|aux|modal)\.\s*)+)/i,
-  );
-  if (!match) return { part: "红宝书", meaning: value };
+  const partPattern = "(?:vlink|modal|usage|prep|conj|pron|suff|pref|adj|adv|det|int|num|aux|ord|vi|vt|n|v)";
+  const normalized = value.trim();
+  const segments = [
+    ...normalized.matchAll(
+      new RegExp(
+        `((?:${partPattern}\\.\\s*)+)([\\s\\S]*?)(?=${partPattern}\\.|$)`,
+        "gi",
+      ),
+    ),
+  ];
+  if (!segments.length || segments[0].index !== 0) {
+    return {
+      part: "红宝书",
+      meaning: normalized,
+      senses: [{ part: "红宝书", meaning: normalized }],
+    };
+  }
+
+  const grouped = new Map<string, string[]>();
+  const meanings: string[] = [];
+  for (const segment of segments) {
+    const meaning = segment[2].trim().replace(/^[;；]\s*/, "");
+    if (!meaning) continue;
+    meanings.push(meaning);
+    const parts = [
+      ...segment[1].matchAll(new RegExp(`${partPattern}\\.`, "gi")),
+    ].map(([item]) => item.toLowerCase());
+    for (const part of parts) {
+      const items = grouped.get(part) ?? [];
+      items.push(meaning);
+      grouped.set(part, items);
+    }
+  }
+
+  const joinMeanings = (items: string[]) =>
+    items
+      .map((item) => item.replace(/[;；]\s*$/, ""))
+      .join("；");
+  const senses = [...grouped].map(([part, items]) => ({
+    part,
+    meaning: joinMeanings(items),
+  }));
   return {
-    part: match[1].trim(),
-    meaning: value.slice(match[0].length).trim(),
+    part: senses.map((sense) => sense.part).join(" "),
+    meaning: joinMeanings(meanings),
+    senses,
   };
 }
