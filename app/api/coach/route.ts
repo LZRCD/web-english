@@ -33,7 +33,16 @@ function localAnswer(body: CoachRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as CoachRequest;
+  let body: CoachRequest;
+  try {
+    body = (await request.json()) as CoachRequest;
+  } catch {
+    return NextResponse.json({ error: "请求内容不是有效 JSON" }, { status: 400 });
+  }
+  if (!body.word?.word || typeof body.prompt !== "string" || !body.prompt.trim()) {
+    return NextResponse.json({ error: "缺少当前单词或问题" }, { status: 400 });
+  }
+  body.prompt = body.prompt.trim().slice(0, 500);
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
   const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
   const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
@@ -45,6 +54,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,

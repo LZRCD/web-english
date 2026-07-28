@@ -60,12 +60,19 @@ test("本地红宝书词库包含完整的 6550 条词目", async () => {
 });
 
 test("全书乱序与本地状态保存已接入学习流程", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const [page, study, coach] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/study.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/coach/route.ts", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(page, /type StudyScope = "selection" \| "all"/);
+  assert.match(study, /type StudyScope = "selection" \| "all"/);
   assert.match(page, /function startAllBookShuffle/);
   assert.match(page, /setStudyScope\("all"\)/);
   assert.match(page, /已打乱红宝书全部 6550 词/);
-  assert.match(page, /localStorage\.setItem\("wordloop-state"/);
+  assert.match(page, /localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(page, /buildActivityCalendar\(reviews, 140/);
+  assert.match(study, /STORAGE_VERSION = 2/);
+  assert.match(coach, /AbortSignal\.timeout\(15000\)/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);
 });

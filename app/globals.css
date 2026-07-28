@@ -871,6 +871,7 @@ select:focus-visible {
 }
 
 .history-panel,
+.activity-panel,
 .settings-panel,
 .shortcut-panel {
   border: 1px solid var(--line);
@@ -878,6 +879,74 @@ select:focus-visible {
   border-radius: 24px;
   overflow: hidden;
 }
+
+.activity-panel {
+  margin-bottom: 24px;
+}
+
+.activity-panel .panel-title > div {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.activity-panel .panel-title small {
+  color: #9aa098;
+  font-size: 9px;
+}
+
+.activity-scroll {
+  padding: 24px 26px 20px;
+  overflow-x: auto;
+}
+
+.activity-grid {
+  width: max-content;
+  display: grid;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-flow: column;
+  grid-auto-columns: 11px;
+  gap: 4px;
+}
+
+.activity-cell,
+.activity-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: #e8ede9;
+}
+
+.activity-cell {
+  border: 1px solid rgba(21, 24, 32, 0.025);
+}
+
+.activity-cell.today {
+  outline: 1px solid #1f6f50;
+  outline-offset: 2px;
+}
+
+.activity-cell.level-1,
+.activity-legend i.level-1 { background: #cfeedd; }
+.activity-cell.level-2,
+.activity-legend i.level-2 { background: #98dcbc; }
+.activity-cell.level-3,
+.activity-legend i.level-3 { background: #55c996; }
+.activity-cell.level-4,
+.activity-legend i.level-4 { background: #25845f; }
+
+.activity-legend {
+  width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 14px 0 0 auto;
+  color: #959c94;
+  font-size: 9px;
+}
+
+.activity-legend span:first-child { margin-right: 3px; }
+.activity-legend span:last-child { margin-left: 3px; }
 
 .panel-title {
   padding: 22px 26px;
@@ -1199,6 +1268,11 @@ select:focus-visible {
   border-radius: 999px;
   padding: 7px 11px;
   font-size: 10px;
+}
+
+.status-pill.local {
+  color: #8a6b31;
+  background: #f7efd9;
 }
 
 .reset-button {
