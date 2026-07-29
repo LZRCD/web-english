@@ -4,7 +4,6 @@ import {
   FormEvent,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,7 +15,6 @@ import {
 import {
   buildStudyKey,
   dateKey,
-  formatDueTime,
   learningStats,
   MAX_REVIEWS,
   splitMeaning,
@@ -46,7 +44,6 @@ import {
   resolveWeakProgress,
   stubbornWordIds,
   weakWordIds,
-  wordRetrievability,
   type StudySession,
   type StubbornWordMap,
   type WordEnrichment,
@@ -57,21 +54,27 @@ import {
   buildLearningInsights,
   buildReviewForecast,
 } from "../lib/insights";
+import { useAiCoach } from "./hooks/useAiCoach";
+import { useAudio } from "./hooks/useAudio";
+import { useClock } from "./hooks/useClock";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useSearch } from "./hooks/useSearch";
 import { useSelectionLookup } from "./hooks/useSelectionLookup";
 import { useStudyPersistence } from "./hooks/useStudyPersistence";
 import { useStudySession } from "./hooks/useStudySession";
+import { useSyncedRefs } from "./hooks/useSyncedRefs";
 import BooksView from "./components/BooksView";
 import CoachPanel from "./components/CoachPanel";
 import HistoryView from "./components/HistoryView";
+import RatingBar from "./components/RatingBar";
 import SearchPanel from "./components/SearchPanel";
 import SelectionLookupPopup from "./components/SelectionLookupPopup";
 import SessionCompleteView from "./components/SessionCompleteView";
 import SettingsView from "./components/SettingsView";
 import WelcomeScreen from "./components/WelcomeScreen";
+import WordCard from "./components/WordCard";
 import WordbookView from "./components/WordbookView";
 import {
-  buildLocalCoach,
   clozeSentence,
   formatRecallTime,
   maskWord,
@@ -87,14 +90,6 @@ import { buildSessionCompletionSummary } from "../lib/session-summary";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ActivityRange = 140 | 182 | 365;
-type AudioClip = {
-  file: string;
-  start: number;
-  end: number;
-};
-type AudioIndexData = {
-  entries: Record<string, AudioClip>;
-};
 
 type RatingUndo = {
   reviewId: string;
@@ -191,11 +186,6 @@ export default function Home() {
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiInput, setAiInput] = useState("");
-  const [aiAnswer, setAiAnswer] = useState("我会用语境、联想和小测验帮你真正记住这个词。");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiMode, setAiMode] = useState<"unknown" | "cloud" | "local">("unknown");
   const [soundOn, setSoundOn] = useState(true);
   const [dailyGoal, setDailyGoal] = useState(20);
   const [adaptiveNewWords, setAdaptiveNewWords] = useState(true);
@@ -206,23 +196,16 @@ export default function Home() {
   const [reinforcementInput, setReinforcementInput] = useState("");
   const [reinforcementFeedback, setReinforcementFeedback] = useState("");
   const [reinforcementRecallMs, setReinforcementRecallMs] = useState<number | null>(null);
-  const [clock, setClock] = useState(() => Date.now());
   const [toast, setToast] = useState("");
   const [redbookWords, setRedbookWords] = useState<Word[]>([]);
   const [redbookStatus, setRedbookStatus] = useState<RedbookStatus>("loading");
-  const [audioIndex, setAudioIndex] = useState<Record<string, AudioClip>>({});
   const [selectedSection, setSelectedSection] = useState("必考词");
   const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
   const [activityRange, setActivityRange] = useState<ActivityRange>(365);
   const [activityOffset, setActivityOffset] = useState(0);
   const [selectedActivityDate, setSelectedActivityDate] = useState("");
   const [learningItemCount, setLearningItemCount] = useState(REDBOOK_SOURCE_TOTAL);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSearchIds, setSelectedSearchIds] = useState<number[]>([]);
-  const [enrichmentLoading, setEnrichmentLoading] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const recordedAudioRef = useRef<HTMLAudioElement>(null);
   const reinforcementInputRef = useRef<HTMLInputElement>(null);
   const wordCardRef = useRef<HTMLElement>(null);
   const previousSessionCompleteRef = useRef(sessionComplete);
@@ -246,8 +229,13 @@ export default function Home() {
     if (ratingUndoTimerRef.current !== undefined) {
       window.clearTimeout(ratingUndoTimerRef.current);
     }
-    window.speechSynthesis?.cancel();
   }, []);
+
+  const { clock } = useClock();
+  const {
+    searchOpen, searchQuery, selectedSearchIds,
+    setSearchOpen, setSearchQuery, setSelectedSearchIds,
+  } = useSearch();
 
   const lookupStudyWords = useMemo<Word[]>(
     () => lookupWords.map(toLookupStudyWord),
@@ -469,6 +457,28 @@ export default function Home() {
   const reinforcementMeaning = unfamiliarMeanings[0]
     ?? currentMeaningItems[0]
     ?? currentMeaning.meaning;
+
+  const {
+    aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
+    enrichmentLoading,
+    setAiOpen, setAiInput, setAiAnswer, setAiMode,
+    submitCoach, askCoach, enrichCurrentWord,
+  } = useAiCoach({
+    current,
+    enrichments,
+    setEnrichments,
+    unfamiliarMeanings,
+    currentFamiliarMeanings,
+    onNotify: showToast,
+  });
+  const { audioIndex, speak, speakNext, recordedAudioRef } = useAudio({
+    current,
+    studyWords,
+    wordIndex,
+    redbookReady,
+    onNotify: showToast,
+  });
+
   const favoriteWords = useMemo(
     () => favorites
       .map((item) => ({ ...item, word: wordById.get(item.wordId) }))
@@ -592,22 +602,6 @@ export default function Home() {
   });
 
   useEffect(() => {
-    let active = true;
-    fetch("/data/audio-index.json")
-      .then((response) => {
-        if (!response.ok) throw new Error("audio index missing");
-        return response.json() as Promise<AudioIndexData>;
-      })
-      .then((audio) => {
-        if (active) setAudioIndex(audio.entries);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!hydrated) return;
     let active = true;
     Promise.all([
@@ -678,47 +672,6 @@ export default function Home() {
     };
   }, [hydrated, showToast]);
 
-  // 搜索弹窗焦点陷阱 + 滚动锁定 + 焦点恢复
-  useEffect(() => {
-    if (!searchOpen) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    // 锁定 body 滚动
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    // 焦点陷阱
-    const panel = document.querySelector(".search-panel") as HTMLElement | null;
-    if (!panel) {
-      document.body.style.overflow = originalOverflow;
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    panel.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      panel.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = originalOverflow;
-      // 恢复焦点
-      previousFocus?.focus?.();
-    };
-  }, [searchOpen]);
-
   useEffect(() => {
     if (!pendingWordId || !studyWords.length) return;
     const nextIndex = studyWords.findIndex((word) => word.id === pendingWordId);
@@ -729,11 +682,6 @@ export default function Home() {
       setPendingWordId(null);
     });
   }, [pendingWordId, studyKey, studyWords]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 60000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     appendTodayDue(dueWordIds(wordProgress, new Date(clock)));
@@ -784,46 +732,34 @@ export default function Home() {
     });
   }, [revealed]);
 
-  // 键盘快捷键使用的 refs（避免每次渲染重注册监听器）
-  const startedRef = useRef(started);
-  const activeViewRef = useRef(activeView);
-  const redbookReadyRef = useRef(redbookReady);
-  const revealedRef = useRef(revealed);
-  const currentRef = useRef(current);
-  const enrichmentLoadingRef = useRef(enrichmentLoading);
-  const ratingUndoRef = useRef(ratingUndo);
-  const aiOpenRef = useRef(aiOpen);
-  const searchOpenRef = useRef(searchOpen);
-  const selectionLookupRef = useRef(selectionLookup);
-  const sessionCompleteRef = useRef(sessionComplete);
-  const dataOperationRef = useRef(operationInProgress);
-  useLayoutEffect(() => {
-    startedRef.current = started;
-    activeViewRef.current = activeView;
-    redbookReadyRef.current = redbookReady;
-    revealedRef.current = revealed;
-    currentRef.current = current;
-    enrichmentLoadingRef.current = enrichmentLoading;
-    ratingUndoRef.current = ratingUndo;
-    aiOpenRef.current = aiOpen;
-    searchOpenRef.current = searchOpen;
-    selectionLookupRef.current = selectionLookup;
-    sessionCompleteRef.current = sessionComplete;
-    dataOperationRef.current = operationInProgress;
-  }, [
+  // 键盘快捷键使用的 refs（通过 useSyncedRefs 自动同步）
+  const {
+    started: startedRef,
+    activeView: activeViewRef,
+    redbookReady: redbookReadyRef,
+    revealed: revealedRef,
+    current: currentRef,
+    enrichmentLoading: enrichmentLoadingRef,
+    ratingUndo: ratingUndoRef,
+    aiOpen: aiOpenRef,
+    searchOpen: searchOpenRef,
+    selectionLookup: selectionLookupRef,
+    sessionComplete: sessionCompleteRef,
+    operationInProgress: dataOperationRef,
+  } = useSyncedRefs({
+    started,
     activeView,
-    aiOpen,
-    current,
-    enrichmentLoading,
-    operationInProgress,
-    ratingUndo,
     redbookReady,
     revealed,
+    current,
+    enrichmentLoading,
+    ratingUndo,
+    aiOpen,
     searchOpen,
     selectionLookup,
     sessionComplete,
-    started,
-  ]);
+    operationInProgress,
+  });
 
   useKeyboardShortcuts({
     paused: () =>
@@ -934,63 +870,11 @@ export default function Home() {
     setSelectedUnit(state.selectedUnit);
     setRatingUndo(undefined);
     setUndoVisible(false);
-    setClock(new Date().getTime());
   }
 
   function beginLearning() {
     setStarted(true);
     setRecallStartedAt(new Date().getTime());
-  }
-
-  function speakWithTts(word: Word) {
-    if (!("speechSynthesis" in window)) {
-      showToast("当前浏览器不支持语音播放", 2400);
-      return false;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(word.word);
-    utterance.lang = "en-US";
-    utterance.rate = 0.82;
-    window.speechSynthesis.speak(utterance);
-    return true;
-  }
-
-  function playRecordedWord(word: Word) {
-    const clip = word.id === undefined ? undefined : audioIndex[String(word.id)];
-    if (!clip) return false;
-    window.speechSynthesis?.cancel();
-    const audio = recordedAudioRef.current ?? new Audio();
-    recordedAudioRef.current = audio;
-    audio.pause();
-    audio.preload = "auto";
-    audio.src = `${clip.file}#t=${clip.start},${clip.end}`;
-    audio.currentTime = clip.start;
-    audio.ontimeupdate = () => {
-      if (audio.currentTime >= clip.end) {
-        audio.pause();
-        audio.currentTime = clip.start;
-      }
-    };
-    let fallbackUsed = false;
-    const fallback = () => {
-      if (fallbackUsed) return;
-      fallbackUsed = true;
-      audio.pause();
-      speakWithTts(word);
-    };
-    audio.onerror = fallback;
-    audio.play().catch(fallback);
-    return true;
-  }
-
-  useEffect(() => () => {
-    recordedAudioRef.current?.pause();
-    window.speechSynthesis?.cancel();
-  }, []);
-
-  function speak() {
-    if (!redbookReady) return;
-    if (!playRecordedWord(current)) speakWithTts(current);
   }
 
   function rateWord(rating: number, skipReinforcement = false) {
@@ -1082,7 +966,6 @@ export default function Home() {
         [studyKey]: (wordIndex + 1) % Math.max(1, studyWords.length),
       }));
     }
-    setClock(new Date().getTime());
     setRecallStartedAt(new Date().getTime());
     setAiAnswer("我会用语境、联想和小测验帮你真正记住这个词。");
     setAiMode("unknown");
@@ -1148,7 +1031,6 @@ export default function Home() {
     setRatingUndo(undefined);
     setUndoVisible(false);
     showToast(`已撤销 ${ratingUndo.word.word} 的最近评分`, 1800);
-    setClock(new Date().getTime());
   }
 
   function changeStudyMode(mode: StudyMode) {
@@ -1363,11 +1245,6 @@ export default function Home() {
     setActiveView("learn");
   }
 
-  function speakNext() {
-    const nextWord = studyWords[(wordIndex + 1) % Math.max(1, studyWords.length)] ?? REDBOOK_PLACEHOLDER;
-    if (!playRecordedWord(nextWord)) speakWithTts(nextWord);
-  }
-
   function submitReinforcement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (reinforcementRating === null) return;
@@ -1384,69 +1261,6 @@ export default function Home() {
   function skipReinforcement() {
     if (reinforcementRating === null) return;
     rateWord(reinforcementRating, true);
-  }
-
-  async function askCoach(prompt: string) {
-    const question = prompt.trim();
-    if (!question || aiLoading) return;
-    setAiLoading(true);
-    setAiInput("");
-    try {
-      const response = await fetch("/api/coach", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: current, prompt: question.slice(0, 500) }),
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok) throw new Error("request failed");
-      const data = await response.json() as { answer: string; mode?: "cloud" | "local" };
-      setAiAnswer(data.answer);
-      setAiMode(data.mode === "cloud" ? "cloud" : "local");
-    } catch {
-      setAiAnswer(buildLocalCoach(current, question));
-      setAiMode("local");
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  async function enrichCurrentWord() {
-    if (current.id === undefined || enrichmentLoading) return;
-    if (!unfamiliarMeanings.length) {
-      showToast("所有中文义项都已标记熟练，请先取消一个义项", 2400);
-      return;
-    }
-    setEnrichmentLoading(true);
-    try {
-      const response = await fetch("/api/enrich", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          word: current.word,
-          meaning: unfamiliarMeanings.join("；"),
-          familiarMeanings: [...currentFamiliarMeanings],
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-      const data = await response.json() as WordEnrichment & { error?: string };
-      if (!response.ok || data.source !== "ai") {
-        throw new Error(data.error ?? "内容补充失败");
-      }
-      setEnrichments((items) => ({ ...items, [current.id!]: data }));
-      showToast(`已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`, 2400);
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "内容补充失败",
-        2400,
-      );
-    } finally {
-      setEnrichmentLoading(false);
-    }
-  }
-
-  function submitCoach(event: FormEvent) {
-    event.preventDefault();
-    askCoach(aiInput);
   }
 
   const navigation = [
@@ -1616,204 +1430,41 @@ export default function Home() {
               <>
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
-              <article
-                ref={wordCardRef}
-                className={`${revealed ? "word-card revealed" : "word-card"}${reinforcementRating === null ? "" : " reinforcing"}${redbookReady ? "" : " loading"}`}
-                aria-busy={redbookStatus === "loading"}
-                tabIndex={-1}
-                onMouseUp={handleTextSelection}
-              >
-                <div className="word-heading">
-                  <p className="word-count">
-                    {redbookReady
-                      ? activeSession
-                        ? `${String(Math.min(activeSession.index + 1, activeSession.wordIds.length)).padStart(2, "0")} / ${activeSession.wordIds.length}`
-                        : `${String(stats.newCount).padStart(2, "0")} 新词`
-                      : "— / —"}
-                  </p>
-                  <div className="word-actions">
-                    <button
-                      className={isFavorite ? "favorite-button saved" : "favorite-button"}
-                      onClick={() => toggleFavorite()}
-                      disabled={!redbookReady}
-                      aria-label={isFavorite ? `将 ${current.word} 移出词本` : `将 ${current.word} 加入词本`}
-                      aria-pressed={isFavorite}
-                      title={isFavorite ? "移出词本" : "加入词本"}
-                    >
-                      {isFavorite ? "◆" : "◇"}
-                    </button>
-                    <button
-                      className="sound-button"
-                      onClick={speak}
-                      disabled={!redbookReady}
-                      aria-label={`播放 ${current.word} 的发音`}
-                      title={current.id !== undefined && audioIndex[String(current.id)]
-                        ? "2027 红宝书原声"
-                        : "浏览器 TTS 回退"}
-                    >
-                      ◖))
-                    </button>
-                  </div>
-                </div>
-                <button className="word-face" onClick={() => redbookReady && setRevealed(true)} disabled={!redbookReady} aria-label="显示单词释义">
-                  <h1>{reinforcementRating === null ? current.word : maskWord(current.word)}</h1>
-                  <p>
-                    {redbookReady
-                      ? reinforcementRating === null
-                        ? (current.phonetic || "\u00A0")
-                        : `${current.word.replace(/\s/g, "").length} LETTERS`
-                      : "LOCAL VOCABULARY"}
-                  </p>
-                  {!redbookReady
-                    ? <span>{redbookStatus === "loading" ? "正在读取 6550 个考研词汇…" : "未能读取本地红宝书词库"}</span>
-                    : !revealed && <span>先在脑中回忆，再点击查看</span>}
-                </button>
-
-                {revealed && redbookReady && reinforcementRating === null && (
-                  <div className="meaning-panel">
-                    <div className="meaning-main">
-                      {currentSenses.map((sense) => (
-                        <div className="meaning-row" key={sense.part}>
-                          <span>{sense.part}</span>
-                          <div className="meaning-sense-list">
-                            {splitSenseItems(sense.meaning).map((meaning) => {
-                              const familiar = currentFamiliarMeanings.has(meaning);
-                              return (
-                                <button
-                                  type="button"
-                                  className={familiar ? "meaning-sense familiar" : "meaning-sense"}
-                                  key={meaning}
-                                  onClick={() => toggleMeaningFamiliar(meaning)}
-                                  aria-pressed={familiar}
-                                  title={familiar ? "取消熟练标记" : "标记为熟练义项"}
-                                >
-                                  {meaning}
-                                  {familiar && <small>✓ 熟练</small>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {current.relation && (
-                      <div className={`word-relation relation-${current.relation.kind}`}>
-                        <span>词族轨道</span>
-                        <div>
-                          <strong>{current.relation.label}</strong>
-                          <small>{current.relation.note}</small>
-                        </div>
-                      </div>
-                    )}
-                    {current.sentence ? (
-                      <div className="context-block">
-                        <p className="context-sentence">{current.sentence}</p>
-                        <p className="context-translation">{current.translation}</p>
-                        {currentEnrichment && (
-                          <div className="content-meta">
-                            <small className="content-source">
-                              {currentEnrichment.source === "ai" ? "AI 生成 · 已缓存 · 未人工核验" : "词典内容"}
-                              {currentEnrichment.targetMeanings?.length
-                                ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
-                                : ""}
-                            </small>
-                            {currentEnrichment.source === "ai" && (
-                              <button
-                                type="button"
-                                onClick={enrichCurrentWord}
-                                disabled={enrichmentLoading || !unfamiliarMeanings.length}
-                              >
-                                {enrichmentLoading ? "重写中…" : "按未熟练义项重写"}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        className="context-block context-ai"
-                        onClick={enrichCurrentWord}
-                        disabled={enrichmentLoading || !unfamiliarMeanings.length}
-                        aria-keyshortcuts="E"
-                      >
-                        <span>内容补充 <kbd>E</kbd></span>
-                        <p>
-                          {!unfamiliarMeanings.length
-                            ? "全部中文义项已标记熟练"
-                            : enrichmentLoading
-                            ? "正在按未熟练义项生成并校验格式…"
-                            : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
-                        </p>
-                      </button>
-                    )}
-                    {current.collocation && (
-                      <div className="collocation-block">
-                        <span>常用搭配</span>
-                        <p>{current.collocation}</p>
-                      </div>
-                    )}
-                    <div className="word-details">
-                      <div><span>所在分组</span><strong>{current.section ?? selectedSection} · Unit {current.unit ?? selectedUnit}</strong></div>
-                      <div><span>词汇序号</span><strong>NO. {current.id ?? wordIndex + 1}</strong></div>
-                      <div>
-                        <span>下次复习</span>
-                        <strong>
-                          {currentProgress
-                            ? formatDueTime(currentProgress.nextDueAt, new Date(clock))
-                            : "首次学习"}
-                        </strong>
-                      </div>
-                      {currentProgress && (
-                        <div>
-                          <span>FSRS 可提取率</span>
-                          <strong>{wordRetrievability(currentProgress, new Date(clock))}%</strong>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {revealed && redbookReady && reinforcementRating !== null && (
-                  <form className="reinforcement-panel" onSubmit={submitReinforcement}>
-                    <div className="reinforcement-heading">
-                      <span>{reinforcementRating === 0 ? "忘记后再认" : "模糊后加固"}</span>
-                      <strong>趁答案还在短时记忆里，再主动提取一次</strong>
-                    </div>
-                    <div className="reinforcement-cue">
-                      <small>{reinforcementSentence ? "语境填空" : "核心含义"}</small>
-                      <p>{reinforcementSentence || reinforcementMeaning}</p>
-                      {reinforcementRating === 0 && (current.relation || current.root) && (
-                        <em>{current.relation?.label ?? `词根提示：${current.root}`}</em>
-                      )}
-                    </div>
-                    <label className="reinforcement-input">
-                      <span>输入完整单词</span>
-                      <input
-                        ref={reinforcementInputRef}
-                        value={reinforcementInput}
-                        onChange={(event) => {
-                          setReinforcementInput(event.target.value);
-                          setReinforcementFeedback("");
-                        }}
-                        autoComplete="off"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        aria-describedby="reinforcement-feedback"
-                      />
-                    </label>
-                    <div className="reinforcement-actions">
-                      <button type="submit" disabled={!reinforcementInput.trim()}>完成强化</button>
-                      <button type="button" className="quiet" onClick={skipReinforcement}>暂时跳过</button>
-                    </div>
-                    <p
-                      id="reinforcement-feedback"
-                      className={reinforcementFeedback ? "reinforcement-feedback error" : "reinforcement-feedback"}
-                      aria-live="polite"
-                    >
-                      {reinforcementFeedback || "只增加这一道短题，完成后自动进入下一词"}
-                    </p>
-                  </form>
-                )}
-              </article>
+              <WordCard
+                wordCardRef={wordCardRef}
+                reinforcementInputRef={reinforcementInputRef}
+                revealed={revealed}
+                reinforcementRating={reinforcementRating}
+                redbookReady={redbookReady}
+                redbookStatus={redbookStatus}
+                current={current}
+                currentSenses={currentSenses}
+                currentFamiliarMeanings={currentFamiliarMeanings}
+                currentEnrichment={currentEnrichment}
+                currentProgress={currentProgress}
+                isFavorite={isFavorite}
+                audioIndex={audioIndex}
+                activeSession={activeSession}
+                newCount={stats.newCount}
+                currentLocation={currentLocation}
+                clock={clock}
+                reinforcementInput={reinforcementInput}
+                reinforcementFeedback={reinforcementFeedback}
+                reinforcementSentence={reinforcementSentence}
+                reinforcementMeaning={reinforcementMeaning}
+                enrichmentLoading={enrichmentLoading}
+                unfamiliarMeanings={unfamiliarMeanings}
+                onReveal={() => setRevealed(true)}
+                onToggleFavorite={() => toggleFavorite()}
+                onSpeak={speak}
+                onToggleMeaningFamiliar={toggleMeaningFamiliar}
+                onEnrichWord={enrichCurrentWord}
+                onTextSelection={handleTextSelection}
+                onSetReinforcementInput={setReinforcementInput}
+                onClearReinforcementFeedback={() => setReinforcementFeedback("")}
+                onSubmitReinforcement={submitReinforcement}
+                onSkipReinforcement={skipReinforcement}
+              />
               <div className="orbit-label orbit-label-bottom">
                 {!redbookReady
                   ? "LOCAL · REDBOOK"
@@ -1825,15 +1476,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className={revealed && redbookReady && reinforcementRating === null ? "rating-bar visible" : "rating-bar"}>
-              {ratingLabels.map((label, index) => (
-                <button key={label} onClick={() => rateWord(index)}>
-                  <span>{index + 1}</span>
-                  <strong>{label}</strong>
-                  <small>{ratingIntervalLabels[index]}</small>
-                </button>
-              ))}
-            </div>
+            <RatingBar
+              visible={revealed && redbookReady && reinforcementRating === null}
+              ratingLabels={ratingLabels}
+              ratingIntervalLabels={ratingIntervalLabels}
+              onRate={(rating) => rateWord(rating)}
+            />
               </>
             )}
           </div>
