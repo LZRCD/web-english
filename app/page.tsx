@@ -231,7 +231,7 @@ export default function Home() {
     }
   }, []);
 
-  const { clock } = useClock();
+  const { clock, refreshClock } = useClock();
   const {
     searchOpen, searchQuery, selectedSearchIds,
     setSearchOpen, setSearchQuery, setSelectedSearchIds,
@@ -870,6 +870,7 @@ export default function Home() {
     setSelectedUnit(state.selectedUnit);
     setRatingUndo(undefined);
     setUndoVisible(false);
+    refreshClock();
   }
 
   function beginLearning() {
@@ -969,6 +970,7 @@ export default function Home() {
     setRecallStartedAt(new Date().getTime());
     setAiAnswer("我会用语境、联想和小测验帮你真正记住这个词。");
     setAiMode("unknown");
+    refreshClock();
     if (soundOn && (!activeSession || wordIndex + 1 < studyWords.length)) {
       setTimeout(speakNext, 80);
     }
@@ -1030,6 +1032,7 @@ export default function Home() {
     setRecallStartedAt(new Date().getTime());
     setRatingUndo(undefined);
     setUndoVisible(false);
+    refreshClock();
     showToast(`已撤销 ${ratingUndo.word.word} 的最近评分`, 1800);
   }
 

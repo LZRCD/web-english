@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /** 每分钟更新一次的时间戳，供需要时间感知的组件使用 */
-export function useClock(): { clock: number } {
+export function useClock(): { clock: number; refreshClock: () => void } {
   const [clock, setClock] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -9,5 +9,7 @@ export function useClock(): { clock: number } {
     return () => clearInterval(timer);
   }, []);
 
-  return { clock };
+  const refreshClock = useCallback(() => setClock(Date.now()), []);
+
+  return { clock, refreshClock };
 }
