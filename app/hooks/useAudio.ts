@@ -100,11 +100,11 @@ export function useAudio({
     if (!playRecordedWord(current)) speakWithTts(current);
   }
 
-  /** 预读下一个单词，在评分后调用 */
+  /** 预读下一个单词，在评分后调用。此时 wordIndex 已被 rateWord 推进到新词，直接读即可 */
   function speakNext() {
     const words = swRef.current;
     const idx = wiRef.current;
-    const nextWord = words[(idx + 1) % Math.max(1, words.length)];
+    const nextWord = words[idx % Math.max(1, words.length)];
     if (nextWord && !playRecordedWord(nextWord)) speakWithTts(nextWord);
   }
 
