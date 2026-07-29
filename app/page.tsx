@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  ChangeEvent,
   FormEvent,
-  MouseEvent as ReactMouseEvent,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,16 +14,12 @@ import {
   REDBOOK_SOURCE_TOTAL,
 } from "../lib/redbook";
 import {
-  buildActivityCalendar,
   buildStudyKey,
   dateKey,
   formatDueTime,
   learningStats,
-  lookupWordId,
   MAX_REVIEWS,
-  parseStoredState,
   splitMeaning,
-  STORAGE_KEY,
   STORAGE_VERSION,
   type FamiliarMeaningMap,
   type LookupWord,
@@ -41,7 +37,6 @@ import {
   applyRating,
   buildExamPlan,
   buildTodayQueue,
-  createStudySession,
   dueWordIds,
   formatInterval,
   isWeakProgress,
@@ -49,7 +44,6 @@ import {
   rebuildStubbornWords,
   rebuildWordProgress,
   resolveWeakProgress,
-  sessionProgress,
   stubbornWordIds,
   weakWordIds,
   wordRetrievability,
@@ -60,36 +54,36 @@ import {
   type WordProgressMap,
 } from "../lib/learning";
 import {
-  createBackupDocument,
-  getAutomaticBackup,
-  listAutomaticBackups,
-  parseBackupDocument,
-  saveAutomaticBackup,
-  type AutomaticBackup,
-} from "../lib/backup";
-import {
-  loadStoredState,
-  onRemoteChange,
-  saveStoredState,
-  saveStoredStateImmediate,
-} from "../lib/storage";
-import {
   buildLearningInsights,
   buildReviewForecast,
 } from "../lib/insights";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useSelectionLookup } from "./hooks/useSelectionLookup";
+import { useStudyPersistence } from "./hooks/useStudyPersistence";
+import { useStudySession } from "./hooks/useStudySession";
+import BooksView from "./components/BooksView";
+import CoachPanel from "./components/CoachPanel";
+import HistoryView from "./components/HistoryView";
+import SearchPanel from "./components/SearchPanel";
+import SelectionLookupPopup from "./components/SelectionLookupPopup";
+import SessionCompleteView from "./components/SessionCompleteView";
+import SettingsView from "./components/SettingsView";
+import WelcomeScreen from "./components/WelcomeScreen";
+import WordbookView from "./components/WordbookView";
 import {
   buildLocalCoach,
-  cleanSelectedText,
   clozeSentence,
-  formatDictionaryPhonetic,
   formatRecallTime,
   maskWord,
-  seededScore,
   shuffleWithSeed,
   splitSenseItems,
-  wordKey,
 } from "../lib/word-utils";
+import {
+  learningWordId,
+  lookupIdentity,
+  toLookupStudyWord,
+} from "../lib/selection-lookup";
+import { buildSessionCompletionSummary } from "../lib/session-summary";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ActivityRange = 140 | 182 | 365;
@@ -139,21 +133,6 @@ type RedbookAnalysisData = {
   }>;
 };
 
-type LookupResult = Omit<LookupWord, "id" | "addedAt">;
-type DictionaryEntry = [displayWord: string, phonetic: string, translation: string];
-type DictionaryShard = Record<string, DictionaryEntry>;
-
-type SelectionLookup = {
-  query: string;
-  context: string;
-  x: number;
-  y: number;
-  status: "idle" | "loading" | "ready" | "error";
-  result?: LookupResult;
-  cached?: boolean;
-  error?: string;
-};
-
 type ReinforcementRating = 0 | 1;
 
 const SECTION_META = [
@@ -178,19 +157,6 @@ const REDBOOK_PLACEHOLDER: Word = {
   meaning: "正在载入本地词库",
   section: "2027 考研英语",
 };
-const LOOKUP_CACHE_KEY = "wordloop-selection-lookups-v1";
-const DICTIONARY_BASE_PATH = "/data/dictionary";
-
-function readLookupCache() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(LOOKUP_CACHE_KEY) ?? "{}") as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return parsed as Record<string, LookupResult>;
-  } catch {
-    return {};
-  }
-}
-
 export default function Home() {
   const [started, setStarted] = useState(false);
   const [activeView, setActiveView] = useState<"learn" | "books" | "wordbook" | "history" | "settings">("learn");
@@ -198,7 +164,19 @@ export default function Home() {
   const [positions, setPositions] = useState<StudyPositions>({});
   const [reviews, setReviews] = useState<Review[]>([]);
   const [wordProgress, setWordProgress] = useState<WordProgressMap>({});
-  const [activeSession, setActiveSession] = useState<StudySession>();
+  const {
+    activeSession,
+    setActiveSession,
+    sessionComplete,
+    sessionStats: activeSessionStats,
+    hydrate: hydrateSession,
+    startSession: createActiveSession,
+    advanceSession,
+    restoreSession,
+    clearSession,
+    appendTodayDue,
+    clearStaleToday,
+  } = useStudySession();
   const [enrichments, setEnrichments] = useState<Record<number, WordEnrichment>>({});
   const [dictionaryPhonetics, setDictionaryPhonetics] = useState<Record<number, string>>({});
   const [ratingUndo, setRatingUndo] = useState<RatingUndo>();
@@ -213,7 +191,6 @@ export default function Home() {
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
-  const [hydrated, setHydrated] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiAnswer, setAiAnswer] = useState("我会用语境、联想和小测验帮你真正记住这个词。");
@@ -243,38 +220,53 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSearchIds, setSelectedSearchIds] = useState<number[]>([]);
-  const [automaticBackups, setAutomaticBackups] = useState<AutomaticBackup[]>([]);
   const [enrichmentLoading, setEnrichmentLoading] = useState(false);
-  const [selectionLookup, setSelectionLookup] = useState<SelectionLookup>();
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [lastSaveTime, setLastSaveTime] = useState(0);
   const importInputRef = useRef<HTMLInputElement>(null);
   const recordedAudioRef = useRef<HTMLAudioElement>(null);
-  const lookupAbortRef = useRef<AbortController | null>(null);
-  const lookupCacheRef = useRef<Record<string, LookupResult>>({});
-  const dictionaryShardCacheRef = useRef<Record<string, DictionaryShard>>({});
   const reinforcementInputRef = useRef<HTMLInputElement>(null);
+  const wordCardRef = useRef<HTMLElement>(null);
+  const previousSessionCompleteRef = useRef(sessionComplete);
+  const toastTimerRef = useRef<number | undefined>(undefined);
+  const ratingUndoTimerRef = useRef<number | undefined>(undefined);
+  const showToast = useCallback((message: string, duration = 3000) => {
+    setToast(message);
+    if (toastTimerRef.current !== undefined) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast("");
+      toastTimerRef.current = undefined;
+    }, duration);
+  }, []);
 
-  const lookupStudyWords = useMemo<Word[]>(() => lookupWords.map((item) => ({
-    id: item.id,
-    word: item.query,
-    phonetic: item.phonetic,
-    part: item.part,
-    meaning: `${item.part.replace(/\.+$/, "")}. ${item.meaning}`,
-    sentence: item.note,
-    section: "划词集",
-    unit: "自选",
-  })), [lookupWords]);
+  useEffect(() => () => {
+    if (toastTimerRef.current !== undefined) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    if (ratingUndoTimerRef.current !== undefined) {
+      window.clearTimeout(ratingUndoTimerRef.current);
+    }
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  const lookupStudyWords = useMemo<Word[]>(
+    () => lookupWords.map(toLookupStudyWord),
+    [lookupWords],
+  );
   const wordById = useMemo(() => new Map(
-    [...redbookWords, ...lookupStudyWords].map((word) => [word.id, word]),
+    // 红宝书词目放在后面；linkedWordId 命中时保留原书完整数据。
+    [...lookupStudyWords, ...redbookWords].map((word) => [word.id, word]),
   ), [lookupStudyWords, redbookWords]);
   const wordByText = useMemo(() => {
-    const entries = new Map<string, Word>();
+    const exact = new Map<string, Word>();
+    const folded = new Map<string, Word[]>();
     for (const word of redbookWords) {
-      const key = word.word.trim().toLowerCase();
-      if (!entries.has(key)) entries.set(key, word);
+      const text = word.word.trim();
+      if (!exact.has(text)) exact.set(text, word);
+      const key = text.toLowerCase();
+      folded.set(key, [...(folded.get(key) ?? []), word]);
     }
-    return entries;
+    return { exact, folded };
   }, [redbookWords]);
   const filteredStudyWords = useMemo(() => {
     if (redbookStatus !== "ready") return [];
@@ -304,11 +296,6 @@ export default function Home() {
   const studyWords = activeSession ? sessionWords : freeStudyWords;
   const studyKey = activeSession ? `session:${activeSession.id}` : freeStudyKey;
   const wordIndex = activeSession?.index ?? positions[freeStudyKey] ?? 0;
-  const sessionComplete = Boolean(
-    activeSession
-    && activeSession.wordIds.length > 0
-    && activeSession.index >= activeSession.wordIds.length,
-  );
   const currentBase = activeSession
     ? studyWords[Math.min(wordIndex, Math.max(0, studyWords.length - 1))]
     : studyWords[wordIndex % Math.max(1, studyWords.length)];
@@ -318,17 +305,34 @@ export default function Home() {
   const currentDictionaryPhonetic = currentBase?.id === undefined
     ? ""
     : dictionaryPhonetics[currentBase.id] ?? "";
-  const current = currentBase
-    ? {
-        ...currentBase,
-        phonetic: currentBase.phonetic
-          || currentDictionaryPhonetic
-          || undefined,
-        sentence: currentEnrichment?.sentence ?? currentBase.sentence,
-        translation: currentEnrichment?.translation ?? currentBase.translation,
-        collocation: currentEnrichment?.collocations?.join(" · ") ?? currentBase.collocation,
-      }
-    : REDBOOK_PLACEHOLDER;
+  const current = useMemo<Word>(
+    () => currentBase
+      ? {
+          ...currentBase,
+          phonetic: currentBase.phonetic
+            || currentDictionaryPhonetic
+            || undefined,
+          sentence: currentEnrichment?.sentence ?? currentBase.sentence,
+          translation: currentEnrichment?.translation ?? currentBase.translation,
+          collocation: currentEnrichment?.collocations?.join(" · ") ?? currentBase.collocation,
+        }
+      : REDBOOK_PLACEHOLDER,
+    [currentBase, currentDictionaryPhonetic, currentEnrichment],
+  );
+  const {
+    selectionLookup,
+    handleTextSelection,
+    translateSelection,
+    closeSelectionLookup,
+  } = useSelectionLookup({
+    current,
+    currentBase,
+    currentDictionaryPhonetic,
+    wordByText,
+    lookupWords,
+    setLookupWords,
+    setDictionaryPhonetics,
+  });
   const redbookReady = redbookStatus === "ready";
   const isFavorite = current.id !== undefined
     && favorites.some((item) => item.wordId === current.id);
@@ -336,6 +340,7 @@ export default function Home() {
     () => learningStats(reviews, wordProgress, new Date(clock)),
     [clock, reviews, wordProgress],
   );
+  const todayKey = dateKey(new Date(clock));
   const insights = useMemo(
     () => buildLearningInsights(reviews, new Date(clock), 7),
     [clock, reviews],
@@ -344,14 +349,24 @@ export default function Home() {
     () => buildReviewForecast(wordProgress, new Date(clock), 7),
     [clock, wordProgress],
   );
-  // 展示用自动顽固词计算（不进入写盘链路，每次 load 时从 reviews 重建即可）
+  const sessionCompletionSummary = useMemo(
+    () => activeSession && sessionComplete
+      ? buildSessionCompletionSummary({
+          session: activeSession,
+          reviews,
+          wordProgress,
+          now: new Date(clock),
+        })
+      : undefined,
+    [activeSession, clock, reviews, sessionComplete, wordProgress],
+  );
+  // 展示用自动顽固词计算不进入写盘链路；按自然日更新即可。
   const stubbornWords = useMemo(
     () => ({
       ...stubbornHistory,
-      ...rebuildStubbornWords(reviews, new Date()),
+      ...rebuildStubbornWords(reviews, new Date(`${todayKey}T12:00:00`)),
     }),
-    // 不依赖 clock：自动顽固词消解在评分时触发，无需每分钟重算
-    [reviews, stubbornHistory],
+    [reviews, stubbornHistory, todayKey],
   );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
@@ -359,43 +374,6 @@ export default function Home() {
     dueCount: stats.dueCount,
     enabled: adaptiveNewWords,
   });
-  const activityEndTime = useMemo(() => {
-    const end = new Date(clock);
-    end.setDate(end.getDate() - activityOffset);
-    return end.getTime();
-  }, [activityOffset, clock]);
-  const activityDays = useMemo(
-    () => buildActivityCalendar(reviews, activityRange, new Date(activityEndTime)),
-    [activityEndTime, activityRange, reviews],
-  );
-  const activityDateRange = activityDays.length
-    ? `${activityDays[0].date.replaceAll("-", ".")} — ${activityDays.at(-1)?.date.replaceAll("-", ".")}`
-    : "";
-  const selectedDayEvents = useMemo(
-    () => selectedActivityDate
-      ? reviews.filter((review) => dateKey(review.reviewedAt) === selectedActivityDate)
-      : [],
-    [reviews, selectedActivityDate],
-  );
-  const selectedDayReviews = useMemo(() => {
-    if (!selectedActivityDate) return [];
-    const latestByWord = new Map<string, Review>();
-    for (const review of reviews) {
-      if (dateKey(review.reviewedAt) !== selectedActivityDate) continue;
-      const key = review.wordId !== undefined
-        ? `id:${review.wordId}`
-        : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`;
-      const previous = latestByWord.get(key);
-      if (!previous || previous.reviewedAt < review.reviewedAt) {
-        latestByWord.set(key, review);
-      }
-    }
-    return [...latestByWord.values()].sort((first, second) =>
-      second.reviewedAt.localeCompare(first.reviewedAt));
-  }, [reviews, selectedActivityDate]);
-  const selectedWeakCount = selectedDayReviews.filter((review) => review.rating <= 1).length;
-  const selectedDayNewCount = selectedDayEvents.filter((review) => review.kind === "new").length;
-  const todayKey = dateKey(new Date(clock));
   const progress = Math.min(
     100,
     Math.round((stats.newCount / Math.max(1, effectiveNewGoal)) * 100),
@@ -403,7 +381,6 @@ export default function Home() {
   const currentProgress = current.id === undefined ? undefined : wordProgress[current.id];
   const ratingIntervalLabels = ([0, 1, 2, 3] as const).map((rating) =>
     formatInterval(nextInterval(currentProgress, rating, new Date(clock))));
-  const activeSessionStats = sessionProgress(activeSession);
   const primaryWordIds = useMemo(
     () => redbookWords
       .filter((word) => word.id !== undefined && isPrimaryLearningWord(word.id))
@@ -461,7 +438,6 @@ export default function Home() {
     }),
     [clock, dailyGoal, examDate, remainingBySection],
   );
-  const recentReviews = useMemo(() => [...reviews].reverse().slice(0, 8), [reviews]);
   const availableUnits = useMemo(() => {
     const values = redbookWords
       .filter((word) => word.section === selectedSection)
@@ -592,33 +568,48 @@ export default function Home() {
     wordProgress,
   ]);
 
+  const {
+    hydrated,
+    loadStatus,
+    operationInProgress,
+    saveStatus,
+    lastSaveTime,
+    automaticBackups,
+    recoveryCopies,
+    retrySave,
+    exportBackup,
+    exportRecoveryCopy,
+    importBackup,
+    restoreBackup,
+    restoreRecoveryCopy,
+    discardRecoveryCopy,
+    resetLearningRecords,
+  } = useStudyPersistence({
+    state: persistedState,
+    todayKey,
+    onApplyState: applyStoredState,
+    onNotify: showToast,
+  });
+
   useEffect(() => {
     let active = true;
-    const hydration = (async () => {
-      let state: StoredState | null = null;
-      const legacy = localStorage.getItem(STORAGE_KEY);
-      if ("indexedDB" in window) {
-        try {
-          state = await loadStoredState();
-        } catch {}
-      }
-      if (!state && legacy) {
-        try {
-          state = parseStoredState(legacy);
-          if ("indexedDB" in window) {
-            try {
-              await saveStoredState(state);
-              localStorage.removeItem(STORAGE_KEY);
-            } catch {}
-          }
-        } catch {
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      }
-      if (!active) return;
-      if (state) applyStoredState(state);
-      setHydrated(true);
-    })();
+    fetch("/data/audio-index.json")
+      .then((response) => {
+        if (!response.ok) throw new Error("audio index missing");
+        return response.json() as Promise<AudioIndexData>;
+      })
+      .then((audio) => {
+        if (active) setAudioIndex(audio.entries);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let active = true;
     Promise.all([
       fetch("/data/redbook.json").then((response) => {
         if (!response.ok) throw new Error("redbook data missing");
@@ -628,15 +619,8 @@ export default function Home() {
         if (!response.ok) throw new Error("redbook analysis missing");
         return response.json() as Promise<RedbookAnalysisData>;
       }),
-      fetch("/data/audio-index.json")
-        .then((response) => {
-          if (!response.ok) throw new Error("audio index missing");
-          return response.json() as Promise<AudioIndexData>;
-        })
-        .catch(() => ({ entries: {} })),
     ])
-      .then(async ([data, analysis, audio]) => {
-        await hydration;
+      .then(([data, analysis]) => {
         if (!active) return;
         if (!data.words.length) throw new Error("redbook data empty");
         if (analysis.metadata.auditedEntries !== REDBOOK_SOURCE_TOTAL) {
@@ -650,21 +634,30 @@ export default function Home() {
             relation: audit?.relation,
           };
         });
-        const idLookup = new Map(
+        const exactIdLookup = new Map(
           auditedWords.map((word) => [
-            `${word.section ?? ""}:${word.unit ?? ""}:${word.word.toLowerCase()}`,
+            `${word.section ?? ""}:${word.unit ?? ""}:${word.word}`,
             word.id,
           ]),
         );
+        const foldedIdLookup = new Map<string, number | undefined>();
+        for (const word of auditedWords) {
+          const key = `${word.section ?? ""}:${word.unit ?? ""}:${word.word.toLowerCase()}`;
+          if (!foldedIdLookup.has(key)) foldedIdLookup.set(key, word.id);
+        }
         setRedbookWords(auditedWords);
-        setAudioIndex(audio.entries);
         setLearningItemCount(analysis.metadata.learningItemCount);
         setReviews((items) => {
+          if (!items.some((review) => review.wordId === undefined)) {
+            return items;
+          }
           const mappedReviews = items.map((review) => review.wordId
             ? review
             : {
                 ...review,
-                wordId: idLookup.get(
+                wordId: exactIdLookup.get(
+                  `${review.section ?? ""}:${review.unit ?? ""}:${review.word}`,
+                ) ?? foldedIdLookup.get(
                   `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`,
                 ),
               });
@@ -678,53 +671,13 @@ export default function Home() {
       })
       .catch(() => {
         setRedbookStatus("error");
-        setToast("红宝书词库读取失败，请检查本地资源");
+        showToast("红宝书词库读取失败，请检查本地资源");
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [hydrated, showToast]);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    const timer = window.setTimeout(() => {
-      if (!("indexedDB" in window)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-        setSaveStatus("saved");
-        setLastSaveTime(Date.now());
-        return;
-      }
-      setSaveStatus("saving");
-      saveStoredState(persistedState)
-        .then(() => {
-          setSaveStatus("saved");
-          setLastSaveTime(Date.now());
-          localStorage.removeItem(STORAGE_KEY);
-        })
-        .catch(() => {
-          setSaveStatus("error");
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-          setToast("本地存储写入失败，已降级到浏览器缓存，建议导出备份");
-          setTimeout(() => setToast(""), 4000);
-        });
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [hydrated, persistedState]);
-
-  useEffect(() => {
-    if (!hydrated || !("indexedDB" in window)) return;
-    let active = true;
-    listAutomaticBackups()
-      .then((items) => {
-        if (active) setAutomaticBackups(items);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [hydrated]);
-
-  // 跨标签页数据同步：收到远程变更通知时重新加载数据
   // 搜索弹窗焦点陷阱 + 滚动锁定 + 焦点恢复
   useEffect(() => {
     if (!searchOpen) return;
@@ -735,7 +688,10 @@ export default function Home() {
 
     // 焦点陷阱
     const panel = document.querySelector(".search-panel") as HTMLElement | null;
-    if (!panel) return;
+    if (!panel) {
+      document.body.style.overflow = originalOverflow;
+      return;
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -764,32 +720,6 @@ export default function Home() {
   }, [searchOpen]);
 
   useEffect(() => {
-    if (!hydrated || !("indexedDB" in window)) return;
-    return onRemoteChange(() => {
-      loadStoredState().then((remoteState) => {
-        if (remoteState) {
-          applyStoredState(remoteState);
-          setToast("数据已在其他标签页更新，已同步最新状态");
-          setTimeout(() => setToast(""), 3000);
-        }
-      }).catch(() => {});
-    });
-  }, [hydrated]);
-
-  useEffect(() => {
-    if (!hydrated || !("indexedDB" in window)) return;
-    const backupKey = "wordloop-last-auto-backup";
-    if (localStorage.getItem(backupKey) !== todayKey) {
-      localStorage.setItem(backupKey, todayKey);
-      saveAutomaticBackup(persistedState, "daily")
-        .then((items) => {
-          setAutomaticBackups(items);
-        })
-        .catch(() => localStorage.removeItem(backupKey));
-    }
-  }, [hydrated, persistedState, todayKey]);
-
-  useEffect(() => {
     if (!pendingWordId || !studyWords.length) return;
     const nextIndex = studyWords.findIndex((word) => word.id === pendingWordId);
     queueMicrotask(() => {
@@ -806,81 +736,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    lookupCacheRef.current = readLookupCache();
-  }, []);
+    appendTodayDue(dueWordIds(wordProgress, new Date(clock)));
+  }, [appendTodayDue, clock, wordProgress]);
 
   useEffect(() => {
-    if (
-      currentBase?.id === undefined
-      || !currentBase.word
-      || currentBase.phonetic
-      || currentDictionaryPhonetic
-    ) return;
-    let active = true;
-    findInLocalDictionary(currentBase.word)
-      .then((result) => {
-        if (active && result?.phonetic) {
-          setDictionaryPhonetics((items) => ({
-            ...items,
-            [currentBase.id!]: result.phonetic,
-          }));
-        }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [
-    currentBase?.id,
-    currentBase?.phonetic,
-    currentBase?.word,
-    currentDictionaryPhonetic,
-  ]);
-
-  useEffect(() => {
-    if (!selectionLookup) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest(".selection-lookup")) return;
-      lookupAbortRef.current?.abort();
-      setSelectionLookup(undefined);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
-  }, [selectionLookup]);
-
-  useEffect(() => () => {
-    recordedAudioRef.current?.pause();
-    window.speechSynthesis?.cancel();
-    lookupAbortRef.current?.abort();
-  }, []);
-
-  useEffect(() => {
-    lookupAbortRef.current?.abort();
-    queueMicrotask(() => setSelectionLookup(undefined));
-  }, [current.id]);
-
-  useEffect(() => {
-    if (activeSession?.kind !== "today") return;
-    const dueNow = dueWordIds(wordProgress, new Date(clock));
-    const queued = new Set(activeSession.wordIds);
-    const additions = dueNow.filter((wordId) => !queued.has(wordId));
-    if (!additions.length) return;
-    queueMicrotask(() => setActiveSession((session) =>
-      session?.kind === "today"
-        ? { ...session, wordIds: [...session.wordIds, ...additions] }
-        : session));
-  }, [activeSession, clock, wordProgress]);
-
-  useEffect(() => {
-    if (
-      hydrated
-      && activeSession?.kind === "today"
-      && dateKey(activeSession.createdAt) !== todayKey
-    ) {
-      queueMicrotask(() => setActiveSession(undefined));
-    }
-  }, [activeSession, hydrated, todayKey]);
+    if (hydrated) clearStaleToday(todayKey);
+  }, [clearStaleToday, hydrated, todayKey]);
 
   useEffect(() => {
     if (!redbookReady || selectedUnit === "all" || availableUnits.includes(String(selectedUnit))) return;
@@ -896,6 +757,22 @@ export default function Home() {
     if (reinforcementRating === null) return;
     reinforcementInputRef.current?.focus();
   }, [reinforcementRating]);
+
+  useEffect(() => {
+    const wasComplete = previousSessionCompleteRef.current;
+    previousSessionCompleteRef.current = sessionComplete;
+    if (
+      !wasComplete
+      || sessionComplete
+      || activeView !== "learn"
+      || searchOpen
+    ) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      wordCardRef.current?.focus({ preventScroll: true });
+    });
+  }, [activeView, searchOpen, sessionComplete]);
 
   useEffect(() => {
     if (revealed) return;
@@ -918,45 +795,74 @@ export default function Home() {
   const aiOpenRef = useRef(aiOpen);
   const searchOpenRef = useRef(searchOpen);
   const selectionLookupRef = useRef(selectionLookup);
-  startedRef.current = started;
-  activeViewRef.current = activeView;
-  redbookReadyRef.current = redbookReady;
-  revealedRef.current = revealed;
-  currentRef.current = current;
-  enrichmentLoadingRef.current = enrichmentLoading;
-  ratingUndoRef.current = ratingUndo;
-  aiOpenRef.current = aiOpen;
-  searchOpenRef.current = searchOpen;
-  selectionLookupRef.current = selectionLookup;
+  const sessionCompleteRef = useRef(sessionComplete);
+  const dataOperationRef = useRef(operationInProgress);
+  useLayoutEffect(() => {
+    startedRef.current = started;
+    activeViewRef.current = activeView;
+    redbookReadyRef.current = redbookReady;
+    revealedRef.current = revealed;
+    currentRef.current = current;
+    enrichmentLoadingRef.current = enrichmentLoading;
+    ratingUndoRef.current = ratingUndo;
+    aiOpenRef.current = aiOpen;
+    searchOpenRef.current = searchOpen;
+    selectionLookupRef.current = selectionLookup;
+    sessionCompleteRef.current = sessionComplete;
+    dataOperationRef.current = operationInProgress;
+  }, [
+    activeView,
+    aiOpen,
+    current,
+    enrichmentLoading,
+    operationInProgress,
+    ratingUndo,
+    redbookReady,
+    revealed,
+    searchOpen,
+    selectionLookup,
+    sessionComplete,
+    started,
+  ]);
 
   useKeyboardShortcuts({
-    paused: () => aiOpenRef.current || searchOpenRef.current || selectionLookupRef.current !== undefined,
+    paused: () =>
+      dataOperationRef.current
+      || aiOpenRef.current
+      || searchOpenRef.current
+      || selectionLookupRef.current !== undefined,
     shortcuts: [
       {
         key: "Escape",
         action: () => {
           setSearchOpen(false);
           setAiOpen(false);
-          setSelectionLookup(undefined);
-          lookupAbortRef.current?.abort();
+          closeSelectionLookup();
         },
       },
       {
         key: "Space",
         action: () => {
           if (!startedRef.current) beginLearning();
-          else if (activeViewRef.current === "learn" && redbookReadyRef.current) setRevealed(true);
+          else if (
+            activeViewRef.current === "learn"
+            && redbookReadyRef.current
+            && !sessionCompleteRef.current
+          ) {
+            setRevealed(true);
+          }
         },
       },
       {
         key: "a",
-        when: () => startedRef.current,
+        when: () => startedRef.current && !sessionCompleteRef.current,
         action: () => setAiOpen((value) => !value),
       },
       {
         key: "e",
         when: () =>
           startedRef.current
+          && !sessionCompleteRef.current
           && activeViewRef.current === "learn"
           && revealedRef.current
           && redbookReadyRef.current
@@ -966,7 +872,10 @@ export default function Home() {
       },
       {
         key: "f",
-        when: () => startedRef.current && activeViewRef.current === "learn",
+        when: () =>
+          startedRef.current
+          && !sessionCompleteRef.current
+          && activeViewRef.current === "learn",
         action: () => toggleFavorite(),
       },
       {
@@ -976,27 +885,26 @@ export default function Home() {
       },
       {
         key: "/",
-        allowInFormFields: true, // 搜索快捷键在输入框内也应工作
         action: () => setSearchOpen(true),
       },
       {
         key: "1",
-        when: () => revealedRef.current,
+        when: () => revealedRef.current && !sessionCompleteRef.current,
         action: () => rateWord(0),
       },
       {
         key: "2",
-        when: () => revealedRef.current,
+        when: () => revealedRef.current && !sessionCompleteRef.current,
         action: () => rateWord(1),
       },
       {
         key: "3",
-        when: () => revealedRef.current,
+        when: () => revealedRef.current && !sessionCompleteRef.current,
         action: () => rateWord(2),
       },
       {
         key: "4",
-        when: () => revealedRef.current,
+        when: () => revealedRef.current && !sessionCompleteRef.current,
         action: () => rateWord(3),
       },
     ],
@@ -1006,7 +914,7 @@ export default function Home() {
     setReviews(state.reviews);
     setWordProgress(state.wordProgress);
     setPositions(state.positions);
-    setActiveSession(state.activeSession);
+    hydrateSession(state);
     setEnrichments(state.enrichments);
     setLookupWords(state.lookupWords);
     setFamiliarMeanings(state.familiarMeanings);
@@ -1026,112 +934,17 @@ export default function Home() {
     setSelectedUnit(state.selectedUnit);
     setRatingUndo(undefined);
     setUndoVisible(false);
-    setClock(Date.now());
+    setClock(new Date().getTime());
   }
 
   function beginLearning() {
     setStarted(true);
-    setRecallStartedAt(Date.now());
-  }
-
-  function exportBackup() {
-    const document = createBackupDocument(persistedState);
-    const blob = new Blob([`${JSON.stringify(document, null, 2)}\n`], {
-      type: "application/json;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = window.document.createElement("a");
-    link.href = url;
-    link.download = `wordloop-backup-${todayKey}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setToast("词环备份已导出");
-    setTimeout(() => setToast(""), 1800);
-  }
-
-  async function importBackup(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      const document = parseBackupDocument(await file.text());
-      const state = parseStoredState(JSON.stringify(document.state));
-      const confirmed = window.confirm(
-        `备份时间：${new Date(document.exportedAt).toLocaleString("zh-CN")}\n`
-        + `评分记录：${state.reviews.length} 条\n`
-        + `已学习：${Object.keys(state.wordProgress).length} 词\n`
-        + `收藏：${state.favorites.length} 词\n\n`
-        + "导入会完整替换当前学习状态，是否继续？",
-      );
-      if (!confirmed) return;
-      if ("indexedDB" in window) {
-        const items = await saveAutomaticBackup(persistedState, "before-import");
-        setAutomaticBackups(items);
-      }
-      applyStoredState(state);
-      if ("indexedDB" in window) {
-        try {
-          await saveStoredStateImmediate(state);
-          setToast(`已导入 ${state.reviews.length} 条评分记录，数据已保存`);
-        } catch {
-          setToast("导入成功但本地存储写入失败，请勿关闭页面，数据将在稍后自动重试");
-        }
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        setToast(`已导入 ${state.reviews.length} 条评分记录`);
-      }
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "备份导入失败");
-    }
-    setTimeout(() => setToast(""), 4000);
-  }
-
-  async function restoreBackup(id: string) {
-    try {
-      const backup = await getAutomaticBackup(id);
-      if (!backup) throw new Error("找不到这份自动备份");
-      if (!window.confirm(`恢复 ${new Date(backup.createdAt).toLocaleString("zh-CN")} 的自动备份？`)) {
-        return;
-      }
-      const items = await saveAutomaticBackup(persistedState, "manual");
-      setAutomaticBackups(items);
-      const restoredState = parseStoredState(JSON.stringify(backup.document.state));
-      applyStoredState(restoredState);
-      // 立即落盘，不等待 150ms 防抖
-      if ("indexedDB" in window) {
-        await saveStoredStateImmediate(restoredState);
-      }
-      setToast("已恢复自动备份，恢复前状态也已保存");
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "自动备份恢复失败");
-    }
-    setTimeout(() => setToast(""), 2400);
-  }
-
-  async function resetLearningRecords() {
-    if (!window.confirm("确定清空评分、记忆状态、错词和学习位置吗？收藏与内容缓存会保留。")) {
-      return;
-    }
-    try {
-      if ("indexedDB" in window) {
-        const items = await saveAutomaticBackup(persistedState, "manual");
-        setAutomaticBackups(items);
-      }
-    } catch {}
-    setReviews([]);
-    setWordProgress({});
-    setMistakes([]);
-    setStubbornHistory({});
-    setPositions({});
-    setActiveSession(undefined);
-    setRatingUndo(undefined);
-    setToast("学习记录已清空，收藏和内容缓存已保留");
-    setTimeout(() => setToast(""), 1800);
+    setRecallStartedAt(new Date().getTime());
   }
 
   function speakWithTts(word: Word) {
     if (!("speechSynthesis" in window)) {
-      setToast("当前浏览器不支持语音播放");
+      showToast("当前浏览器不支持语音播放", 2400);
       return false;
     }
     window.speechSynthesis.cancel();
@@ -1170,6 +983,11 @@ export default function Home() {
     return true;
   }
 
+  useEffect(() => () => {
+    recordedAudioRef.current?.pause();
+    window.speechSynthesis?.cancel();
+  }, []);
+
   function speak() {
     if (!redbookReady) return;
     if (!playRecordedWord(current)) speakWithTts(current);
@@ -1185,7 +1003,7 @@ export default function Home() {
     ) return;
     const measuredRecallMs = recallStartedAt === null
       ? undefined
-      : Math.max(0, Date.now() - recallStartedAt);
+      : Math.max(0, new Date().getTime() - recallStartedAt);
     if (rating <= 1 && !skipReinforcement && reinforcementRating === null) {
       setReinforcementRating(rating as ReinforcementRating);
       setReinforcementInput("");
@@ -1205,6 +1023,7 @@ export default function Home() {
       word: current.word,
       rating: typedRating,
       reviewedAt: now,
+      sessionId: activeSession?.id,
       recallMs,
       section: current.section,
       unit: current.unit,
@@ -1245,6 +1064,10 @@ export default function Home() {
     const recallMessage = recallMs === undefined
       ? ""
       : ` · 用时 ${formatRecallTime(recallMs)}${recallMs >= 15000 ? "，回忆偏慢" : ""}`;
+    if (toastTimerRef.current !== undefined) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = undefined;
+    }
     setToast(`${ratingLabels[typedRating]} · ${formatInterval(result.review.intervalMs)}后复习${recallMessage} · Z 撤销`);
     setReinforcementRating(null);
     setReinforcementInput("");
@@ -1252,30 +1075,39 @@ export default function Home() {
     setReinforcementRecallMs(null);
     setRevealed(false);
     if (activeSession) {
-      setActiveSession((session) => session
-        ? { ...session, index: Math.min(session.wordIds.length, session.index + 1) }
-        : session);
+      advanceSession();
     } else {
       setPositions((items) => ({
         ...items,
         [studyKey]: (wordIndex + 1) % Math.max(1, studyWords.length),
       }));
     }
-    setClock(Date.now());
-    setRecallStartedAt(Date.now());
+    setClock(new Date().getTime());
+    setRecallStartedAt(new Date().getTime());
     setAiAnswer("我会用语境、联想和小测验帮你真正记住这个词。");
     setAiMode("unknown");
     if (soundOn && (!activeSession || wordIndex + 1 < studyWords.length)) {
       setTimeout(speakNext, 80);
     }
-    setTimeout(() => {
-      setToast("");
+    const ratedReviewId = result.review.id;
+    if (ratingUndoTimerRef.current !== undefined) {
+      window.clearTimeout(ratingUndoTimerRef.current);
+    }
+    ratingUndoTimerRef.current = window.setTimeout(() => {
+      setToast((message) => message.endsWith("· Z 撤销") ? "" : message);
       setUndoVisible(false);
+      setRatingUndo((undo) =>
+        undo?.reviewId === ratedReviewId ? undefined : undo);
+      ratingUndoTimerRef.current = undefined;
     }, 5000);
   }
 
   function undoLastRating() {
     if (!ratingUndo) return;
+    if (ratingUndoTimerRef.current !== undefined) {
+      window.clearTimeout(ratingUndoTimerRef.current);
+      ratingUndoTimerRef.current = undefined;
+    }
     window.speechSynthesis?.cancel();
     setReviews((items) => {
       const rest = items.filter((review) => review.id !== ratingUndo.reviewId);
@@ -1302,9 +1134,9 @@ export default function Home() {
     setStudyScope(ratingUndo.studyScope);
     setShuffleSeed(ratingUndo.shuffleSeed);
     if (ratingUndo.previousSession) {
-      setActiveSession(ratingUndo.previousSession);
+      restoreSession(ratingUndo.previousSession);
     } else {
-      setActiveSession(undefined);
+      clearSession();
       setPositions((items) => ({
         ...items,
         [ratingUndo.studyKey]: ratingUndo.previousPosition,
@@ -1312,16 +1144,15 @@ export default function Home() {
     }
     setActiveView("learn");
     setRevealed(true);
-    setRecallStartedAt(Date.now());
+    setRecallStartedAt(new Date().getTime());
     setRatingUndo(undefined);
     setUndoVisible(false);
-    setToast(`已撤销 ${ratingUndo.word.word} 的最近评分`);
-    setClock(Date.now());
-    setTimeout(() => setToast(""), 1800);
+    showToast(`已撤销 ${ratingUndo.word.word} 的最近评分`, 1800);
+    setClock(new Date().getTime());
   }
 
   function changeStudyMode(mode: StudyMode) {
-    setActiveSession(undefined);
+    clearSession();
     setStudyScope("selection");
     setStudyMode(mode);
     if (mode === "shuffled") {
@@ -1329,39 +1160,52 @@ export default function Home() {
       setPositions((items) => Object.fromEntries(
         Object.entries(items).filter(([key]) => !key.startsWith(prefix)),
       ));
-      setShuffleSeed(Date.now());
+      setShuffleSeed(new Date().getTime());
     }
     setRevealed(false);
-    setToast(mode === "shuffled" ? "已打乱当前单元" : "已恢复红宝书顺序");
-    setTimeout(() => setToast(""), 1600);
+    showToast(
+      mode === "shuffled" ? "已打乱当前单元" : "已恢复红宝书顺序",
+      1600,
+    );
   }
 
   function startAllBookShuffle(openLearning = true) {
-    setActiveSession(undefined);
+    clearSession();
     setPositions((items) => Object.fromEntries(
       Object.entries(items).filter(([key]) => !key.startsWith("all:shuffled:")),
     ));
     setStudyScope("all");
     setStudyMode("shuffled");
-    setShuffleSeed(Date.now());
+    setShuffleSeed(new Date().getTime());
     setRevealed(false);
     if (openLearning) setActiveView("learn");
-    setToast(`已打乱 ${learningItemCount} 个学习项，保留 ${REDBOOK_SOURCE_TOTAL} 条原书来源`);
-    setTimeout(() => setToast(""), 1800);
+    showToast(
+      `已打乱 ${learningItemCount} 个学习项，保留 ${REDBOOK_SOURCE_TOTAL} 条原书来源`,
+      1800,
+    );
   }
 
-  function startSession(kind: StudySession["kind"], title: string, wordIds: number[]) {
+  function startSession(
+    kind: StudySession["kind"],
+    title: string,
+    wordIds: number[],
+    originKind?: StudySession["originKind"],
+  ) {
     if (!wordIds.length) {
-      setToast("当前没有可加入学习队列的单词");
-      setTimeout(() => setToast(""), 1800);
+      showToast("当前没有可加入学习队列的单词", 1800);
       return;
     }
-    setActiveSession(createStudySession(kind, title, wordIds));
+    createActiveSession(kind, title, wordIds, originKind);
+    if (ratingUndoTimerRef.current !== undefined) {
+      window.clearTimeout(ratingUndoTimerRef.current);
+      ratingUndoTimerRef.current = undefined;
+    }
+    setRatingUndo(undefined);
+    setUndoVisible(false);
     beginLearning();
     setRevealed(false);
     setActiveView("learn");
-    setToast(`已建立${title} · ${wordIds.length} 词`);
-    setTimeout(() => setToast(""), 1800);
+    showToast(`已建立${title} · ${wordIds.length} 词`, 1800);
   }
 
   function startTodaySession() {
@@ -1391,13 +1235,13 @@ export default function Home() {
 
   function startStubbornSession() {
     startSession(
-      "mistakes",
+      "stubborn",
       "顽固词专项",
       stubbornWordIds(stubbornWords, wordProgress),
     );
   }
 
-  function startLookupSession(wordIds = lookupWords.map((item) => item.id)) {
+  function startLookupSession(wordIds = lookupWords.map(learningWordId)) {
     startSession("lookups", "划词集复习", wordIds);
   }
 
@@ -1410,6 +1254,66 @@ export default function Home() {
     setSelectedSearchIds([]);
   }
 
+  function getSessionPrimaryAction() {
+    if (!activeSession) return undefined;
+    const sourceKind = activeSession.kind === "reinforcement"
+      ? activeSession.originKind
+      : activeSession.kind;
+    if (sourceKind === "today") {
+      // 该函数仅会在按钮点击后执行，规则无法跨辅助函数识别事件边界。
+      // eslint-disable-next-line react-hooks/refs
+      return { label: "刷新今日任务", onClick: () => startTodaySession() };
+    }
+    if (sourceKind === "search") {
+      return {
+        label: "继续搜索",
+        onClick: () => {
+          clearSession();
+          if (ratingUndoTimerRef.current !== undefined) {
+            window.clearTimeout(ratingUndoTimerRef.current);
+            ratingUndoTimerRef.current = undefined;
+          }
+          setRatingUndo(undefined);
+          setUndoVisible(false);
+          setSearchOpen(true);
+        },
+      };
+    }
+    if (!sourceKind) return undefined;
+    const tab = sourceKind === "favorites"
+      ? "favorites"
+      : sourceKind === "lookups"
+        ? "lookups"
+        : sourceKind === "stubborn"
+          ? "stubborn"
+          : "mistakes";
+    return {
+      label: activeSession.kind === "reinforcement" ? "返回原词本" : "返回词本",
+      onClick: () => {
+        clearSession();
+        if (ratingUndoTimerRef.current !== undefined) {
+          window.clearTimeout(ratingUndoTimerRef.current);
+          ratingUndoTimerRef.current = undefined;
+        }
+        setRatingUndo(undefined);
+        setUndoVisible(false);
+        setWordbookTab(tab);
+        setActiveView("wordbook");
+      },
+    };
+  }
+
+  function returnToFreeStudy() {
+    setActiveSession(undefined);
+    if (ratingUndoTimerRef.current !== undefined) {
+      window.clearTimeout(ratingUndoTimerRef.current);
+      ratingUndoTimerRef.current = undefined;
+    }
+    setRatingUndo(undefined);
+    setUndoVisible(false);
+    setRevealed(false);
+  }
+
   function markMistakeResolved(wordId: number) {
     const progressItem = wordProgress[wordId];
     if (progressItem) {
@@ -1419,8 +1323,7 @@ export default function Home() {
       }));
     }
     setMistakes((items) => items.filter((record) => record.wordId !== wordId));
-    setToast("已移出当前薄弱词，历史评分仍会保留");
-    setTimeout(() => setToast(""), 1800);
+    showToast("已移出当前薄弱词，历史评分仍会保留", 1800);
   }
 
   function toggleFavorite(word: Word = current) {
@@ -1429,8 +1332,7 @@ export default function Home() {
     setFavorites((items) => exists
       ? items.filter((item) => item.wordId !== word.id)
       : [{ wordId: word.id!, addedAt: new Date().toISOString() }, ...items]);
-    setToast(exists ? "已移出我的词本" : "已加入我的词本");
-    setTimeout(() => setToast(""), 1600);
+    showToast(exists ? "已移出我的词本" : "已加入我的词本", 1600);
   }
 
   function toggleMeaningFamiliar(meaning: string) {
@@ -1464,236 +1366,6 @@ export default function Home() {
   function speakNext() {
     const nextWord = studyWords[(wordIndex + 1) % Math.max(1, studyWords.length)] ?? REDBOOK_PLACEHOLDER;
     if (!playRecordedWord(nextWord)) speakWithTts(nextWord);
-  }
-
-  async function handleTextSelection(event: ReactMouseEvent<HTMLElement>) {
-    const target = event.target as HTMLElement;
-    if (target.closest("button, input, textarea, select, a")) return;
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
-    if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
-
-    const query = cleanSelectedText(selection.toString());
-    if (!query || !/[A-Za-z]/.test(query)) return;
-    const rangeBox = range.getBoundingClientRect();
-    if (!rangeBox.width && !rangeBox.height) return;
-    const popupWidth = Math.min(360, window.innerWidth - 24);
-    const x = Math.min(
-      window.innerWidth - popupWidth / 2 - 12,
-      Math.max(popupWidth / 2 + 12, rangeBox.left + rangeBox.width / 2),
-    );
-    const popupHeight = 220;
-    const y = rangeBox.bottom + 12 + popupHeight <= window.innerHeight
-      ? rangeBox.bottom + 12
-      : Math.max(12, rangeBox.top - popupHeight - 12);
-    const commonNode = range.commonAncestorContainer;
-    const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
-      ? commonNode as Element
-      : commonNode.parentElement;
-    const contextElement = commonElement?.closest(
-      ".meaning-row, .context-block, .collocation-block, .word-face",
-    );
-    const context = (contextElement?.textContent ?? current.sentence ?? current.meaning)
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 500);
-
-    lookupAbortRef.current?.abort();
-    setSelectionLookup({ query, context, x, y, status: "idle" });
-  }
-
-  function saveLookupWord(result: LookupResult) {
-    setLookupWords((items) => {
-      const existing = items.find(
-        (item) => item.query.toLowerCase() === result.query.toLowerCase(),
-      );
-      return [
-        {
-          ...result,
-          id: existing?.id ?? lookupWordId(result.query),
-          addedAt: existing?.addedAt ?? new Date().toISOString(),
-        },
-        ...items.filter((item) => item.query.toLowerCase() !== result.query.toLowerCase()),
-      ].slice(0, 200);
-    });
-  }
-
-  async function findInLocalDictionary(query: string): Promise<LookupResult | null> {
-    if (!/^[A-Za-z][A-Za-z '-]*$/.test(query)) return null;
-    const shardName = query[0].toLowerCase();
-    let shard = dictionaryShardCacheRef.current[shardName];
-    if (!shard) {
-      const response = await fetch(`${DICTIONARY_BASE_PATH}/${shardName}.json`);
-      if (!response.ok) return null;
-      shard = await response.json() as DictionaryShard;
-      dictionaryShardCacheRef.current[shardName] = shard;
-    }
-    const entry = shard[query.toLowerCase()];
-    if (!entry) return null;
-    return {
-      query: entry[0],
-      kind: entry[0].includes(" ") ? "phrase" : "word",
-      phonetic: formatDictionaryPhonetic(entry[1]),
-      phoneticSource: "dictionary",
-      part: "本地词典",
-      meaning: entry[2].replace(/\\n/g, "；").replace(/\s*;\s*/g, "；"),
-      note: "ECDICT 离线释义",
-      source: "dictionary",
-    };
-  }
-
-  async function translateSelection(options: { forceAi?: boolean } = {}) {
-    if (!selectionLookup || selectionLookup.status === "loading") return;
-    const { query, context, x, y } = selectionLookup;
-    const normalizedQuery = query.toLowerCase();
-    const localWord = wordByText.get(normalizedQuery);
-    if (localWord && !options.forceAi) {
-      const parsed = splitMeaning(localWord.meaning);
-      const dictionaryResult = localWord.phonetic
-        ? null
-        : await findInLocalDictionary(query).catch(() => null);
-      const phonetic = localWord.phonetic || dictionaryResult?.phonetic || "";
-      if (localWord.id !== undefined && phonetic) {
-        setDictionaryPhonetics((items) => ({ ...items, [localWord.id!]: phonetic }));
-      }
-      const result: LookupResult = {
-        query: localWord.word,
-        kind: localWord.word.includes(" ") ? "phrase" : "word",
-        phonetic,
-        phoneticSource: localWord.phonetic ? "redbook" : phonetic ? "dictionary" : undefined,
-        part: localWord.part ?? parsed.part,
-        meaning: parsed.meaning,
-        note: `${localWord.section ?? "红宝书"}${localWord.unit ? ` · Unit ${localWord.unit}` : ""}`,
-        source: "redbook",
-      };
-      saveLookupWord(result);
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result,
-      });
-      return;
-    }
-
-    const savedLookup = lookupWords.find(
-      (item) => item.query.toLowerCase() === normalizedQuery,
-    );
-    if (savedLookup && !options.forceAi) {
-      const dictionaryResult = savedLookup.source === "ai"
-        ? await findInLocalDictionary(query).catch(() => null)
-        : null;
-      const result: LookupResult = {
-        query: savedLookup.query,
-        kind: savedLookup.kind,
-        phonetic: savedLookup.source === "ai"
-          ? dictionaryResult?.phonetic ?? ""
-          : savedLookup.phonetic,
-        phoneticSource: savedLookup.source === "ai"
-          ? dictionaryResult?.phoneticSource
-          : savedLookup.phoneticSource,
-        part: savedLookup.part,
-        meaning: savedLookup.meaning,
-        note: savedLookup.note,
-        source: savedLookup.source,
-      };
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result,
-        cached: true,
-      });
-      return;
-    }
-
-    const cacheKey = JSON.stringify([normalizedQuery, context.toLowerCase()]);
-    const cached = lookupCacheRef.current[cacheKey];
-    if (cached && (!options.forceAi || cached.source === "ai")) {
-      const trustedCached = cached.source === "ai"
-        ? {
-            ...cached,
-            phonetic: selectionLookup.result?.phonetic || (
-              cached.phoneticSource ? cached.phonetic : ""
-            ),
-            phoneticSource: selectionLookup.result?.phoneticSource
-              ?? cached.phoneticSource,
-          }
-        : cached;
-      saveLookupWord(trustedCached);
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result: trustedCached,
-        cached: true,
-      });
-      return;
-    }
-
-    const controller = new AbortController();
-    lookupAbortRef.current = controller;
-    setSelectionLookup({ query, context, x, y, status: "loading" });
-    try {
-      if (!options.forceAi) {
-        const dictionaryResult = await findInLocalDictionary(query);
-        if (dictionaryResult) {
-          saveLookupWord(dictionaryResult);
-          setSelectionLookup({
-            query,
-            context,
-            x,
-            y,
-            status: "ready",
-            result: dictionaryResult,
-          });
-          return;
-        }
-      }
-      const response = await fetch("/api/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: query, context }),
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(30000),
-        ]),
-      });
-      const data = await response.json() as LookupResult & { error?: string };
-      if (!response.ok || data.source !== "ai") {
-        throw new Error(data.error ?? "划词查询失败");
-      }
-      const trustedResult: LookupResult = {
-        ...data,
-        phonetic: selectionLookup.result?.phonetic || "",
-        phoneticSource: selectionLookup.result?.phoneticSource,
-      };
-      const entries = Object.entries({
-        ...lookupCacheRef.current,
-        [cacheKey]: trustedResult,
-      }).slice(-120);
-      lookupCacheRef.current = Object.fromEntries(entries);
-      localStorage.setItem(LOOKUP_CACHE_KEY, JSON.stringify(lookupCacheRef.current));
-      saveLookupWord(trustedResult);
-      setSelectionLookup({ query, context, x, y, status: "ready", result: trustedResult });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "error",
-        error: error instanceof Error ? error.message : "划词查询失败",
-      });
-    }
   }
 
   function submitReinforcement(event: FormEvent<HTMLFormElement>) {
@@ -1741,8 +1413,7 @@ export default function Home() {
   async function enrichCurrentWord() {
     if (current.id === undefined || enrichmentLoading) return;
     if (!unfamiliarMeanings.length) {
-      setToast("所有中文义项都已标记熟练，请先取消一个义项");
-      setTimeout(() => setToast(""), 2400);
+      showToast("所有中文义项都已标记熟练，请先取消一个义项", 2400);
       return;
     }
     setEnrichmentLoading(true);
@@ -1762,12 +1433,14 @@ export default function Home() {
         throw new Error(data.error ?? "内容补充失败");
       }
       setEnrichments((items) => ({ ...items, [current.id!]: data }));
-      setToast(`已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`);
+      showToast(`已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`, 2400);
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "内容补充失败");
+      showToast(
+        error instanceof Error ? error.message : "内容补充失败",
+        2400,
+      );
     } finally {
       setEnrichmentLoading(false);
-      setTimeout(() => setToast(""), 2400);
     }
   }
 
@@ -1785,17 +1458,23 @@ export default function Home() {
   ] as const;
 
   return (
-    <main className="app-shell">
-      {!started && (
-        <button className="welcome" onClick={beginLearning} aria-label="开始学习">
-          <span className="welcome-mark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
+    <main
+      className="app-shell"
+      aria-busy={operationInProgress || loadStatus === "loading"}
+    >
+      {!started && <WelcomeScreen onBegin={beginLearning} />}
+      {(operationInProgress || loadStatus === "loading") && (
+        <div
+          className="data-operation-shield"
+          role="status"
+          aria-live="assertive"
+        >
+          <span>
+            {operationInProgress
+              ? "正在安全写入学习数据…"
+              : "正在读取本地学习数据…"}
           </span>
-          <span className="welcome-name">词环</span>
-          <span className="welcome-hint">按空格键或点击开始</span>
-        </button>
+        </div>
       )}
 
       <aside className="side-rail" aria-label="主导航">
@@ -1914,25 +1593,34 @@ export default function Home() {
                 <small>开始 →</small>
               </button>
             )}
-            {sessionComplete && activeSession && (
-              <div className="session-complete">
-                <span>✓</span>
-                <p className="eyebrow">{activeSession.title}</p>
-                <h1>本次学习完成</h1>
-                <p>已完成 {activeSession.wordIds.length} 次学习任务，评分结果已进入复习计划。</p>
-                <div>
-                  <button onClick={startTodaySession}>刷新今日任务</button>
-                  <button className="quiet" onClick={() => setActiveSession(undefined)}>返回自由学习</button>
-                </div>
-              </div>
+            {sessionComplete && sessionCompletionSummary && (
+              <SessionCompleteView
+                summary={sessionCompletionSummary}
+                onReinforce={(wordIds) => {
+                  const originKind = activeSession?.kind === "reinforcement"
+                    ? activeSession.originKind
+                    : activeSession?.kind;
+                  startSession(
+                    "reinforcement",
+                    "本次薄弱词 · 再强化",
+                    wordIds,
+                    originKind,
+                  );
+                }}
+                primaryAction={getSessionPrimaryAction()}
+                onFreeStudy={returnToFreeStudy}
+                onUndo={ratingUndo ? undoLastRating : undefined}
+              />
             )}
             {!sessionComplete && (
               <>
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <article
+                ref={wordCardRef}
                 className={`${revealed ? "word-card revealed" : "word-card"}${reinforcementRating === null ? "" : " reinforcing"}${redbookReady ? "" : " loading"}`}
                 aria-busy={redbookStatus === "loading"}
+                tabIndex={-1}
                 onMouseUp={handleTextSelection}
               >
                 <div className="word-heading">
@@ -2152,772 +1840,199 @@ export default function Home() {
         )}
 
         {activeView === "books" && (
-          <div className="content-view">
-            <div className="section-heading">
-              <div><p className="eyebrow">2027 考研英语红宝书</p><h1>按红宝书顺序开始</h1></div>
-              <div className="book-heading-actions">
-                <span className="resource-badge">本地资源 · 6550 原书词条 · {learningItemCount} 学习项</span>
-                <button className="primary-button" onClick={() => startAllBookShuffle()}>全书乱序</button>
-              </div>
-            </div>
-            <div className="book-grid">
-              {SECTION_META.map((book) => {
-                const bookWordIds = redbookWords
-                  .filter((word) => word.section === book.name && word.id !== undefined && isPrimaryLearningWord(word.id))
-                  .map((word) => word.id!);
-                const learned = bookWordIds.filter((wordId) => wordProgress[wordId]).length;
-                const mastered = bookWordIds.filter((wordId) => wordProgress[wordId]?.status === "mastered").length;
-                const due = new Set(dueWordIds(wordProgress, new Date(clock)));
-                const dueCount = bookWordIds.filter((wordId) => due.has(wordId)).length;
-                return (
-                <button className="book-card" key={book.name} onClick={() => {
-                  setSelectedSection(book.name);
-                  setSelectedUnit(book.name === "超纲词" ? "A" : 1);
-                  setStudyScope("selection");
-                  setActiveSession(undefined);
-                  setRevealed(false);
-                  setActiveView("learn");
-                }}>
-                  <span className={`book-swatch ${book.color}`}>{book.marker}</span>
-                  <div>
-                    <small>{book.detail}</small>
-                    <h2>{book.name}</h2>
-                    <p>{learned} 已学习 · {mastered} 已掌握 · {dueCount} 待复习</p>
-                  </div>
-                  <div className="book-line"><i style={{ width: `${(learned / book.total) * 100}%` }} /></div>
-                </button>
-              )})}
-              <button className="book-card empty-book all-book-card" onClick={() => startAllBookShuffle()}>
-                <span>{learningItemCount}</span>
-                <h2>全书乱序</h2>
-                <p>保留 6550 条原书来源，变体不重复进入每日新词</p>
-              </button>
-            </div>
-          </div>
+          <BooksView
+            sectionMeta={SECTION_META}
+            redbookWords={redbookWords}
+            wordProgress={wordProgress}
+            learningItemCount={learningItemCount}
+            clock={clock}
+            onSelectBook={(section, unit) => {
+              setSelectedSection(section);
+              setSelectedUnit(unit);
+              setStudyScope("selection");
+              setActiveSession(undefined);
+              setRevealed(false);
+              setActiveView("learn");
+            }}
+            onAllShuffle={() => startAllBookShuffle()}
+          />
         )}
 
         {activeView === "wordbook" && (
-          <div className="content-view">
-            <div className="section-heading wordbook-heading">
-              <div>
-                <p className="eyebrow">PERSONAL WORD LEDGER</p>
-                <h1>把难词留在手边</h1>
-              </div>
-              <div className="wordbook-counts">
-                <span><strong>{favoriteWords.length}</strong> 个收藏</span>
-                <span><strong>{mistakeWords.length}</strong> 个错词</span>
-                <span><strong>{stubbornWordList.length}</strong> 个顽固词</span>
-                <span><strong>{lookupWords.length}</strong> 个划词</span>
-              </div>
-              <div className="wordbook-batch-actions">
-                <button onClick={startFavoriteSession} disabled={!favoriteWords.length}>复习全部收藏</button>
-                <button onClick={startMistakeSession} disabled={!mistakeWords.length}>强化当前错词</button>
-                <button onClick={startStubbornSession} disabled={!stubbornWordList.length}>顽固词专项</button>
-                <button onClick={() => startLookupSession()} disabled={!lookupWords.length}>学习划词集</button>
-              </div>
-            </div>
-            <div className="wordbook-tabs" role="tablist" aria-label="词本分类">
-              <button
-                role="tab"
-                aria-selected={wordbookTab === "favorites"}
-                className={wordbookTab === "favorites" ? "active" : ""}
-                onClick={() => setWordbookTab("favorites")}
-              >
-                我的词本 <span>{favoriteWords.length}</span>
-              </button>
-              <button
-                role="tab"
-                aria-selected={wordbookTab === "mistakes"}
-                className={wordbookTab === "mistakes" ? "active" : ""}
-                onClick={() => setWordbookTab("mistakes")}
-              >
-                错词记录 <span>{mistakeWords.length}</span>
-              </button>
-              <button
-                role="tab"
-                aria-selected={wordbookTab === "stubborn"}
-                className={wordbookTab === "stubborn" ? "active" : ""}
-                onClick={() => setWordbookTab("stubborn")}
-              >
-                顽固词 <span>{stubbornWordList.length}</span>
-              </button>
-              <button
-                role="tab"
-                aria-selected={wordbookTab === "lookups"}
-                className={wordbookTab === "lookups" ? "active" : ""}
-                onClick={() => setWordbookTab("lookups")}
-              >
-                划词集 <span>{lookupWords.length}</span>
-              </button>
-            </div>
-            <div className="saved-word-grid">
-              {wordbookTab === "favorites" && favoriteWords.map((item) => (
-                <article className="saved-word-card" key={item.wordId}>
-                  <div className="saved-word-mark">{item.word.word.slice(0, 1).toUpperCase()}</div>
-                  <div className="saved-word-copy">
-                    <div><h2>{item.word.word}</h2><span>{item.word.phonetic ?? item.word.part ?? splitMeaning(item.word.meaning).part}</span></div>
-                    <p>{splitMeaning(item.word.meaning).meaning}</p>
-                    <small>{item.word.section ?? "红宝书"} · Unit {item.word.unit ?? "—"}</small>
-                  </div>
-                  <div className="saved-word-actions">
-                    <button onClick={() => focusSavedWord(item.word)}>去复习</button>
-                    <button className="quiet" onClick={() => toggleFavorite(item.word)}>移除</button>
-                  </div>
-                </article>
-              ))}
-              {wordbookTab === "mistakes" && mistakeWords.map((item) => (
-                <article className="saved-word-card mistake-card" key={item.wordId}>
-                  <div className="saved-word-mark">{item.mistakeCount}</div>
-                  <div className="saved-word-copy">
-                    <div><h2>{item.word.word}</h2><span>{ratingLabels[item.lastRating]}</span></div>
-                    <p>{splitMeaning(item.word.meaning).meaning}</p>
-                    <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "红宝书"} Unit {item.word.unit ?? "—"}</small>
-                  </div>
-                  <div className="saved-word-actions">
-                    <button onClick={() => focusSavedWord(item.word)}>重新学习</button>
-                    <button
-                      className={favorites.some((favorite) => favorite.wordId === item.wordId) ? "quiet saved" : "quiet"}
-                      onClick={() => toggleFavorite(item.word)}
-                    >
-                      {favorites.some((favorite) => favorite.wordId === item.wordId) ? "已收藏" : "加入词本"}
-                    </button>
-                    <button className="quiet" onClick={() => markMistakeResolved(item.wordId)}>已掌握</button>
-                  </div>
-                </article>
-              ))}
-              {wordbookTab === "stubborn" && stubbornWordList.map((item) => (
-                <article className="saved-word-card mistake-card" key={item.record.wordId}>
-                  <div className="saved-word-mark">{item.record.triggerCount}</div>
-                  <div className="saved-word-copy">
-                    <div>
-                      <h2>{item.word.word}</h2>
-                      <span>{item.record.reason === "again-3" ? "30 天内忘记 ≥ 3 次" : "30 天内低评分 ≥ 5 次"}</span>
-                    </div>
-                    <p>{splitMeaning(item.word.meaning).meaning}</p>
-                    <small>
-                      当前 R {item.progress ? wordRetrievability(item.progress, new Date(clock)) : 0}%
-                      {" · "}连续 3 次“认识/熟练”后自动退出
-                    </small>
-                  </div>
-                  <div className="saved-word-actions">
-                    <button onClick={() => focusSavedWord(item.word)}>专项修复</button>
-                    <button
-                      className={favorites.some((favorite) => favorite.wordId === item.record.wordId) ? "quiet saved" : "quiet"}
-                      onClick={() => toggleFavorite(item.word)}
-                    >
-                      {favorites.some((favorite) => favorite.wordId === item.record.wordId) ? "已收藏" : "加入词本"}
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {wordbookTab === "lookups" && lookupWords.map((item) => (
-                <article className="saved-word-card lookup-word-card" key={item.query.toLowerCase()}>
-                  <div className="saved-word-mark">↳</div>
-                  <div className="saved-word-copy">
-                    <div>
-                      <h2>{item.query}</h2>
-                      <span>{item.phonetic || item.part}</span>
-                    </div>
-                    <p>{item.meaning}</p>
-                    <small>
-                      {item.part}
-                      {item.note ? ` · ${item.note}` : ""}
-                      {" · "}{item.source === "redbook"
-                        ? "红宝书"
-                        : item.source === "dictionary"
-                          ? "ECDICT 本地辞典"
-                          : "DS Flash"}
-                    </small>
-                  </div>
-                  <div className="saved-word-actions">
-                    <button onClick={() => startLookupSession([item.id])}>去学习</button>
-                    <button
-                      className="quiet"
-                      onClick={() => setLookupWords((items) =>
-                        items.filter((word) => word.query.toLowerCase() !== item.query.toLowerCase()))}
-                    >
-                      移除
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {wordbookTab === "favorites" && favoriteWords.length === 0 && (
-                <div className="wordbook-empty">
-                  <span>◇</span>
-                  <h2>词本还是空的</h2>
-                  <p>学习时点击单词卡右上角的菱形，即可收藏。</p>
-                  <button onClick={() => setActiveView("learn")}>去学习</button>
-                </div>
-              )}
-              {wordbookTab === "mistakes" && mistakeWords.length === 0 && (
-                <div className="wordbook-empty">
-                  <span>✓</span>
-                  <h2>暂时没有错词</h2>
-                  <p>评分为“忘记”或“模糊”的单词会自动记录在这里。</p>
-                  <button onClick={() => setActiveView("learn")}>继续学习</button>
-                </div>
-              )}
-              {wordbookTab === "stubborn" && stubbornWordList.length === 0 && (
-                <div className="wordbook-empty">
-                  <span>✓</span>
-                  <h2>没有活跃顽固词</h2>
-                  <p>连续成功 3 次或 30 天没有新的低评分会自动退出专项。</p>
-                  <button onClick={() => setActiveView("learn")}>继续学习</button>
-                </div>
-              )}
-              {wordbookTab === "lookups" && lookupWords.length === 0 && (
-                <div className="wordbook-empty">
-                  <span>↳</span>
-                  <h2>还没有划词记录</h2>
-                  <p>在学习卡正文中划选英文，点击“翻译”后会自动收进这里。</p>
-                  <button onClick={() => setActiveView("learn")}>去划词</button>
-                </div>
-              )}
-            </div>
-          </div>
+          <WordbookView
+            activeTab={wordbookTab}
+            favoriteWords={favoriteWords}
+            mistakeWords={mistakeWords}
+            stubbornWordList={stubbornWordList}
+            lookupWords={lookupWords}
+            ratingLabels={ratingLabels}
+            clock={clock}
+            favorites={favorites}
+            onTabChange={setWordbookTab}
+            onFocusWord={focusSavedWord}
+            onToggleFavorite={toggleFavorite}
+            onResolveMistake={markMistakeResolved}
+            onStartFavorites={startFavoriteSession}
+            onStartMistakes={startMistakeSession}
+            onStartStubborn={startStubbornSession}
+            onStartLookups={startLookupSession}
+            onRemoveLookup={(item) => {
+              const identity = lookupIdentity(item);
+              setLookupWords((items) =>
+                items.filter((word) => lookupIdentity(word) !== identity));
+            }}
+            onNavigateLearn={() => setActiveView("learn")}
+          />
         )}
 
         {activeView === "history" && (
-          <div className="content-view">
-            <div className="section-heading">
-              <div><p className="eyebrow">MEMORY TRACE</p><h1>每一次回忆都算数</h1></div>
-              <div className="streak"><strong>{stats.streak}</strong><span>连续学习天</span></div>
-            </div>
-            <div className="stat-grid">
-              <div><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
-              <div><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
-              <div><span>完成次数</span><strong>{stats.completionCount}</strong><small>{stats.coveredCount} 个不同单词</small></div>
-              <div><span>平均可提取率</span><strong>{stats.retrievability}%</strong><small>FSRS 当前回忆概率</small></div>
-              <button type="button" onClick={startTodaySession}>
-                <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
-              </button>
-            </div>
-            <section className="insights-panel" aria-labelledby="insights-title">
-              <div className="panel-title">
-                <h2 id="insights-title">学习趋势</h2>
-                <small>近 7 天</small>
-              </div>
-              <div className="insights-grid">
-                <div className="insight-card">
-                  <span>成功率</span>
-                  <strong>{Math.round(insights.successRate)}%</strong>
-                  <small>
-                    {insights.successRateDelta !== null
-                      ? `${insights.successRateDelta >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(insights.successRateDelta))}%`
-                      : "—"}
-                  </small>
-                </div>
-                <div className="insight-card">
-                  <span>平均回忆</span>
-                  <strong>
-                    {insights.averageRecallMs !== null
-                      ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
-                      : "—"}
-                  </strong>
-                  <small>反应耗时</small>
-                </div>
-                <div className="insight-card">
-                  <span>学习天数</span>
-                  <strong>{insights.activeDays}</strong>
-                  <small>/ 7 天</small>
-                </div>
-                <div className="insight-card">
-                  <span>不同单词</span>
-                  <strong>{insights.uniqueWordCount}</strong>
-                  <small>{insights.reviewCount} 次评分</small>
-                </div>
-              </div>
-              {reviewForecast.length > 0 && (
-                <div className="forecast-panel">
-                  <div className="forecast-title">
-                    <span>未来 7 天到期复习</span>
-                    <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
-                  </div>
-                  <div className="forecast-bars">
-                    {reviewForecast.map((day) => {
-                      const maxCount = Math.max(1, ...reviewForecast.map((d) => d.count));
-                      const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
-                      return (
-                        <div className="forecast-day" key={day.date} title={`${day.date} · ${day.count} 词到期`}>
-                          <small>{day.date.slice(5)}</small>
-                          <div className={`forecast-bar level-${level}`} style={{ height: `${Math.max(4, (day.count / maxCount) * 48)}px` }} />
-                          <span>{day.count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </section>
-            <section className="activity-panel" aria-labelledby="activity-title">
-              <div className="panel-title">
-                <div className="activity-heading">
-                  <h2 id="activity-title">背诵日历</h2>
-                  <small>{activityDateRange}</small>
-                </div>
-                <div className="activity-panel-tools">
-                  <span>{activityDays.filter((day) => day.count > 0).length} 个学习日</span>
-                  <div className="activity-controls" aria-label="背诵日历范围">
-                    <div className="activity-range">
-                      {(Object.keys(activityRangeLabels).map(Number) as ActivityRange[]).map((range) => (
-                        <button
-                          type="button"
-                          className={activityRange === range ? "active" : ""}
-                          key={range}
-                          aria-pressed={activityRange === range}
-                          onClick={() => {
-                            setActivityRange(range);
-                            setActivityOffset(0);
-                            setSelectedActivityDate("");
-                          }}
-                        >
-                          {activityRangeLabels[range]}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="activity-nav">
-                      <button
-                        type="button"
-                        aria-label="查看更早日期"
-                        title="查看更早日期"
-                        onClick={() => {
-                          setActivityOffset((offset) => offset + activityRange);
-                          setSelectedActivityDate("");
-                        }}
-                      >
-                        ←
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="查看更近日期"
-                        title="查看更近日期"
-                        disabled={activityOffset === 0}
-                        onClick={() => {
-                          setActivityOffset((offset) => Math.max(0, offset - activityRange));
-                          setSelectedActivityDate("");
-                        }}
-                      >
-                        →
-                      </button>
-                    </div>
-                    {activityOffset > 0 && (
-                      <button
-                        type="button"
-                        className="activity-today"
-                        onClick={() => {
-                          setActivityOffset(0);
-                          setSelectedActivityDate("");
-                        }}
-                      >
-                        回到今天
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="activity-scroll">
-                <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
-                  {activityDays.map((day) => (
-                    <button
-                      type="button"
-                      key={day.date}
-                      className={`activity-cell level-${day.level}${day.date === dateKey(new Date(clock)) ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
-                      title={`${day.date} · ${day.count} 词`}
-                      aria-label={`${day.date}，背诵 ${day.count} 个单词`}
-                      aria-pressed={day.date === selectedActivityDate}
-                      onClick={() => setSelectedActivityDate((date) => date === day.date ? "" : day.date)}
-                    />
-                  ))}
-                </div>
-                <div className="activity-legend" aria-hidden="true">
-                  <span>少</span>
-                  {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}
-                  <span>多</span>
-                </div>
-              </div>
-              {selectedActivityDate && (
-                <div className="activity-detail" aria-live="polite">
-                  <div className="activity-detail-head">
-                    <div>
-                      <strong>{selectedActivityDate.replaceAll("-", ".")}</strong>
-                      <span>
-                        {selectedDayReviews.length
-                          ? `${selectedDayNewCount} 新学 · ${selectedDayEvents.length - selectedDayNewCount} 复习 · ${selectedDayReviews.length} 个不同单词 · ${selectedWeakCount} 个薄弱`
-                          : "当天没有学习记录"}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="关闭日期详情"
-                      onClick={() => setSelectedActivityDate("")}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  {selectedDayReviews.length > 0 && (
-                    <div className="activity-word-list">
-                      {selectedDayReviews.map((review) => (
-                        <span
-                          className={`activity-word rating-${review.rating}`}
-                          key={`${review.wordId ?? review.word}-${review.reviewedAt}`}
-                        >
-                          <strong>{review.word}</strong>
-                          <small>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</small>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-            <div className="history-panel">
-              <div className="panel-title"><h2>最近学习</h2><span>{reviews.length} 次记忆记录</span></div>
-              {recentReviews.length ? recentReviews.map((review) => (
-                <div className="history-row" key={`${review.word}-${review.reviewedAt}`}>
-                  <strong>{review.word}</strong>
-                  <span className={`rating-dot rating-${review.rating}`}>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</span>
-                  <span>{formatDueTime(review.dueAt, new Date(clock))}</span>
-                </div>
-              )) : <div className="empty-state">完成第一个单词后，记忆轨迹会出现在这里。</div>}
-            </div>
-          </div>
+          <HistoryView
+            stats={stats}
+            effectiveNewGoal={effectiveNewGoal}
+            dailyGoal={dailyGoal}
+            reviews={reviews}
+            clock={clock}
+            activityRange={activityRange}
+            activityOffset={activityOffset}
+            activityRangeLabels={activityRangeLabels}
+            selectedActivityDate={selectedActivityDate}
+            ratingLabels={ratingLabels}
+            insights={insights}
+            reviewForecast={reviewForecast}
+            onStartTodaySession={startTodaySession}
+            onActivityRangeChange={(range) => {
+              setActivityRange(range);
+              setActivityOffset(0);
+              setSelectedActivityDate("");
+            }}
+            onActivityNavigate={(direction) => {
+              setActivityOffset((offset) =>
+                Math.max(0, offset + direction * activityRange));
+              setSelectedActivityDate("");
+            }}
+            onActivityToday={() => {
+              setActivityOffset(0);
+              setSelectedActivityDate("");
+            }}
+            onSelectDate={setSelectedActivityDate}
+          />
         )}
 
         {activeView === "settings" && (
-          <div className="content-view settings-view">
-            <div className="section-heading"><div><p className="eyebrow">偏好设置</p><h1>把节奏调成你的样子</h1></div></div>
-            <div className="settings-panel">
-              <label>
-                <span><strong>每日新词</strong><small>保持一个能够长期坚持的数量</small></span>
-                <select value={dailyGoal} onChange={(event) => setDailyGoal(Number(event.target.value))}>
-                  <option value={10}>10 词</option>
-                  <option value={20}>20 词</option>
-                  <option value={30}>30 词</option>
-                  <option value={50}>50 词</option>
-                </select>
-              </label>
-              <label>
-                <span>
-                  <strong>积压时动态减量</strong>
-                  <small>
-                    {adaptiveNewWords
-                      ? `${stats.dueCount} 个到期词，今天的新词目标调整为 ${effectiveNewGoal}`
-                      : `已手动覆盖，固定按 ${dailyGoal} 个新词`}
-                  </small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={adaptiveNewWords}
-                  onChange={(event) => setAdaptiveNewWords(event.target.checked)}
-                />
-              </label>
-              <label>
-                <span>
-                  <strong>最低新词量</strong>
-                  <small>积压再多也保留的最低数量；设为 0 可暂停新词</small>
-                </span>
-                <select
-                  value={minimumNewWords}
-                  disabled={!adaptiveNewWords}
-                  onChange={(event) => setMinimumNewWords(Number(event.target.value))}
-                >
-                  <option value={0}>0 词</option>
-                  <option value={5}>5 词</option>
-                  <option value={10}>10 词</option>
-                </select>
-              </label>
-              <label>
-                <span>
-                  <strong>考研日期</strong>
-                  <small>
-                    {examPlan
-                      ? `${examPlan.phase} · 剩 ${examPlan.daysRemaining} 天 · 优先 ${examPlan.focusSection} · 建议至少 ${examPlan.requiredDailyNew} 个新词/天`
-                      : "设置后按必考词、基础词、超纲词排序，并预测完成工作量"}
-                  </small>
-                  {examPlan && (
-                    <small>
-                      当前目标预计 {examPlan.projectedDays} 天学完，
-                      {examPlan.onTrack ? `可预留 ${examPlan.reviewReserveDays} 天集中复习` : "按当前速度无法在复习预留期前完成"}
-                    </small>
-                  )}
-                </span>
-                <input
-                  type="date"
-                  value={examDate}
-                  onChange={(event) => setExamDate(event.target.value)}
-                  aria-label="考研日期"
-                />
-              </label>
-              <label>
-                <span><strong>自动播放发音</strong><small>切换到下一个单词时播放美音</small></span>
-                <input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />
-              </label>
-              <label>
-                <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 {learningItemCount} 个学习项</small></span>
-                <select
-                  value={studyScope === "all" ? "all" : studyMode}
-                  onChange={(event) => {
-                    if (event.target.value === "all") startAllBookShuffle(false);
-                    else changeStudyMode(event.target.value as StudyMode);
-                  }}
-                >
-                  <option value="ordered">红宝书顺序</option>
-                  <option value="shuffled">当前范围乱序</option>
-                  <option value="all">全书 {learningItemCount} 学习项乱序</option>
-                </select>
-              </label>
-              <label>
-                <span><strong>AI 记忆教练</strong><small>已启用；未配置云端模型时自动使用本地模式</small></span>
-                <span className={aiMode === "local" ? "status-pill local" : "status-pill"}>
-                  {aiMode === "cloud" ? "DeepSeek 云端" : aiMode === "local" ? "本地备用" : "DeepSeek 已配置"}
-                </span>
-              </label>
-              <div className="backup-settings">
-                <span>
-                  <strong>本地数据备份</strong>
-                  <small>
-                    {automaticBackups[0]
-                      ? `最近自动快照：${new Date(automaticBackups[0].createdAt).toLocaleString("zh-CN")}`
-                      : "每天自动保存快照，也可导出为 JSON 文件"}
-                  </small>
-                  {saveStatus !== "idle" && (
-                    <small className={`save-status save-status--${saveStatus}`}>
-                      {saveStatus === "saving" && "保存中…"}
-                      {saveStatus === "saved" && `已保存 ${new Date(lastSaveTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`}
-                      {saveStatus === "error" && "⚠ 保存失败，请立即导出备份"}
-                    </small>
-                  )}
-                </span>
-                <div>
-                  <button type="button" onClick={exportBackup}>导出备份</button>
-                  <button type="button" onClick={() => importInputRef.current?.click()}>导入备份</button>
-                  {automaticBackups[0] && (
-                    <button type="button" className="quiet" onClick={() => restoreBackup(automaticBackups[0].id)}>
-                      恢复最近快照
-                    </button>
-                  )}
-                </div>
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept="application/json,.json"
-                  hidden
-                  onChange={importBackup}
-                />
-              </div>
-              <button className="reset-button" onClick={resetLearningRecords}>
-                清空本机学习记录
-              </button>
-            </div>
-            <div className="shortcut-panel">
-              <h2>快捷键</h2>
-              <div>
-                <span><kbd>Space</kbd> 查看释义</span>
-                <span><kbd>1–4</kbd> 评估记忆</span>
-                <span><kbd>Z</kbd> 撤销最近评分</span>
-                <span><kbd>/</kbd> 全局查词</span>
-                <span><kbd>F</kbd> 收藏单词</span>
-                <span><kbd>E</kbd> 内容补充</span>
-                <span><kbd>A</kbd> AI 教练</span>
-              </div>
-            </div>
-          </div>
+          <SettingsView
+            dataActionsDisabled={
+              loadStatus === "loading" || operationInProgress
+            }
+            dataReplacementDisabled={
+              loadStatus !== "ready"
+              || saveStatus === "error"
+              || operationInProgress
+            }
+            dataActionsLoading={
+              loadStatus === "loading"
+                ? "hydrating"
+                : operationInProgress
+                  ? "authoritative"
+                  : null
+            }
+            dailyGoal={dailyGoal}
+            adaptiveNewWords={adaptiveNewWords}
+            minimumNewWords={minimumNewWords}
+            examDate={examDate}
+            examPlan={examPlan}
+            soundOn={soundOn}
+            studyMode={studyMode}
+            studyScope={studyScope}
+            learningItemCount={learningItemCount}
+            aiMode={aiMode}
+            automaticBackups={automaticBackups}
+            stats={stats}
+            effectiveNewGoal={effectiveNewGoal}
+            saveStatus={saveStatus}
+            lastSaveTime={lastSaveTime}
+            recoveryCopies={recoveryCopies.map((copy) => ({
+              id: copy.id,
+              createdAt: copy.createdAt,
+              restorable: copy.state !== undefined,
+            }))}
+            onDailyGoalChange={setDailyGoal}
+            onAdaptiveChange={setAdaptiveNewWords}
+            onMinWordsChange={setMinimumNewWords}
+            onExamDateChange={setExamDate}
+            onSoundChange={setSoundOn}
+            onModeChange={(mode) => {
+              if (mode === "all") startAllBookShuffle(false);
+              else changeStudyMode(mode);
+            }}
+            onExportBackup={exportBackup}
+            onImportClick={() => importInputRef.current?.click()}
+            onImportBackup={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importBackup(file);
+            }}
+            onRestoreBackup={restoreBackup}
+            onRetrySave={retrySave}
+            onExportRecovery={exportRecoveryCopy}
+            onRestoreRecovery={restoreRecoveryCopy}
+            onDiscardRecovery={discardRecoveryCopy}
+            onResetRecords={resetLearningRecords}
+            importInputRef={importInputRef}
+          />
         )}
       </section>
 
       {selectionLookup && (
-        <section
-          className="selection-lookup"
-          style={{ left: selectionLookup.x, top: selectionLookup.y }}
-          role="dialog"
-          aria-label={`划词查询：${selectionLookup.query}`}
-          aria-live="polite"
-        >
-          <div className="selection-lookup-head">
-            <span>
-              划词查义
-              {selectionLookup.result?.source === "redbook"
-                ? " · 红宝书"
-                : selectionLookup.result?.source === "dictionary"
-                  ? " · ECDICT · 本地"
-                : selectionLookup.cached
-                  ? " · DS FLASH · 已缓存"
-                  : selectionLookup.status === "idle"
-                    ? " · 待查询"
-                    : " · DS FLASH"}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                lookupAbortRef.current?.abort();
-                setSelectionLookup(undefined);
-              }}
-              aria-label="关闭划词查询"
-            >
-              ×
-            </button>
-          </div>
-          <div className="selection-lookup-query">
-            <strong>{selectionLookup.result?.query ?? selectionLookup.query}</strong>
-            {selectionLookup.result?.phonetic && <small>{selectionLookup.result.phonetic}</small>}
-          </div>
-          {selectionLookup.status === "idle" && (
-            <button
-              className="selection-lookup-action"
-              type="button"
-              onClick={() => translateSelection()}
-            >
-              <span>翻译</span>
-              <small>查询后自动加入划词集</small>
-            </button>
-          )}
-          {selectionLookup.status === "loading" && (
-            <p className="selection-lookup-state">
-              <i aria-hidden="true" />
-              正在结合上下文判断词义…
-            </p>
-          )}
-          {selectionLookup.status === "error" && (
-            <div className="selection-lookup-error">
-              <p>{selectionLookup.error}</p>
-              <button type="button" onClick={() => translateSelection()}>重试</button>
-            </div>
-          )}
-          {selectionLookup.status === "ready" && selectionLookup.result && (
-            <>
-              <div className="selection-lookup-meaning">
-                <span>{selectionLookup.result.part}</span>
-                <p>{selectionLookup.result.meaning}</p>
-              </div>
-              {selectionLookup.result.note && (
-                <small className="selection-lookup-note">{selectionLookup.result.note}</small>
-              )}
-              <small className="selection-lookup-saved">已加入划词集</small>
-              {selectionLookup.result.source === "dictionary" && (
-                <button
-                  className="selection-lookup-context"
-                  type="button"
-                  onClick={() => translateSelection({ forceAi: true })}
-                >
-                  让 DS 结合当前语境辨义
-                </button>
-              )}
-            </>
-          )}
-        </section>
+        <SelectionLookupPopup
+          lookup={selectionLookup}
+          onTranslate={translateSelection}
+          onClose={closeSelectionLookup}
+        />
       )}
 
-      <aside className={aiOpen ? "coach-panel open" : "coach-panel"} aria-label="AI 记忆教练" inert={!aiOpen}>
-        <div className="coach-head">
-          <div><span className="coach-badge">AI</span><div><strong>记忆教练</strong><small>围绕 {current.word}</small></div></div>
-          <button onClick={() => setAiOpen(false)} aria-label="关闭 AI 教练">×</button>
-        </div>
-        <div className="coach-context">
-          <span>正在学习</span>
-          <strong>{current.word}</strong>
-          <small>{currentMeaning.meaning}</small>
-        </div>
-        <div className="coach-answer">
-          <span>词环 AI{aiMode === "cloud" ? " · 云端" : aiMode === "local" ? " · 本地" : ""}</span>
-          <p>{aiLoading ? "正在组织一个更容易记住的解释…" : aiAnswer}</p>
-        </div>
-        <div className="coach-prompts">
-          {["给我一个记忆联想", "换个真实语境", "解释近义词区别", "出一道小测验"].map((prompt) => (
-            <button key={prompt} onClick={() => askCoach(prompt)}>{prompt}</button>
-          ))}
-        </div>
-        <form onSubmit={submitCoach}>
-          <input value={aiInput} maxLength={500} onChange={(event) => setAiInput(event.target.value)} placeholder="问问这个词该怎么记…" aria-label="向 AI 教练提问" />
-          <button type="submit" aria-label="发送问题">↗</button>
-        </form>
-        <p className="coach-note">
-          {aiMode === "cloud" ? "本次由 DeepSeek 云端回答" : aiMode === "local" ? "云端不可用，本次使用本地提示" : "AI 会结合当前单词和语境回答"}
-        </p>
-      </aside>
+      <CoachPanel
+        open={aiOpen}
+        word={current.word}
+        meaning={currentMeaning.meaning}
+        aiMode={aiMode}
+        aiAnswer={aiAnswer}
+        aiLoading={aiLoading}
+        aiInput={aiInput}
+        onInputChange={setAiInput}
+        onAsk={askCoach}
+        onSubmit={submitCoach}
+        onClose={() => setAiOpen(false)}
+      />
 
       {searchOpen && (
-        <div className="search-backdrop" role="presentation" onMouseDown={() => setSearchOpen(false)}>
-          <section
-            className="search-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="全局查词"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="search-head">
-              <div>
-                <p className="eyebrow">GLOBAL VOCABULARY SEARCH</p>
-                <h2>查单词、释义或编号</h2>
-              </div>
-              <button type="button" onClick={() => setSearchOpen(false)} aria-label="关闭查词">×</button>
-            </div>
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setSelectedSearchIds([]);
-              }}
-              placeholder="例如 outline、轮廓、1172"
-              aria-label="搜索红宝书词库"
-            />
-            <div className="search-summary">
-              <span>{searchQuery ? `找到 ${searchResults.length} 条结果` : "输入关键词开始搜索"}</span>
-              {searchResults.length > 0 && (
-                <button type="button" onClick={startSearchSession}>
-                  {selectedSearchIds.length
-                    ? `学习已选 ${selectedSearchIds.length} 词`
-                    : `学习当前 ${searchResults.length} 词`}
-                </button>
-              )}
-            </div>
-            <div className="search-results">
-              {searchResults.map((word) => {
-                const progressItem = word.id === undefined ? undefined : wordProgress[word.id];
-                const selected = word.id !== undefined && selectedSearchIds.includes(word.id);
-                return (
-                  <article key={word.id}>
-                    <button
-                      type="button"
-                      className={selected ? "search-select selected" : "search-select"}
-                      onClick={() => {
-                        if (word.id === undefined) return;
-                        setSelectedSearchIds((items) => items.includes(word.id!)
-                          ? items.filter((wordId) => wordId !== word.id)
-                          : [...items, word.id!]);
-                      }}
-                      aria-pressed={selected}
-                      aria-label={selected ? `取消选择 ${word.word}` : `选择 ${word.word}`}
-                    >
-                      {selected ? "✓" : "+"}
-                    </button>
-                    <div>
-                      <div><strong>{word.word}</strong><span>{splitMeaning(word.meaning).part}</span></div>
-                      <p>{splitMeaning(word.meaning).meaning}</p>
-                      <small>
-                        {word.section} · Unit {word.unit}
-                        {progressItem
-                          ? ` · R ${wordRetrievability(progressItem, new Date(clock))}% · ${progressItem.status === "mastered" ? "已掌握" : formatDueTime(progressItem.nextDueAt, new Date(clock))}`
-                          : " · 未学习"}
-                      </small>
-                    </div>
-                    <button type="button" className="search-learn" onClick={() => {
-                      startSession("search", `专项学习 · ${word.word}`, word.id === undefined ? [] : [word.id]);
-                      setSearchOpen(false);
-                    }}>
-                      学习
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </div>
+        <SearchPanel
+          open={searchOpen}
+          query={searchQuery}
+          results={searchResults}
+          selectedIds={selectedSearchIds}
+          wordProgress={wordProgress}
+          clock={clock}
+          onQueryChange={(value) => {
+            setSearchQuery(value);
+            setSelectedSearchIds([]);
+          }}
+          onToggleSelect={(wordId) => {
+            setSelectedSearchIds((items) => items.includes(wordId)
+              ? items.filter((item) => item !== wordId)
+              : [...items, wordId]);
+          }}
+          onStartSearch={startSearchSession}
+          onStartWordSession={(wordIds) => {
+            const word = wordIds[0] === undefined ? undefined : wordById.get(wordIds[0]);
+            startSession("search", `专项学习${word ? ` · ${word.word}` : ""}`, wordIds);
+          }}
+          onClose={() => setSearchOpen(false)}
+        />
       )}
 
-      {toast && (
+      {(toast || (undoVisible && ratingUndo)) && (
         <div className="toast" role="status">
-          <span>{toast}</span>
+          {toast && <span>{toast}</span>}
           {undoVisible && ratingUndo && <button type="button" onClick={undoLastRating}>撤销</button>}
         </div>
       )}

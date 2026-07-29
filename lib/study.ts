@@ -1,4 +1,7 @@
-import { canonicalWordId } from "./redbook.ts";
+import {
+  canonicalWordId,
+  REDBOOK_SOURCE_TOTAL,
+} from "./redbook.ts";
 import {
   averageRetrievability,
   rebuildStubbornWords,
@@ -67,6 +70,8 @@ export type MistakeRecord = SavedWord & {
 
 export type LookupWord = {
   id: number;
+  /** 命中红宝书词目时关联原始学习项，避免生成第二份学习进度。 */
+  linkedWordId?: number;
   query: string;
   kind: "word" | "phrase" | "sentence";
   phonetic: string;
@@ -128,6 +133,15 @@ function validDate(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function normalizeCount(value: unknown, fallback = 0) {
+  const count = Number(value);
+  if (!Number.isFinite(count)) return fallback;
+  return Math.min(
+    Number.MAX_SAFE_INTEGER,
+    Math.max(0, Math.trunc(count)),
+  );
+}
+
 export function isValidStudyWordId(value: unknown): value is number {
   return Number.isSafeInteger(value)
     && Number(value) >= 1
@@ -185,10 +199,16 @@ function normalizeLookupWord(value: unknown): LookupWord | null {
   if (!query || !meaning || !["word", "phrase", "sentence"].includes(String(item.kind))) {
     return null;
   }
+  const linkedWordId = Number(item.linkedWordId);
   return {
     id: isValidStudyWordId(Number(item.id))
       ? canonicalWordId(Number(item.id))
       : lookupWordId(query),
+    linkedWordId: Number.isSafeInteger(linkedWordId)
+      && linkedWordId >= 1
+      && linkedWordId <= REDBOOK_SOURCE_TOTAL
+      ? canonicalWordId(linkedWordId)
+      : undefined,
     query,
     kind: item.kind as LookupWord["kind"],
     phonetic: (
@@ -223,12 +243,13 @@ function normalizeLookupWords(value: unknown) {
     .map(normalizeLookupWord)
     .filter((item): item is LookupWord => {
       if (!item) return false;
-      const key = item.query.toLowerCase();
+      const key = item.linkedWordId === undefined
+        ? `lookup:${item.query.toLowerCase()}`
+        : `redbook:${item.linkedWordId}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    })
-    .slice(0, 200);
+    });
 }
 
 function normalizeFamiliarMeanings(value: unknown): FamiliarMeaningMap {
@@ -299,7 +320,7 @@ export function reviewDueAt(reviewedAt: string, rating: Rating) {
   return new Date(reviewed.getTime() + REVIEW_INTERVALS[rating]).toISOString();
 }
 
-function normalizeReview(value: unknown, index: number): Review | null {
+function normalizeReview(value: unknown): Review | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
   const rating = Number(item.rating);
@@ -335,6 +356,9 @@ function normalizeReview(value: unknown, index: number): Review | null {
     id: typeof item.id === "string" && item.id
       ? item.id
       : `${normalizedWordId ?? item.word}:${reviewedAt.toISOString()}`,
+    sessionId: typeof item.sessionId === "string" && item.sessionId.trim()
+      ? item.sessionId.trim()
+      : undefined,
     wordId: normalizedWordId,
     word: item.word.trim(),
     rating: rating as Rating,
@@ -379,11 +403,13 @@ function normalizeFsrsCard(value: unknown): SerializedFsrsCard | undefined {
     // 语义范围校验：stability/difficulty/计数不可为负
     || !Number.isFinite(stability) || stability < 0
     || !Number.isFinite(difficulty) || difficulty < 0
-    || !Number.isFinite(elapsedDays) || elapsedDays < 0
-    || !Number.isFinite(scheduledDays) || scheduledDays < 0
-    || !Number.isFinite(learningSteps) || learningSteps < 0
-    || !Number.isFinite(reps) || reps < 0
-    || !Number.isFinite(lapses) || lapses < 0
+    || !Number.isInteger(elapsedDays) || elapsedDays < 0
+    || !Number.isInteger(scheduledDays) || scheduledDays < 0
+    || !Number.isInteger(learningSteps) || learningSteps < 0
+    || !Number.isInteger(reps) || reps < 0
+    || !Number.isInteger(lapses) || lapses < 0
+    || lapses > reps
+    || (lastReview !== null && lastReview.getTime() > due.getTime())
     // 到期时间不可在过去超过 100 年（明显异常数据）
     || due.getTime() < Date.now() - 100 * 365 * 24 * 60 * 60 * 1000
   ) {
@@ -428,15 +454,28 @@ function normalizeWordProgress(
     return null;
   }
   const intervalMs = Number(item.intervalMs);
-  const fsrsCard = normalizeFsrsCard(item.fsrsCard);
-  // FSRS 卡片到期时间应与 progress 到期时间一致（允许 1 天误差）
-  if (fsrsCard) {
-    const cardDue = new Date(fsrsCard.due).getTime();
-    const progressDue = nextDueAt.getTime();
-    if (Math.abs(cardDue - progressDue) > 24 * 60 * 60 * 1000) {
-      // 不一致时以 fsrsCard 为准
-    }
+  let fsrsCard = normalizeFsrsCard(item.fsrsCard);
+  if (
+    fsrsCard?.lastReview
+    && Math.abs(
+      new Date(fsrsCard.lastReview).getTime() - lastReviewedAt.getTime(),
+    ) > 24 * 60 * 60 * 1000
+  ) {
+    fsrsCard = undefined;
   }
+  // FSRS 卡片是排程真源；有效卡片存在时统一使用其 due。
+  const effectiveNextDueAt = fsrsCard
+    ? new Date(fsrsCard.due)
+    : nextDueAt;
+  const reviewCount = Math.max(1, normalizeCount(item.reviewCount, 1));
+  const successCount = Math.min(
+    reviewCount,
+    normalizeCount(item.successCount),
+  );
+  const lapseCount = Math.min(
+    reviewCount,
+    normalizeCount(item.lapseCount),
+  );
   return {
     wordId: canonicalWordId(wordId),
     status: item.status === "mastered"
@@ -446,15 +485,21 @@ function normalizeWordProgress(
         : "learning",
     firstLearnedAt: firstLearnedAt.toISOString(),
     lastReviewedAt: lastReviewedAt.toISOString(),
-    nextDueAt: nextDueAt.toISOString(),
+    nextDueAt: effectiveNextDueAt.toISOString(),
     lastRating: lastRating as Rating,
-    reviewCount: Math.max(1, Number(item.reviewCount) || 1),
-    successCount: Math.max(0, Number(item.successCount) || 0),
-    lapseCount: Math.max(0, Number(item.lapseCount) || 0),
-    consecutiveSuccesses: Math.max(0, Number(item.consecutiveSuccesses) || 0),
+    reviewCount,
+    successCount,
+    lapseCount,
+    consecutiveSuccesses: Math.min(
+      successCount,
+      normalizeCount(item.consecutiveSuccesses),
+    ),
     intervalMs: Number.isFinite(intervalMs) && intervalMs > 0
       ? intervalMs
-      : Math.max(10 * 60 * 1000, nextDueAt.getTime() - lastReviewedAt.getTime()),
+      : Math.max(
+          10 * 60 * 1000,
+          effectiveNextDueAt.getTime() - lastReviewedAt.getTime(),
+        ),
     fsrsCard,
     ...(validDate(item.weakResolvedAt)
       ? { weakResolvedAt: validDate(item.weakResolvedAt)!.toISOString() }
@@ -468,7 +513,15 @@ function normalizeSession(value: unknown): StudySession | undefined {
   if (
     typeof item.id !== "string"
     || typeof item.title !== "string"
-    || !["today", "favorites", "mistakes", "search", "lookups"].includes(String(item.kind))
+    || ![
+      "today",
+      "favorites",
+      "mistakes",
+      "stubborn",
+      "search",
+      "lookups",
+      "reinforcement",
+    ].includes(String(item.kind))
     || !Array.isArray(item.wordIds)
   ) {
     return undefined;
@@ -478,9 +531,20 @@ function normalizeSession(value: unknown): StudySession | undefined {
     .filter(isValidStudyWordId)
     .map(canonicalWordId)
     .filter((wordId, index, items) => items.indexOf(wordId) === index);
+  const originKind = [
+    "today",
+    "favorites",
+    "mistakes",
+    "stubborn",
+    "search",
+    "lookups",
+  ].includes(String(item.originKind))
+    ? item.originKind as StudySession["originKind"]
+    : undefined;
   return {
     id: item.id,
     kind: item.kind as StudySession["kind"],
+    ...(originKind ? { originKind } : {}),
     title: item.title,
     wordIds,
     index: Math.min(wordIds.length, Math.max(0, Number(item.index) || 0)),
@@ -542,7 +606,20 @@ export function parseStoredState(raw: string): StoredState {
     throw new Error("状态数据格式无效：期望对象");
   }
   const state = parsed as Record<string, unknown>;
-  const sourceVersion = Number(state.schemaVersion) || 1;
+  const hasSourceVersion = state.schemaVersion !== undefined;
+  const parsedSourceVersion = Number(state.schemaVersion);
+  if (
+    hasSourceVersion
+    && (!Number.isSafeInteger(parsedSourceVersion) || parsedSourceVersion < 1)
+  ) {
+    throw new Error("状态数据版本无效");
+  }
+  const sourceVersion = hasSourceVersion ? parsedSourceVersion : 1;
+  if (sourceVersion > STORAGE_VERSION) {
+    throw new Error(
+      `状态数据来自更新版本的词环（v${sourceVersion}），当前版本为 v${STORAGE_VERSION}`,
+    );
+  }
   const studyMode: StudyMode = state.studyMode === "shuffled" ? "shuffled" : "ordered";
   const studyScope: StudyScope = state.studyScope === "all" ? "all" : "selection";
   const shuffleSeed = Number.isFinite(state.shuffleSeed) ? Number(state.shuffleSeed) : 1;
@@ -571,24 +648,26 @@ export function parseStoredState(raw: string): StoredState {
       shuffleSeed,
     )] = legacyIndex;
   }
-  const normalizedReviews = (Array.isArray(state.reviews) ? state.reviews : [])
+  const normalizedReviewInput = (Array.isArray(state.reviews) ? state.reviews : [])
     .map(normalizeReview)
-    .filter((item): item is Review => item !== null)
-    .slice(-MAX_REVIEWS);
+    .filter((item): item is Review => item !== null);
 
   // 检测并去除重复 ID（保留最后出现的，与 IDB upsert 行为一致）
   const seenIds = new Set<string>();
   const dedupedReviews: Review[] = [];
-  for (let i = normalizedReviews.length - 1; i >= 0; i--) {
-    const review = normalizedReviews[i];
+  for (let i = normalizedReviewInput.length - 1; i >= 0; i--) {
+    const review = normalizedReviewInput[i];
     if (!seenIds.has(review.id)) {
       seenIds.add(review.id);
       dedupedReviews.unshift(review);
     }
   }
-  // 原地替换
-  normalizedReviews.length = 0;
-  normalizedReviews.push(...dedupedReviews);
+  // IndexedDB getAll() 按主键返回；统一按事件时间排序后再保留最近记录。
+  const normalizedReviews = dedupedReviews
+    .sort((a, b) =>
+      new Date(a.reviewedAt).getTime() - new Date(b.reviewedAt).getTime()
+      || a.id.localeCompare(b.id))
+    .slice(-MAX_REVIEWS);
 
   if (sourceVersion < 4) {
     const seen = new Set<number>();
@@ -598,9 +677,20 @@ export function parseStoredState(raw: string): StoredState {
       seen.add(review.wordId);
     }
   }
-  const normalizedProgress = state.wordProgress && typeof state.wordProgress === "object"
+  const rawProgress = state.wordProgress
+    && typeof state.wordProgress === "object"
+    && !Array.isArray(state.wordProgress)
+    ? state.wordProgress as Record<string, unknown>
+    : {};
+  const progressWordIds = new Set(
+    Object.keys(rawProgress)
+      .map(Number)
+      .filter(isValidStudyWordId)
+      .map(canonicalWordId),
+  );
+  const normalizedProgress = Object.keys(rawProgress).length
     ? Object.fromEntries(
-        Object.entries(state.wordProgress as Record<string, unknown>)
+        Object.entries(rawProgress)
           .map(([key, value]) => {
             const wordId = Number(key);
             return [canonicalWordId(wordId), normalizeWordProgress(value, wordId)];
@@ -615,61 +705,72 @@ export function parseStoredState(raw: string): StoredState {
   // 2) FSRS 卡缺失/损坏 → 仅对该词从 reviews 降级重建
   // 3) 无任何已存储进度 → 从 reviews 全量重建（旧版迁移路径）
   const healthyProgress: WordProgressMap = {};
-  const damagedWordIds = new Set<number>();
+  const damagedWordIds = new Set(progressWordIds);
 
   for (const [wordIdStr, item] of Object.entries(normalizedProgress)) {
     const wordId = Number(wordIdStr);
     const progress = item as WordProgress;
     if (progress.fsrsCard) {
       healthyProgress[wordId] = progress;
+      damagedWordIds.delete(wordId);
     } else {
       damagedWordIds.add(wordId);
     }
   }
 
-  let wordProgress: WordProgressMap;
+  const latestReviewAtByWordId = new Map<number, number>();
+  for (const review of normalizedReviews) {
+    if (review.wordId === undefined) continue;
+    latestReviewAtByWordId.set(
+      review.wordId,
+      Math.max(
+        latestReviewAtByWordId.get(review.wordId) ?? 0,
+        new Date(review.reviewedAt).getTime(),
+      ),
+    );
+  }
+  for (const [wordIdText, progress] of Object.entries(healthyProgress)) {
+    const wordId = Number(wordIdText);
+    const latestReviewAt = latestReviewAtByWordId.get(wordId);
+    if (
+      latestReviewAt !== undefined
+      && latestReviewAt > new Date(progress.lastReviewedAt).getTime()
+    ) {
+      delete healthyProgress[wordId];
+      damagedWordIds.add(wordId);
+    }
+  }
 
-  if (Object.keys(healthyProgress).length > 0 || normalizedReviews.length === 0) {
-    // 以健康进度为基底
-    wordProgress = { ...healthyProgress };
+  // reviews 中出现但 progress 缺失的词也必须进入逐词重建。
+  for (const review of normalizedReviews) {
+    if (review.wordId !== undefined && !healthyProgress[review.wordId]) {
+      damagedWordIds.add(review.wordId);
+    }
+  }
 
-    // 对 FSRS 卡缺失/损坏的词从 reviews 逐词重建
-    if (damagedWordIds.size > 0) {
-      const damagedReviews = normalizedReviews.filter(
-        (r) => r.wordId !== undefined && damagedWordIds.has(r.wordId),
-      );
-      if (damagedReviews.length > 0) {
-        const rebuilt = rebuildWordProgress(damagedReviews);
-        for (const [wordIdStr, rebuiltProgress] of Object.entries(rebuilt)) {
-          const wordId = Number(wordIdStr);
-          if (damagedWordIds.has(wordId)) {
-            const original = normalizedProgress[wordId];
-            if (original?.weakResolvedAt) {
-              rebuiltProgress.weakResolvedAt = original.weakResolvedAt;
-            }
-            wordProgress[wordId] = rebuiltProgress;
-            damagedWordIds.delete(wordId);
+  const wordProgress: WordProgressMap = { ...healthyProgress };
+  if (damagedWordIds.size > 0) {
+    const damagedReviews = normalizedReviews.filter(
+      (review) =>
+        review.wordId !== undefined && damagedWordIds.has(review.wordId),
+    );
+    if (damagedReviews.length > 0) {
+      const rebuilt = rebuildWordProgress(damagedReviews);
+      for (const [wordIdStr, rebuiltProgress] of Object.entries(rebuilt)) {
+        const wordId = Number(wordIdStr);
+        if (damagedWordIds.has(wordId)) {
+          const original = normalizedProgress[wordId];
+          if (original?.weakResolvedAt) {
+            rebuiltProgress.weakResolvedAt = original.weakResolvedAt;
           }
-        }
-      }
-      // 无 reviews 可重建的损坏条目：保留原始条目（不含 fsrsCard），
-      // 待首次评分后由 applyRating 生成新 FSRS 卡
-      for (const wordId of damagedWordIds) {
-        const original = normalizedProgress[wordId];
-        if (original) {
-          wordProgress[wordId] = original as WordProgress;
+          wordProgress[wordId] = rebuiltProgress;
+          damagedWordIds.delete(wordId);
         }
       }
     }
-  } else {
-    // 旧版迁移路径：无已存储进度，从 reviews 全量重建
-    wordProgress = rebuildWordProgress(normalizedReviews);
-    // 保留原进度中的 weakResolvedAt
-    for (const [wordIdStr, item] of Object.entries(normalizedProgress)) {
-      const wordId = Number(wordIdStr);
-      if (item.weakResolvedAt && wordProgress[wordId]) {
-        wordProgress[wordId].weakResolvedAt = item.weakResolvedAt;
-      }
+    // 无 reviews 可重建的损坏条目不再伪装成完整 WordProgress。
+    for (const wordId of damagedWordIds) {
+      delete wordProgress[wordId];
     }
   }
   const storedStubbornWords: StubbornWordMap = state.stubbornWords

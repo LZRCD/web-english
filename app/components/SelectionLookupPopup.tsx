@@ -1,26 +1,6 @@
 "use client";
 
-type LookupResult = {
-  query: string;
-  kind: "word" | "phrase" | "sentence";
-  phonetic: string;
-  phoneticSource?: "redbook" | "dictionary";
-  part: string;
-  meaning: string;
-  note: string;
-  source: "redbook" | "dictionary" | "ai";
-};
-
-type SelectionLookupState = {
-  query: string;
-  context: string;
-  x: number;
-  y: number;
-  status: "idle" | "loading" | "ready" | "error";
-  result?: LookupResult;
-  cached?: boolean;
-  error?: string;
-};
+import type { SelectionLookupState } from "../../lib/selection-lookup";
 
 type SelectionLookupPopupProps = {
   lookup: SelectionLookupState;

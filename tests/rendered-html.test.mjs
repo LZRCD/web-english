@@ -140,12 +140,26 @@ test("红宝书原声音频经逐词 ASR 校对并对低置信度片段使用 TT
 });
 
 test("全书乱序与本地状态保存已接入学习流程", async () => {
-  const [page, study, coach, enrich] = await Promise.all([
+  const [
+    page,
+    study,
+    persistenceHook,
+    coach,
+    enrich,
+    historyView,
+    settingsView,
+    searchPanel,
+  ] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/study.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/hooks/useStudyPersistence.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/coach/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/enrich/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/HistoryView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/SearchPanel.tsx", import.meta.url), "utf8"),
   ]);
+  const ui = [page, historyView, settingsView, searchPanel].join("\n");
 
   assert.match(study, /type StudyScope = "selection" \| "all"/);
   assert.match(page, /function startAllBookShuffle/);
@@ -153,12 +167,14 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /已打乱 \$\{learningItemCount\} 个学习项/);
   assert.match(page, /redbook-analysis\.json/);
   assert.match(page, /word-relation/);
-  assert.match(page, /loadStoredState\(\)/);
-  assert.match(page, /saveStoredState\(persistedState\)/);
-  assert.match(page, /buildActivityCalendar\(reviews, activityRange/);
+  assert.match(page, /useStudyPersistence/);
+  assert.match(persistenceHook, /loadStoredState\(\)/);
+  assert.match(persistenceHook, /persistStateSnapshot\(state\)/);
+  assert.match(persistenceHook, /saveStoredState\(state\)/);
+  assert.match(historyView, /buildActivityCalendar\(reviews, activityRange/);
   assert.match(page, /activityRangeLabels/);
-  assert.match(page, /selectedActivityDate/);
-  assert.match(page, /回到今天/);
+  assert.match(historyView, /selectedActivityDate/);
+  assert.match(historyView, /回到今天/);
   assert.match(study, /STORAGE_VERSION = 5/);
   assert.match(coach, /AbortSignal\.timeout\(15000\)/);
   assert.match(page, /function undoLastRating/);
@@ -172,12 +188,12 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /playRecordedWord/);
   assert.match(page, /浏览器 TTS 回退/);
   assert.match(page, /aria-keyshortcuts="E"/);
-  assert.match(page, /<kbd>E<\/kbd> 内容补充/);
+  assert.match(ui, /<kbd>E<\/kbd> 内容补充/);
   assert.match(page, /function submitReinforcement/);
   assert.match(page, /趁答案还在短时记忆里，再主动提取一次/);
   assert.match(page, /reinforcementRating === null \? "rating-bar visible"/);
-  assert.match(page, /全局查词/);
-  assert.match(page, /导出备份/);
+  assert.match(ui, /全局查词/);
+  assert.match(ui, /导出备份/);
   assert.match(enrich, /未配置云端模型/);
   assert.match(enrich, /collocations/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);

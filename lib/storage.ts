@@ -8,6 +8,32 @@ import type { SerializedFsrsCard } from "./learning.ts";
 export const DATABASE_NAME = "wordloop-local";
 export const DATABASE_VERSION = 2;
 const CHANNEL_NAME = "wordloop-state-changes";
+const CONCURRENT_WRITE_CODE = "CONCURRENT_WRITE";
+const STORAGE_SOURCE_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+let knownRevision: number | null = null;
+
+type StorageRevisionRecord = {
+  revision?: unknown;
+};
+
+/**
+ * 判断数据库中的 settings 是否仍是当前标签页已知的版本。
+ * knownRevision 为 null 表示尚未成功读取数据库，此时只允许初始化真正的空库。
+ */
+export function matchesKnownStorageRevision(
+  settings: StorageRevisionRecord | undefined,
+  expectedRevision: number | null,
+) {
+  if (expectedRevision === null) return settings === undefined;
+  if (settings === undefined) return expectedRevision === 0;
+
+  const revision = Number.isSafeInteger(settings.revision)
+    && Number(settings.revision) >= 0
+    ? Number(settings.revision)
+    : 0;
+  return revision === expectedRevision;
+}
 
 export const STORES = {
   settings: "settings",
@@ -101,8 +127,17 @@ function createStore(
 export function openWordLoopDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("本地数据库升级被其他页面阻塞"));
+    let settled = false;
+    request.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(request.error);
+    };
+    request.onblocked = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("本地数据库升级被其他页面阻塞"));
+    };
     request.onupgradeneeded = () => {
       const database = request.result;
       createStore(database, STORES.settings, "id");
@@ -116,7 +151,14 @@ export function openWordLoopDatabase() {
       createStore(database, STORES.fsrsCards, "wordId");
       createStore(database, STORES.stubbornWords, "wordId");
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close();
+        return;
+      }
+      settled = true;
+      resolve(request.result);
+    };
   });
 }
 
@@ -239,25 +281,31 @@ function putStore<T>(store: IDBObjectStore, values: T[], keyPath: string) {
 async function writeSnapshot(snapshot: IndexedStateSnapshot) {
   const database = await openWordLoopDatabase();
   try {
-    // 读取当前 revision 进行 CAS 检查
+    // 读取当前 revision，并与本标签页最后一次加载/保存的版本比较。
+    const baseRevision = knownRevision;
     const readTx = database.transaction(STORES.settings, "readonly");
     const currentSettings = await requestResult(
       readTx.objectStore(STORES.settings).get(CURRENT_STATE_ID),
     ) as StateSettings | undefined;
-    const currentRevision = currentSettings?.revision ?? 0;
+    // 未成功读取过数据库时，只允许创建真正的空数据库，不能覆盖缺 revision 的旧记录。
+    if (!matchesKnownStorageRevision(currentSettings, baseRevision)) {
+      throw new Error(`${CONCURRENT_WRITE_CODE}: 另一标签页已修改数据`);
+    }
 
-    // 递增 revision
-    const newRevision = currentRevision + 1;
+    const expectedRevision = baseRevision ?? 0;
+    const newRevision = expectedRevision + 1;
     snapshot.settings.revision = newRevision;
 
     const transaction = database.transaction([...STATE_STORE_NAMES], "readwrite");
     const completed = transactionCompleted(transaction);
 
-    // CAS：再次检查 revision 未被其他标签页修改
+    // 写事务获得锁后再次检查，覆盖“读取后、写入前”发生的竞争。
     const settingsStore = transaction.objectStore(STORES.settings);
     const recheck = await requestResult(settingsStore.get(CURRENT_STATE_ID)) as StateSettings | undefined;
-    if ((recheck?.revision ?? 0) !== currentRevision) {
-      throw new Error("CONCURRENT_WRITE: 另一标签页已修改数据");
+    if (!matchesKnownStorageRevision(recheck, baseRevision)) {
+      transaction.abort();
+      await completed.catch(() => undefined);
+      throw new Error(`${CONCURRENT_WRITE_CODE}: 另一标签页已修改数据`);
     }
 
     putStore(settingsStore, [snapshot.settings], "id");
@@ -270,11 +318,16 @@ async function writeSnapshot(snapshot: IndexedStateSnapshot) {
     putStore(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards, "wordId");
     putStore(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords, "wordId");
     await completed;
+    knownRevision = newRevision;
 
     // 通知其他标签页
     try {
       const bc = new BroadcastChannel(CHANNEL_NAME);
-      bc.postMessage({ revision: newRevision, timestamp: Date.now() });
+      bc.postMessage({
+        revision: newRevision,
+        sourceId: STORAGE_SOURCE_ID,
+        timestamp: Date.now(),
+      });
       bc.close();
     } catch {
       // BroadcastChannel 不可用时静默跳过
@@ -299,7 +352,9 @@ export function getLastSuccessfulWriteTime() {
 export function onRemoteChange(callback: () => void) {
   try {
     const bc = new BroadcastChannel(CHANNEL_NAME);
-    bc.onmessage = () => callback();
+    bc.onmessage = (event) => {
+      if (event.data?.sourceId !== STORAGE_SOURCE_ID) callback();
+    };
     return () => bc.close();
   } catch {
     return () => {};
@@ -308,32 +363,42 @@ export function onRemoteChange(callback: () => void) {
 
 let pendingWrite = Promise.resolve();
 
-export function saveStoredState(state: StoredState) {
+function enqueueSnapshot(state: StoredState) {
   const snapshot = splitStoredState(state);
   pendingWrite = pendingWrite
-    .catch((error) => {
-      lastWriteError = error;
-      throw error; // 重新抛出，让调用方能感知失败
-    })
+    .catch(() => undefined)
     .then(() => writeSnapshot(snapshot))
     .then(() => {
       lastWriteError = null;
       lastSuccessfulWrite = Date.now();
+    })
+    .catch((error) => {
+      lastWriteError = error;
+      throw error;
     });
   return pendingWrite;
 }
 
-/** 直接写入 IndexedDB，不经过防抖队列。用于导入等需要立即确认持久化的场景。 */
-export function saveStoredStateImmediate(state: StoredState) {
-  const snapshot = splitStoredState(state);
-  pendingWrite = writeSnapshot(snapshot).then(() => {
-    lastWriteError = null;
-    lastSuccessfulWrite = Date.now();
-  });
-  return pendingWrite;
+export function saveStoredState(state: StoredState) {
+  return enqueueSnapshot(state);
 }
 
-export async function loadStoredState() {
+/** 排在已有写入之后并立即确认持久化，供导入/恢复等权威写入使用。 */
+export function saveStoredStateImmediate(state: StoredState) {
+  return enqueueSnapshot(state);
+}
+
+export function isStorageConflictError(error: unknown) {
+  return error instanceof Error && error.message.startsWith(CONCURRENT_WRITE_CODE);
+}
+
+export type StoredStateRead = {
+  state: StoredState | null;
+  revision: number;
+};
+
+/** 读取一致快照但不接管 revision；跨标签同步确认未发生本地编辑后再接管。 */
+export async function readStoredState(): Promise<StoredStateRead> {
   const database = await openWordLoopDatabase();
   try {
     const transaction = database.transaction([...STATE_STORE_NAMES], "readonly");
@@ -360,8 +425,11 @@ export async function loadStoredState() {
       requestResult(transaction.objectStore(STORES.stubbornWords).getAll()),
     ]);
     await completed;
-    if (!settings) return null;
-    return combineStoredState({
+    if (!settings) return { state: null, revision: 0 };
+    const revision = Number.isSafeInteger((settings as StateSettings).revision)
+      ? (settings as StateSettings).revision
+      : 0;
+    const state = combineStoredState({
       settings: settings as StateSettings,
       reviews: reviews as IndexedStateSnapshot["reviews"],
       wordProgress: wordProgress as IndexedStateSnapshot["wordProgress"],
@@ -372,7 +440,21 @@ export async function loadStoredState() {
       fsrsCards: fsrsCards as IndexedStateSnapshot["fsrsCards"],
       stubbornWords: stubbornWords as IndexedStateSnapshot["stubbornWords"],
     });
+    return { state, revision };
   } finally {
     database.close();
   }
+}
+
+export function adoptStoredRevision(revision: number) {
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new Error("本地数据库版本无效");
+  }
+  knownRevision = revision;
+}
+
+export async function loadStoredState() {
+  const result = await readStoredState();
+  adoptStoredRevision(result.revision);
+  return result.state;
 }

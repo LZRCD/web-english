@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { splitMeaning, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
 import { wordRetrievability, type StubbornWordRecord, type WordProgress } from "../../lib/learning";
 
@@ -7,6 +8,7 @@ type FavoriteWordItem = SavedWord & { word: Word };
 type MistakeWordItem = MistakeRecord & { word: Word };
 type StubbornWordItem = { record: StubbornWordRecord; progress?: WordProgress; word: Word };
 type WordbookTab = "favorites" | "mistakes" | "stubborn" | "lookups";
+const WORDBOOK_TABS: WordbookTab[] = ["favorites", "mistakes", "stubborn", "lookups"];
 
 type WordbookViewProps = {
   activeTab: WordbookTab;
@@ -25,7 +27,7 @@ type WordbookViewProps = {
   onStartMistakes: () => void;
   onStartStubborn: () => void;
   onStartLookups: (wordIds?: number[]) => void;
-  onRemoveLookup: (query: string) => void;
+  onRemoveLookup: (word: LookupWord) => void;
   onNavigateLearn: () => void;
 };
 
@@ -50,6 +52,45 @@ export default function WordbookView({
   onNavigateLearn,
 }: WordbookViewProps) {
   const now = new Date(clock);
+  const batchAction = {
+    favorites: {
+      label: "复习全部收藏",
+      disabled: favoriteWords.length === 0,
+      run: onStartFavorites,
+    },
+    mistakes: {
+      label: "强化当前错词",
+      disabled: mistakeWords.length === 0,
+      run: onStartMistakes,
+    },
+    stubborn: {
+      label: "开始顽固词专项",
+      disabled: stubbornWordList.length === 0,
+      run: onStartStubborn,
+    },
+    lookups: {
+      label: "学习划词集",
+      disabled: lookupWords.length === 0,
+      run: () => onStartLookups(),
+    },
+  }[activeTab];
+  const moveTabFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = WORDBOOK_TABS.indexOf(activeTab);
+    const nextTab = event.key === "Home"
+      ? WORDBOOK_TABS[0]
+      : event.key === "End"
+        ? WORDBOOK_TABS.at(-1)!
+        : WORDBOOK_TABS[
+            (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + WORDBOOK_TABS.length)
+            % WORDBOOK_TABS.length
+          ];
+    onTabChange(nextTab);
+    requestAnimationFrame(() => {
+      document.getElementById(`wordbook-tab-${nextTab}`)?.focus();
+    });
+  };
 
   return (
     <div className="content-view">
@@ -65,16 +106,23 @@ export default function WordbookView({
           <span><strong>{lookupWords.length}</strong> 个划词</span>
         </div>
         <div className="wordbook-batch-actions">
-          <button onClick={onStartFavorites} disabled={!favoriteWords.length}>复习全部收藏</button>
-          <button onClick={onStartMistakes} disabled={!mistakeWords.length}>强化当前错词</button>
-          <button onClick={onStartStubborn} disabled={!stubbornWordList.length}>顽固词专项</button>
-          <button onClick={() => onStartLookups()} disabled={!lookupWords.length}>学习划词集</button>
+          <button onClick={batchAction.run} disabled={batchAction.disabled}>
+            {batchAction.label}
+          </button>
         </div>
       </div>
-      <div className="wordbook-tabs" role="tablist" aria-label="词本分类">
+      <div
+        className="wordbook-tabs"
+        role="tablist"
+        aria-label="词本分类"
+        onKeyDown={moveTabFocus}
+      >
         <button
           role="tab"
+          id="wordbook-tab-favorites"
+          aria-controls="wordbook-panel"
           aria-selected={activeTab === "favorites"}
+          tabIndex={activeTab === "favorites" ? 0 : -1}
           className={activeTab === "favorites" ? "active" : ""}
           onClick={() => onTabChange("favorites")}
         >
@@ -82,7 +130,10 @@ export default function WordbookView({
         </button>
         <button
           role="tab"
+          id="wordbook-tab-mistakes"
+          aria-controls="wordbook-panel"
           aria-selected={activeTab === "mistakes"}
+          tabIndex={activeTab === "mistakes" ? 0 : -1}
           className={activeTab === "mistakes" ? "active" : ""}
           onClick={() => onTabChange("mistakes")}
         >
@@ -90,7 +141,10 @@ export default function WordbookView({
         </button>
         <button
           role="tab"
+          id="wordbook-tab-stubborn"
+          aria-controls="wordbook-panel"
           aria-selected={activeTab === "stubborn"}
+          tabIndex={activeTab === "stubborn" ? 0 : -1}
           className={activeTab === "stubborn" ? "active" : ""}
           onClick={() => onTabChange("stubborn")}
         >
@@ -98,14 +152,22 @@ export default function WordbookView({
         </button>
         <button
           role="tab"
+          id="wordbook-tab-lookups"
+          aria-controls="wordbook-panel"
           aria-selected={activeTab === "lookups"}
+          tabIndex={activeTab === "lookups" ? 0 : -1}
           className={activeTab === "lookups" ? "active" : ""}
           onClick={() => onTabChange("lookups")}
         >
           划词集 <span>{lookupWords.length}</span>
         </button>
       </div>
-      <div className="saved-word-grid">
+      <div
+        className="saved-word-grid"
+        id="wordbook-panel"
+        role="tabpanel"
+        aria-labelledby={`wordbook-tab-${activeTab}`}
+      >
         {activeTab === "favorites" && favoriteWords.map((item) => (
           <article className="saved-word-card" key={item.wordId}>
             <div className="saved-word-mark">{item.word.word.slice(0, 1).toUpperCase()}</div>
@@ -151,7 +213,7 @@ export default function WordbookView({
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>
                 当前 R {item.progress ? wordRetrievability(item.progress, now) : 0}%
-                {" · "}连续 3 次"认识/熟练"后自动退出
+                {" · "}连续 3 次“认识/熟练”后自动退出
               </small>
             </div>
             <div className="saved-word-actions">
@@ -166,7 +228,12 @@ export default function WordbookView({
           </article>
         ))}
         {activeTab === "lookups" && lookupWords.map((item) => (
-          <article className="saved-word-card lookup-word-card" key={item.query.toLowerCase()}>
+          <article
+            className="saved-word-card lookup-word-card"
+            key={item.linkedWordId === undefined
+              ? `lookup:${item.query.toLowerCase()}`
+              : `redbook:${item.linkedWordId}`}
+          >
             <div className="saved-word-mark">↳</div>
             <div className="saved-word-copy">
               <div>
@@ -185,10 +252,10 @@ export default function WordbookView({
               </small>
             </div>
             <div className="saved-word-actions">
-              <button onClick={() => onStartLookups([item.id])}>去学习</button>
+              <button onClick={() => onStartLookups([item.linkedWordId ?? item.id])}>去学习</button>
               <button
                 className="quiet"
-                onClick={() => onRemoveLookup(item.query)}
+                onClick={() => onRemoveLookup(item)}
               >
                 移除
               </button>
@@ -207,7 +274,7 @@ export default function WordbookView({
           <div className="wordbook-empty">
             <span>✓</span>
             <h2>暂时没有错词</h2>
-            <p>评分为"忘记"或"模糊"的单词会自动记录在这里。</p>
+            <p>评分为“忘记”或“模糊”的单词会自动记录在这里。</p>
             <button onClick={onNavigateLearn}>继续学习</button>
           </div>
         )}
@@ -223,7 +290,7 @@ export default function WordbookView({
           <div className="wordbook-empty">
             <span>↳</span>
             <h2>还没有划词记录</h2>
-            <p>在学习卡正文中划选英文，点击"翻译"后会自动收进这里。</p>
+            <p>在学习卡正文中划选英文，点击“翻译”后会自动收进这里。</p>
             <button onClick={onNavigateLearn}>去划词</button>
           </div>
         )}

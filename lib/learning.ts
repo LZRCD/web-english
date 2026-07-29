@@ -13,10 +13,19 @@ import { canonicalWordId } from "./redbook.ts";
 export type Rating = 0 | 1 | 2 | 3;
 export type ReviewKind = "new" | "review";
 export type MemoryStatus = "learning" | "reviewing" | "mastered";
-export type SessionKind = "today" | "favorites" | "mistakes" | "search" | "lookups";
+export type SessionKind =
+  | "today"
+  | "favorites"
+  | "mistakes"
+  | "stubborn"
+  | "search"
+  | "lookups"
+  | "reinforcement";
 
 export type ReviewEvent = {
   id: string;
+  /** 评分所属学习会话；旧记录可缺省。 */
+  sessionId?: string;
   wordId?: number;
   word: string;
   rating: Rating;
@@ -63,6 +72,8 @@ export type WordProgressMap = Record<number, WordProgress>;
 export type StudySession = {
   id: string;
   kind: SessionKind;
+  /** 强化会话完成后返回原始入口。 */
+  originKind?: Exclude<SessionKind, "reinforcement">;
   title: string;
   wordIds: number[];
   index: number;
@@ -200,6 +211,7 @@ export function applyRating(
     unit?: number | string;
     reviewId?: string;
     recallMs?: number;
+    sessionId?: string;
   },
 ): RatingResult {
   const wordId = canonicalWordId(input.wordId);
@@ -245,6 +257,7 @@ export function applyRating(
   return {
     review: {
       id: input.reviewId ?? createReviewId(wordId, input.reviewedAt),
+      sessionId: input.sessionId,
       wordId,
       word: input.word,
       rating,
@@ -554,11 +567,13 @@ export function createStudySession(
   title: string,
   wordIds: number[],
   now = new Date(),
+  originKind?: Exclude<SessionKind, "reinforcement">,
 ): StudySession {
   const canonicalIds = wordIds.map(canonicalWordId);
   return {
     id: `${kind}:${now.toISOString()}`,
     kind,
+    originKind,
     title,
     wordIds: canonicalIds.filter((wordId, index) =>
       canonicalIds.indexOf(wordId) === index),

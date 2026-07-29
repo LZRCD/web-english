@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
+/.wordloop-runtime/
 
 # next.js
 /.next/

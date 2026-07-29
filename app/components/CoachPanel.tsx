@@ -32,7 +32,12 @@ export default function CoachPanel({
   onClose,
 }: CoachPanelProps) {
   return (
-    <aside className={open ? "coach-panel open" : "coach-panel"} aria-label="AI 记忆教练">
+    <aside
+      className={open ? "coach-panel open" : "coach-panel"}
+      aria-label="AI 记忆教练"
+      aria-hidden={!open}
+      inert={!open}
+    >
       <div className="coach-head">
         <div><span className="coach-badge">AI</span><div><strong>记忆教练</strong><small>围绕 {word}</small></div></div>
         <button onClick={onClose} aria-label="关闭 AI 教练">×</button>

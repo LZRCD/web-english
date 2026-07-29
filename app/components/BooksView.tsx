@@ -33,6 +33,7 @@ export default function BooksView({
   onAllShuffle,
 }: BooksViewProps) {
   const now = new Date(clock);
+  const due = new Set(dueWordIds(wordProgress, now));
 
   return (
     <div className="content-view">
@@ -50,7 +51,6 @@ export default function BooksView({
             .map((word) => word.id!);
           const learned = bookWordIds.filter((wordId) => wordProgress[wordId]).length;
           const mastered = bookWordIds.filter((wordId) => wordProgress[wordId]?.status === "mastered").length;
-          const due = new Set(dueWordIds(wordProgress, now));
           const dueCount = bookWordIds.filter((wordId) => due.has(wordId)).length;
           return (
           <button className="book-card" key={book.name} onClick={() => {

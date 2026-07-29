@@ -33,6 +33,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
     || target.closest('[role="textbox"]') !== null
     || target.closest('[role="searchbox"]') !== null
     || target.closest('[role="combobox"]') !== null
+    || target.closest('a, summary, [role="button"], [role="link"]') !== null
   );
 }
 
@@ -42,8 +43,11 @@ export function useKeyboardShortcuts({
 }: KeyboardShortcutsOptions) {
   const shortcutsRef = useRef(shortcuts);
   const pausedRef = useRef(paused);
-  shortcutsRef.current = shortcuts;
-  pausedRef.current = paused;
+
+  useEffect(() => {
+    shortcutsRef.current = shortcuts;
+    pausedRef.current = paused;
+  }, [paused, shortcuts]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

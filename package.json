@@ -15,7 +15,8 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/study.test.ts",
+    "test": "npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/study.test.ts tests/insights.test.ts tests/data-integrity.test.ts tests/session-summary.test.ts tests/study-session.test.ts",
+    "test:e2e": "playwright test --config playwright.config.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit"
   },
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

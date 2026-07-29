@@ -1,4 +1,7 @@
-import type { StoredState } from "./study.ts";
+import {
+  STORAGE_VERSION,
+  type StoredState,
+} from "./study.ts";
 import {
   openWordLoopDatabase,
   requestResult,
@@ -37,11 +40,16 @@ export function createBackupDocument(
 }
 
 export function parseBackupDocument(raw: string) {
-  const value = JSON.parse(raw) as Partial<BackupDocument>;
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("不是有效的词环备份文件");
+  }
+  const value = parsed as Partial<BackupDocument>;
   if (
     value.format !== BACKUP_FORMAT
     || !value.state
     || typeof value.state !== "object"
+    || Array.isArray(value.state)
     || typeof value.exportedAt !== "string"
   ) {
     throw new Error("不是有效的词环备份文件");
@@ -50,11 +58,19 @@ export function parseBackupDocument(raw: string) {
   if (Number.isNaN(new Date(value.exportedAt).getTime())) {
     throw new Error("备份文件导出日期无效");
   }
-  // 拒绝未来 schema 版本
-  const STORAGE_VERSION = 5;
-  if (typeof value.schemaVersion === "number" && value.schemaVersion > STORAGE_VERSION) {
+  const documentVersion = Number(value.schemaVersion);
+  const stateVersion = Number((value.state as { schemaVersion?: unknown }).schemaVersion);
+  if (
+    !Number.isSafeInteger(documentVersion)
+    || documentVersion < 1
+    || !Number.isSafeInteger(stateVersion)
+    || stateVersion !== documentVersion
+  ) {
+    throw new Error("备份文件版本信息不一致");
+  }
+  if (documentVersion > STORAGE_VERSION) {
     throw new Error(
-      `备份文件来自更新版本的词环（v${value.schemaVersion}），当前版本为 v${STORAGE_VERSION}，请升级后再导入`,
+      `备份文件来自更新版本的词环（v${documentVersion}），当前版本为 v${STORAGE_VERSION}，请升级后再导入`,
     );
   }
   return value as BackupDocument;

@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  adaptiveNewWordGoal,
-  type ExamPlan,
-} from "../../lib/learning";
+import type { ChangeEvent, RefObject } from "react";
+import type { ExamPlan } from "../../lib/learning";
 import type { AutomaticBackup } from "../../lib/backup";
 import type { StudyMode, StudyScope } from "../../lib/study";
 
@@ -21,6 +19,16 @@ type SettingsViewProps = {
   automaticBackups: AutomaticBackup[];
   stats: { dueCount: number };
   effectiveNewGoal: number;
+  saveStatus: "idle" | "saving" | "saved" | "fallback" | "error";
+  lastSaveTime: number;
+  dataActionsDisabled: boolean;
+  dataReplacementDisabled: boolean;
+  dataActionsLoading: "hydrating" | "authoritative" | null;
+  recoveryCopies: Array<{
+    id: string;
+    createdAt: string;
+    restorable: boolean;
+  }>;
   onDailyGoalChange: (value: number) => void;
   onAdaptiveChange: (value: boolean) => void;
   onMinWordsChange: (value: number) => void;
@@ -29,11 +37,14 @@ type SettingsViewProps = {
   onModeChange: (mode: StudyMode | "all") => void;
   onExportBackup: () => void;
   onImportClick: () => void;
+  onImportBackup: (event: ChangeEvent<HTMLInputElement>) => void;
   onRestoreBackup: (id: string) => void;
+  onRetrySave: () => void;
+  onExportRecovery: (id: string) => void;
+  onRestoreRecovery: (id: string) => void;
+  onDiscardRecovery: (id: string) => void;
   onResetRecords: () => void;
-  importInputRef: React.RefObject<HTMLInputElement | null>;
-  startAllBookShuffle: (openLearning?: boolean) => void;
-  changeStudyMode: (mode: StudyMode) => void;
+  importInputRef: RefObject<HTMLInputElement | null>;
 };
 
 export default function SettingsView({
@@ -50,6 +61,12 @@ export default function SettingsView({
   automaticBackups,
   stats,
   effectiveNewGoal,
+  saveStatus,
+  lastSaveTime,
+  dataActionsDisabled,
+  dataReplacementDisabled,
+  dataActionsLoading,
+  recoveryCopies,
   onDailyGoalChange,
   onAdaptiveChange,
   onMinWordsChange,
@@ -58,19 +75,44 @@ export default function SettingsView({
   onModeChange,
   onExportBackup,
   onImportClick,
+  onImportBackup,
   onRestoreBackup,
+  onRetrySave,
+  onExportRecovery,
+  onRestoreRecovery,
+  onDiscardRecovery,
   onResetRecords,
   importInputRef,
-  startAllBookShuffle,
-  changeStudyMode,
 }: SettingsViewProps) {
+  const dataActionsLocked = dataActionsDisabled || dataActionsLoading !== null;
+  const dataReplacementLocked =
+    dataActionsLocked || dataReplacementDisabled;
+  const dataActionsStatus = dataActionsLoading === "hydrating"
+    ? "正在读取本地数据，数据操作暂不可用…"
+    : dataActionsLoading === "authoritative"
+      ? "正在安全写入数据，请稍候…"
+      : dataReplacementDisabled
+        ? "本地数据尚未安全载入，可导出、导入备份或重试保存。"
+        : dataActionsDisabled
+          ? "数据操作暂不可用，请稍候…"
+          : "";
+
   return (
     <div className="content-view settings-view">
       <div className="section-heading"><div><p className="eyebrow">偏好设置</p><h1>把节奏调成你的样子</h1></div></div>
-      <div className="settings-panel">
+      {dataActionsStatus && (
+        <p className="data-actions-status" role="status" aria-live="polite">
+          {dataActionsStatus}
+        </p>
+      )}
+      <div className="settings-panel" aria-busy={dataActionsLocked}>
         <label>
           <span><strong>每日新词</strong><small>保持一个能够长期坚持的数量</small></span>
-          <select value={dailyGoal} onChange={(event) => onDailyGoalChange(Number(event.target.value))}>
+          <select
+            value={dailyGoal}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onDailyGoalChange(Number(event.target.value))}
+          >
             <option value={10}>10 词</option>
             <option value={20}>20 词</option>
             <option value={30}>30 词</option>
@@ -89,6 +131,7 @@ export default function SettingsView({
           <input
             type="checkbox"
             checked={adaptiveNewWords}
+            disabled={dataReplacementLocked}
             onChange={(event) => onAdaptiveChange(event.target.checked)}
           />
         </label>
@@ -99,7 +142,7 @@ export default function SettingsView({
           </span>
           <select
             value={minimumNewWords}
-            disabled={!adaptiveNewWords}
+            disabled={!adaptiveNewWords || dataReplacementLocked}
             onChange={(event) => onMinWordsChange(Number(event.target.value))}
           >
             <option value={0}>0 词</option>
@@ -125,22 +168,26 @@ export default function SettingsView({
           <input
             type="date"
             value={examDate}
+            disabled={dataReplacementLocked}
             onChange={(event) => onExamDateChange(event.target.value)}
             aria-label="考研日期"
           />
         </label>
         <label>
           <span><strong>自动播放发音</strong><small>切换到下一个单词时播放美音</small></span>
-          <input type="checkbox" checked={soundOn} onChange={(event) => onSoundChange(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={soundOn}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onSoundChange(event.target.checked)}
+          />
         </label>
         <label>
           <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 {learningItemCount} 个学习项</small></span>
           <select
             value={studyScope === "all" ? "all" : studyMode}
-            onChange={(event) => {
-              if (event.target.value === "all") startAllBookShuffle(false);
-              else changeStudyMode(event.target.value as StudyMode);
-            }}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onModeChange(event.target.value as StudyMode | "all")}
           >
             <option value="ordered">红宝书顺序</option>
             <option value="shuffled">当前范围乱序</option>
@@ -161,12 +208,30 @@ export default function SettingsView({
                 ? `最近自动快照：${new Date(automaticBackups[0].createdAt).toLocaleString("zh-CN")}`
                 : "每天自动保存快照，也可导出为 JSON 文件"}
             </small>
+            {saveStatus !== "idle" && (
+              <small className={`save-status save-status--${saveStatus}`}>
+                {saveStatus === "saving" && "保存中…"}
+                {saveStatus === "saved" && `已保存 ${new Date(lastSaveTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`}
+                {saveStatus === "fallback" && "已保存到本机兼容存储"}
+                {saveStatus === "error" && "保存失败，请先导出备份或重试"}
+              </small>
+            )}
           </span>
           <div>
-            <button type="button" onClick={onExportBackup}>导出备份</button>
-            <button type="button" onClick={onImportClick}>导入备份</button>
+            <button type="button" disabled={dataActionsLocked} onClick={onExportBackup}>导出备份</button>
+            <button type="button" disabled={dataActionsLocked} onClick={onImportClick}>导入备份</button>
+            {saveStatus === "error" && (
+              <button type="button" className="quiet" disabled={dataActionsLocked} onClick={onRetrySave}>
+                重试保存
+              </button>
+            )}
             {automaticBackups[0] && (
-              <button type="button" className="quiet" onClick={() => onRestoreBackup(automaticBackups[0].id)}>
+              <button
+                type="button"
+                className="quiet"
+                disabled={dataReplacementLocked}
+                onClick={() => onRestoreBackup(automaticBackups[0].id)}
+              >
                 恢复最近快照
               </button>
             )}
@@ -176,10 +241,60 @@ export default function SettingsView({
             type="file"
             accept="application/json,.json"
             hidden
-            onChange={() => {}}
+            disabled={dataActionsLocked}
+            onChange={onImportBackup}
           />
         </div>
-        <button className="reset-button" onClick={onResetRecords}>
+        {recoveryCopies.length > 0 && (
+          <div className="backup-settings recovery-settings" role="status">
+            <span>
+              <strong>发现 {recoveryCopies.length} 份未合并的恢复副本</strong>
+              {recoveryCopies.map((copy, index) => (
+                <small key={copy.id}>
+                  {index + 1}. {new Date(copy.createdAt).toLocaleString("zh-CN")}
+                  {copy.restorable ? " · 可恢复" : " · 仅可导出"}
+                </small>
+              ))}
+            </span>
+            <div className="recovery-copy-actions">
+              {recoveryCopies.map((copy, index) => (
+                <div key={copy.id}>
+                  <small>副本 {index + 1}</small>
+                  <button
+                    type="button"
+                    disabled={dataActionsLocked}
+                    onClick={() => onExportRecovery(copy.id)}
+                  >
+                    导出
+                  </button>
+                  {copy.restorable && (
+                    <button
+                      type="button"
+                      disabled={dataReplacementLocked}
+                      onClick={() => onRestoreRecovery(copy.id)}
+                    >
+                      恢复
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="quiet"
+                    disabled={dataActionsLocked}
+                    onClick={() => onDiscardRecovery(copy.id)}
+                  >
+                    删除
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <button
+          type="button"
+          className="reset-button"
+          disabled={dataReplacementLocked}
+          onClick={onResetRecords}
+        >
           清空本机学习记录
         </button>
       </div>

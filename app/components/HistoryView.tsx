@@ -1,7 +1,7 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { dateKey, formatDueTime, buildActivityCalendar, type Review } from "../../lib/study";
-import type { WordProgressMap } from "../../lib/learning";
 import type { LearningInsights, ReviewForecastDay } from "../../lib/insights";
 
 type ActivityRange = 140 | 182 | 365;
@@ -19,7 +19,6 @@ type HistoryViewProps = {
   effectiveNewGoal: number;
   dailyGoal: number;
   reviews: Review[];
-  wordProgress: WordProgressMap;
   clock: number;
   activityRange: ActivityRange;
   activityOffset: number;
@@ -40,7 +39,6 @@ export default function HistoryView({
   effectiveNewGoal,
   dailyGoal,
   reviews,
-  wordProgress,
   clock,
   activityRange,
   activityOffset,
@@ -88,6 +86,34 @@ export default function HistoryView({
   const selectedWeakCount = selectedDayReviews.filter((review) => review.rating <= 1).length;
   const selectedDayNewCount = selectedDayEvents.filter((review) => review.kind === "new").length;
   const recentReviews = [...reviews].reverse().slice(0, 8);
+  const forecastMax = Math.max(1, ...reviewForecast.map((day) => day.count));
+  const activityTabDate = selectedActivityDate
+    || (activityDays.some((day) => day.date === todayKey)
+      ? todayKey
+      : activityDays.at(-1)?.date);
+  const moveActivityFocus = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    const offset = {
+      ArrowLeft: -7,
+      ArrowRight: 7,
+      ArrowUp: -1,
+      ArrowDown: 1,
+    }[event.key];
+    if (offset === undefined) return;
+    event.preventDefault();
+    const nextIndex = Math.min(
+      activityDays.length - 1,
+      Math.max(0, index + offset),
+    );
+    const nextDate = activityDays[nextIndex]?.date;
+    if (!nextDate) return;
+    onSelectDate(nextDate);
+    requestAnimationFrame(() => {
+      document.getElementById(`activity-${nextDate}`)?.focus();
+    });
+  };
 
   return (
     <div className="content-view">
@@ -147,12 +173,14 @@ export default function HistoryView({
             </div>
             <div className="forecast-bars">
               {reviewForecast.map((day) => {
-                const maxCount = Math.max(1, ...reviewForecast.map((d) => d.count));
                 const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
                 return (
                   <div className="forecast-day" key={day.date} title={`${day.date} · ${day.count} 词到期`}>
                     <small>{day.date.slice(5)}</small>
-                    <div className={`forecast-bar level-${level}`} style={{ height: `${Math.max(4, (day.count / maxCount) * 48)}px` }} />
+                    <div
+                      className={`forecast-bar level-${level}`}
+                      style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
+                    />
                     <span>{day.count}</span>
                   </div>
                 );
@@ -192,7 +220,7 @@ export default function HistoryView({
                   aria-label="查看更早日期"
                   title="查看更早日期"
                   onClick={() => {
-                    onActivityNavigate(activityRange);
+                    onActivityNavigate(1);
                     onSelectDate("");
                   }}
                 >
@@ -204,7 +232,7 @@ export default function HistoryView({
                   title="查看更近日期"
                   disabled={activityOffset === 0}
                   onClick={() => {
-                    onActivityNavigate(Math.max(0, activityOffset - activityRange) - activityOffset);
+                    onActivityNavigate(-1);
                     onSelectDate("");
                   }}
                 >
@@ -228,14 +256,17 @@ export default function HistoryView({
         </div>
         <div className="activity-scroll">
           <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
-            {activityDays.map((day) => (
+            {activityDays.map((day, index) => (
               <button
                 type="button"
+                id={`activity-${day.date}`}
                 key={day.date}
                 className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
                 title={`${day.date} · ${day.count} 词`}
                 aria-label={`${day.date}，背诵 ${day.count} 个单词`}
                 aria-pressed={day.date === selectedActivityDate}
+                tabIndex={day.date === activityTabDate ? 0 : -1}
+                onKeyDown={(event) => moveActivityFocus(event, index)}
                 onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
               />
             ))}
