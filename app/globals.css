@@ -1075,6 +1075,41 @@ select:focus-visible {
   cursor: default;
 }
 
+.sense-examples-label {
+  display: block;
+  color: #33936a;
+  font: 700 9px/1 "Courier New", monospace;
+  letter-spacing: 0.08em;
+  margin-bottom: 9px;
+}
+
+.sense-examples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.sense-example {
+  display: grid;
+  gap: 4px;
+}
+
+.sense-example strong {
+  color: #459b75;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sense-example .context-sentence {
+  font: 500 14px/1.55 Georgia, serif;
+}
+
+.sense-example .context-translation {
+  margin-top: 2px !important;
+}
+
 .collocation-block {
   border-left: 2px solid #b7dbc7;
   padding: 4px 0 4px 12px;
@@ -1289,6 +1324,30 @@ select:focus-visible {
 .selection-lookup-query small {
   color: #7f8881;
   font: 500 11px/1 "Courier New", monospace;
+}
+
+.selection-lookup-speak {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 27px;
+  height: 27px;
+  border: 1px solid #cde3d6;
+  border-radius: 9px;
+  background: #f0f8f3;
+  color: #2f7f5b;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.selection-lookup-speak:hover {
+  border-color: #9fc8b1;
+  background: #e6f5ec;
+}
+
+.selection-lookup-speak:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .selection-lookup-action {
@@ -2667,6 +2726,48 @@ kbd {
   color: #8ce0b8;
   font-weight: 700;
   cursor: pointer;
+}
+
+.undo-forever {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 75;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #cfe0d5;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #2f7f5b;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(29, 52, 39, 0.14);
+  animation: panel-in 180ms ease-out both;
+}
+
+.undo-forever:hover {
+  border-color: #9fc8b1;
+  background: #f0f8f3;
+}
+
+.undo-forever span {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.undo-forever small {
+  margin-left: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #4b9c75;
+  color: #fff;
+  font: 700 9px/1.6 "Courier New", monospace;
+  text-align: center;
 }
 
 .search-backdrop {

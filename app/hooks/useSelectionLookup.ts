@@ -34,6 +34,7 @@ type DictionaryEntry = [
   translation: string,
 ];
 type DictionaryShard = Record<string, DictionaryEntry>;
+type PhoneticIndex = Record<string, string>;
 
 type CommonOptions = {
   current: Word;
@@ -67,6 +68,7 @@ export type UseSelectionLookupResult = {
 
 const LOOKUP_CACHE_KEY = "wordloop-selection-lookups-v1";
 const DICTIONARY_BASE_PATH = "/data/dictionary";
+const PHONETIC_INDEX_PATH = "/data/phonetic-index.json";
 
 function readLookupCache() {
   try {
@@ -86,6 +88,31 @@ function writeLookupCache(cache: Record<string, LookupResult>) {
   try {
     localStorage.setItem(LOOKUP_CACHE_KEY, JSON.stringify(cache));
   } catch {}
+}
+
+/** 由红宝书词条构建划词结果；phonetic 可来自词典音标索引 */
+function redbookLookupResult(
+  localWord: Word,
+  phonetic: string,
+): LookupResult {
+  const parsed = splitMeaning(localWord.meaning);
+  return {
+    linkedWordId: localWord.id,
+    query: localWord.word,
+    kind: localWord.word.includes(" ") ? "phrase" : "word",
+    phonetic,
+    phoneticSource: localWord.phonetic
+      ? "redbook"
+      : phonetic
+        ? "dictionary"
+        : undefined,
+    part: localWord.part ?? parsed.part,
+    meaning: parsed.meaning,
+    note: `${localWord.section ?? "红宝书"}${
+      localWord.unit ? ` · Unit ${localWord.unit}` : ""
+    }`,
+    source: "redbook",
+  };
 }
 
 export function useSelectionLookup(
@@ -111,6 +138,8 @@ export function useSelectionLookup(
   const lookupCacheRef = useRef<Record<string, LookupResult>>({});
   const dictionaryShardCacheRef =
     useRef<Record<string, DictionaryShard>>({});
+  const phoneticIndexRef = useRef<PhoneticIndex>({});
+  const [phoneticIndexReady, setPhoneticIndexReady] = useState(false);
 
   const closeSelectionLookup = useCallback(() => {
     lookupAbortRef.current?.abort();
@@ -165,6 +194,78 @@ export function useSelectionLookup(
     [],
   );
 
+  /** 词典音标索引（秒级）优先，分片兜底 */
+  const lookupLocalPhonetic = useCallback(
+    async (query: string): Promise<string> => {
+      const normalized = query.trim().toLowerCase();
+      const indexed = phoneticIndexRef.current[normalized];
+      if (indexed) return indexed;
+      const result = await findInLocalDictionary(query).catch(() => null);
+      return result?.phonetic ?? "";
+    },
+    [findInLocalDictionary],
+  );
+
+  /** 同步解析已知词：红宝书词 / 已存划词 / 已缓存结果。命中返回结果，否则 null。 */
+  const resolveKnownLocal = useCallback((
+    query: string,
+    context: string,
+  ): { result: LookupResult; cached: boolean } | null => {
+    const normalizedQuery = query.toLowerCase();
+    const localWord = wordByText.exact.get(query.trim())
+      ?? wordByText.folded.get(normalizedQuery)?.[0];
+    if (localWord) {
+      const phonetic = localWord.phonetic
+        || phoneticIndexRef.current[normalizedQuery]
+        || "";
+      if (localWord.id !== undefined && phonetic) {
+        setDictionaryPhonetics((items) => ({
+          ...items,
+          [localWord.id!]: phonetic,
+        }));
+      }
+      return {
+        result: redbookLookupResult(localWord, phonetic),
+        cached: false,
+      };
+    }
+
+    const savedLookup = lookupWords.find(
+      (item) => item.query.toLowerCase() === normalizedQuery,
+    );
+    if (savedLookup) {
+      const phonetic = savedLookup.source === "ai"
+        ? phoneticIndexRef.current[normalizedQuery] || savedLookup.phonetic
+        : savedLookup.phonetic;
+      return {
+        result: {
+          query: savedLookup.query,
+          kind: savedLookup.kind,
+          phonetic,
+          phoneticSource: savedLookup.source === "ai"
+            ? (phonetic ? "dictionary" : undefined)
+            : savedLookup.phoneticSource,
+          part: savedLookup.part,
+          meaning: savedLookup.meaning,
+          note: savedLookup.note,
+          source: savedLookup.source,
+        },
+        cached: true,
+      };
+    }
+
+    const cacheKey = JSON.stringify([normalizedQuery, context.toLowerCase()]);
+    const cached = lookupCacheRef.current[cacheKey];
+    if (cached) {
+      return { result: cached, cached: true };
+    }
+    return null;
+  }, [
+    lookupWords,
+    setDictionaryPhonetics,
+    wordByText,
+  ]);
+
   const handleTextSelection = useCallback(async (
     event: ReactMouseEvent<HTMLElement>,
   ) => {
@@ -214,8 +315,53 @@ export function useSelectionLookup(
       .slice(0, 500);
 
     lookupAbortRef.current?.abort();
+    const resolved = resolveKnownLocal(query, context);
+    if (resolved) {
+      saveLookupWord(resolved.result);
+      setSelectionLookup({
+        query,
+        context,
+        x,
+        y,
+        status: "ready",
+        result: resolved.result,
+        cached: resolved.cached,
+      });
+      // 红宝书词索引未命中音标时，后台用词典分片补全
+      if (
+        resolved.result.source === "redbook"
+        && !resolved.result.phonetic
+      ) {
+        findInLocalDictionary(query)
+          .then((dictionaryResult) => {
+            if (!dictionaryResult?.phonetic) return;
+            setSelectionLookup((state) =>
+              state
+              && state.query === query
+              && state.result?.source === "redbook"
+              && !state.result.phonetic
+                ? {
+                    ...state,
+                    result: {
+                      ...state.result,
+                      phonetic: dictionaryResult.phonetic,
+                      phoneticSource: "dictionary",
+                    },
+                  }
+                : state);
+          })
+          .catch(() => {});
+      }
+      return;
+    }
     setSelectionLookup({ query, context, x, y, status: "idle" });
-  }, [current.meaning, current.sentence]);
+  }, [
+    current.meaning,
+    current.sentence,
+    findInLocalDictionary,
+    resolveKnownLocal,
+    saveLookupWord,
+  ]);
 
   const translateSelection = useCallback(async (
     translateOptions: { forceAi?: boolean } = {},
@@ -223,114 +369,43 @@ export function useSelectionLookup(
     if (!selectionLookup || selectionLookup.status === "loading") return;
     const { query, context, x, y } = selectionLookup;
     const normalizedQuery = query.toLowerCase();
-    const localWord = wordByText.exact.get(query.trim())
-      ?? wordByText.folded.get(normalizedQuery)?.[0];
-    if (localWord && !translateOptions.forceAi) {
-      const parsed = splitMeaning(localWord.meaning);
-      const dictionaryResult = localWord.phonetic
-        ? null
-        : await findInLocalDictionary(query).catch(() => null);
-      const phonetic =
-        localWord.phonetic || dictionaryResult?.phonetic || "";
-      if (localWord.id !== undefined && phonetic) {
-        setDictionaryPhonetics((items) => ({
-          ...items,
-          [localWord.id!]: phonetic,
-        }));
+
+    if (!translateOptions.forceAi) {
+      const known = resolveKnownLocal(query, context);
+      if (known) {
+        saveLookupWord(known.result);
+        setSelectionLookup({
+          query,
+          context,
+          x,
+          y,
+          status: "ready",
+          result: known.result,
+          cached: known.cached,
+        });
+        // 已知结果仍缺音标时（非红宝书词典词），后台用词典分片补全
+        if (!known.result.phonetic) {
+          lookupLocalPhonetic(query)
+            .then((phonetic) => {
+              if (!phonetic) return;
+              setSelectionLookup((state) =>
+                state
+                && state.query === query
+                && !state.result?.phonetic
+                  ? {
+                      ...state,
+                      result: {
+                        ...state.result!,
+                        phonetic,
+                        phoneticSource: "dictionary",
+                      },
+                    }
+                  : state);
+            })
+            .catch(() => {});
+        }
+        return;
       }
-      const result: LookupResult = {
-        linkedWordId: localWord.id,
-        query: localWord.word,
-        kind: localWord.word.includes(" ") ? "phrase" : "word",
-        phonetic,
-        phoneticSource: localWord.phonetic
-          ? "redbook"
-          : phonetic
-            ? "dictionary"
-            : undefined,
-        part: localWord.part ?? parsed.part,
-        meaning: parsed.meaning,
-        note: `${localWord.section ?? "红宝书"}${
-          localWord.unit ? ` · Unit ${localWord.unit}` : ""
-        }`,
-        source: "redbook",
-      };
-      saveLookupWord(result);
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result,
-      });
-      return;
-    }
-
-    const savedLookup = lookupWords.find(
-      (item) => item.query.toLowerCase() === normalizedQuery,
-    );
-    if (savedLookup && !translateOptions.forceAi) {
-      const dictionaryResult = savedLookup.source === "ai"
-        ? await findInLocalDictionary(query).catch(() => null)
-        : null;
-      const result: LookupResult = {
-        query: savedLookup.query,
-        kind: savedLookup.kind,
-        phonetic: savedLookup.source === "ai"
-          ? dictionaryResult?.phonetic ?? ""
-          : savedLookup.phonetic,
-        phoneticSource: savedLookup.source === "ai"
-          ? dictionaryResult?.phoneticSource
-          : savedLookup.phoneticSource,
-        part: savedLookup.part,
-        meaning: savedLookup.meaning,
-        note: savedLookup.note,
-        source: savedLookup.source,
-      };
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result,
-        cached: true,
-      });
-      return;
-    }
-
-    const cacheKey = JSON.stringify([
-      normalizedQuery,
-      context.toLowerCase(),
-    ]);
-    const cached = lookupCacheRef.current[cacheKey];
-    if (
-      cached
-      && (!translateOptions.forceAi || cached.source === "ai")
-    ) {
-      const trustedCached = cached.source === "ai"
-        ? {
-            ...cached,
-            phonetic: selectionLookup.result?.phonetic || (
-              cached.phoneticSource ? cached.phonetic : ""
-            ),
-            phoneticSource:
-              selectionLookup.result?.phoneticSource
-              ?? cached.phoneticSource,
-          }
-        : cached;
-      saveLookupWord(trustedCached);
-      setSelectionLookup({
-        query,
-        context,
-        x,
-        y,
-        status: "ready",
-        result: trustedCached,
-        cached: true,
-      });
-      return;
     }
 
     const controller = new AbortController();
@@ -367,14 +442,17 @@ export function useSelectionLookup(
       if (!response.ok || data.source !== "ai") {
         throw new Error(data.error ?? "划词查询失败");
       }
+      const dictionaryPhonetic = await lookupLocalPhonetic(query);
       const trustedResult: LookupResult = {
         ...data,
-        phonetic: selectionLookup.result?.phonetic || "",
-        phoneticSource: selectionLookup.result?.phoneticSource,
+        phonetic: selectionLookup.result?.phonetic || dictionaryPhonetic,
+        phoneticSource:
+          selectionLookup.result?.phoneticSource
+          || (dictionaryPhonetic ? "dictionary" : undefined),
       };
       const entries = Object.entries({
         ...lookupCacheRef.current,
-        [cacheKey]: trustedResult,
+        [JSON.stringify([normalizedQuery, context.toLowerCase()])]: trustedResult,
       }).slice(-120);
       lookupCacheRef.current = Object.fromEntries(entries);
       writeLookupCache(lookupCacheRef.current);
@@ -404,15 +482,35 @@ export function useSelectionLookup(
     }
   }, [
     findInLocalDictionary,
-    lookupWords,
+    lookupLocalPhonetic,
+    resolveKnownLocal,
     saveLookupWord,
     selectionLookup,
-    setDictionaryPhonetics,
-    wordByText,
+    setSelectionLookup,
   ]);
 
   useEffect(() => {
     lookupCacheRef.current = readLookupCache();
+  }, []);
+
+  // 预加载红宝书词音标索引，秒级填充学习卡与划词结果
+  useEffect(() => {
+    let active = true;
+    fetch(PHONETIC_INDEX_PATH)
+      .then((response) => {
+        if (!response.ok) throw new Error("phonetic index missing");
+        return response.json() as Promise<PhoneticIndex>;
+      })
+      .then((index) => {
+        if (active) {
+          phoneticIndexRef.current = index;
+          setPhoneticIndexReady(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -425,12 +523,12 @@ export function useSelectionLookup(
       return;
     }
     let active = true;
-    findInLocalDictionary(currentBase.word)
-      .then((result) => {
-        if (active && result?.phonetic) {
+    lookupLocalPhonetic(currentBase.word)
+      .then((phonetic) => {
+        if (active && phonetic) {
           setDictionaryPhonetics((items) => ({
             ...items,
-            [currentBase.id!]: result.phonetic,
+            [currentBase.id!]: phonetic,
           }));
         }
       })
@@ -443,7 +541,8 @@ export function useSelectionLookup(
     currentBase?.phonetic,
     currentBase?.word,
     currentDictionaryPhonetic,
-    findInLocalDictionary,
+    lookupLocalPhonetic,
+    phoneticIndexReady,
     setDictionaryPhonetics,
   ]);
 

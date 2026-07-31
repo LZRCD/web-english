@@ -5,12 +5,14 @@ import type { SelectionLookupState } from "../../lib/selection-lookup";
 type SelectionLookupPopupProps = {
   lookup: SelectionLookupState;
   onTranslate: (options?: { forceAi?: boolean }) => void;
+  onSpeak: () => void;
   onClose: () => void;
 };
 
 export default function SelectionLookupPopup({
   lookup,
   onTranslate,
+  onSpeak,
   onClose,
 }: SelectionLookupPopupProps) {
   return (
@@ -45,6 +47,16 @@ export default function SelectionLookupPopup({
       <div className="selection-lookup-query">
         <strong>{lookup.result?.query ?? lookup.query}</strong>
         {lookup.result?.phonetic && <small>{lookup.result.phonetic}</small>}
+        <button
+          className="selection-lookup-speak"
+          type="button"
+          onClick={onSpeak}
+          disabled={lookup.status === "loading"}
+          aria-label={`播放 ${lookup.result?.query ?? lookup.query} 的发音`}
+          title="点击播放读音"
+        >
+          ◖))
+        </button>
       </div>
       {lookup.status === "idle" && (
         <button

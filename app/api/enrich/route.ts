@@ -4,6 +4,14 @@ type EnrichmentRequest = {
   word?: string;
   meaning?: string;
   familiarMeanings?: string[];
+  /** 待逐条造句的释义列表 */
+  senses?: string[];
+};
+
+type SenseExampleItem = {
+  meaning?: unknown;
+  sentence?: unknown;
+  translation?: unknown;
 };
 
 const MAX_ATTEMPTS = 2;
@@ -25,18 +33,42 @@ function normalizeEnrichment(content: string) {
         .filter(Boolean)
         .slice(0, 4)
     : [];
-  if (
-    typeof enrichment.sentence !== "string"
-    || typeof enrichment.translation !== "string"
-    || !enrichment.sentence.trim()
-    || !enrichment.translation.trim()
-    || collocations.length < 2
-  ) {
+  const rawExamples = Array.isArray(enrichment.senseExamples)
+    ? enrichment.senseExamples as unknown[]
+    : [];
+  const senseExamples = rawExamples
+    .filter((item): item is SenseExampleItem => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      meaning: typeof item.meaning === "string" ? item.meaning.trim() : "",
+      sentence: typeof item.sentence === "string" ? item.sentence.trim() : "",
+      translation: typeof item.translation === "string"
+        ? item.translation.trim()
+        : "",
+    }))
+    .filter((item) => item.meaning && item.sentence && item.translation)
+    .slice(0, 8);
+  const hasSenseExamples = senseExamples.length > 0;
+  const hasLegacySentence = typeof enrichment.sentence === "string"
+    && typeof enrichment.translation === "string"
+    && Boolean(enrichment.sentence.trim())
+    && Boolean(enrichment.translation.trim());
+  if (!hasSenseExamples && !hasLegacySentence) {
     throw new Error("模型返回的内容字段不完整");
   }
+  if (hasSenseExamples) {
+    return {
+      sentence: senseExamples[0].sentence,
+      translation: senseExamples[0].translation,
+      senseExamples,
+      collocations,
+      source: "ai" as const,
+      generatedAt: new Date().toISOString(),
+      verified: false,
+    };
+  }
   return {
-    sentence: enrichment.sentence.trim(),
-    translation: enrichment.translation.trim(),
+    sentence: (enrichment.sentence as string).trim(),
+    translation: (enrichment.translation as string).trim(),
     collocations,
     source: "ai" as const,
     generatedAt: new Date().toISOString(),
@@ -60,7 +92,18 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .slice(0, 30)
     : [];
-  if (!word || !meaning) {
+  const senses = Array.isArray(body.senses)
+    ? body.senses
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 6)
+    : [];
+  if (!senses.length && meaning) {
+    senses.push(...meaning.split(/[;；]/).map((item) => item.trim()).filter(Boolean).slice(0, 6));
+  }
+  const effectiveMeaning = senses.join("；") || meaning || "";
+  if (!word || !effectiveMeaning) {
     return NextResponse.json({ error: "缺少单词或释义" }, { status: 400 });
   }
 
@@ -79,7 +122,7 @@ export async function POST(request: NextRequest) {
     try {
       const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
@@ -89,17 +132,17 @@ export async function POST(request: NextRequest) {
           thinking: { type: "disabled" },
           response_format: { type: "json_object" },
           temperature: 0.2,
-          max_tokens: 420,
+          max_tokens: 1400,
           messages: [
             {
               role: "system",
-              content: "你是严谨的考研英语词典编辑。只返回 JSON，不要 markdown。字段必须是 sentence、translation、collocations，不要生成 phonetic 或任何音标字段。sentence 是原创的考研阅读风格英文例句，必须准确体现 redbookMeaning 中尚未熟练的中文释义，禁止用 familiarMeanings 中已熟练的含义作为核心义项；translation 是对应中文翻译；collocations 是 2 到 4 个与未熟练义项相关的常用英文搭配数组。不要捏造词源，不要引用受版权保护的原句。",
+              content: "你是严谨的考研英语词典编辑。只返回 JSON，不要 markdown。字段必须是 senseExamples、collocations，不要生成 phonetic 或任何音标字段。senseExamples 是数组，必须为 senses 中的每个释义各生成 1 句原创考研阅读风格英文例句，元素为 { meaning, sentence, translation }：meaning 必须与输入 senses 中对应条目逐字一致；sentence 必须准确体现该释义；translation 是对应中文翻译。禁止用 familiarMeanings 中已熟练的含义作为核心义项。collocations 是 2 到 4 个与这些释义相关的常用英文搭配数组。不要捏造词源，不要引用受版权保护的原句。",
             },
             {
               role: "user",
               content: JSON.stringify({
                 word,
-                redbookMeaning: meaning,
+                senses,
                 familiarMeanings,
               }),
             },
@@ -116,7 +159,7 @@ export async function POST(request: NextRequest) {
       if (!content) throw new Error("模型没有返回内容");
       return NextResponse.json({
         ...normalizeEnrichment(content),
-        targetMeanings: meaning.split(/[;；]/).map((item) => item.trim()).filter(Boolean),
+        targetMeanings: senses,
       });
     } catch (error) {
       lastError = error;

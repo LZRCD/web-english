@@ -174,7 +174,7 @@ export default function Home() {
   } = useStudySession();
   const [enrichments, setEnrichments] = useState<Record<number, WordEnrichment>>({});
   const [dictionaryPhonetics, setDictionaryPhonetics] = useState<Record<number, string>>({});
-  const [ratingUndo, setRatingUndo] = useState<RatingUndo>();
+  const [undoStack, setUndoStack] = useState<RatingUndo[]>([]);
   const [undoVisible, setUndoVisible] = useState(false);
   const [favorites, setFavorites] = useState<SavedWord[]>([]);
   const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
@@ -471,7 +471,7 @@ export default function Home() {
     currentFamiliarMeanings,
     onNotify: showToast,
   });
-  const { audioIndex, speak, speakNext, recordedAudioRef } = useAudio({
+  const { audioIndex, speak, speakNext, speakWord } = useAudio({
     current,
     studyWords,
     wordIndex,
@@ -740,7 +740,7 @@ export default function Home() {
     revealed: revealedRef,
     current: currentRef,
     enrichmentLoading: enrichmentLoadingRef,
-    ratingUndo: ratingUndoRef,
+    undoStack: undoStackRef,
     aiOpen: aiOpenRef,
     searchOpen: searchOpenRef,
     selectionLookup: selectionLookupRef,
@@ -753,7 +753,7 @@ export default function Home() {
     revealed,
     current,
     enrichmentLoading,
-    ratingUndo,
+    undoStack,
     aiOpen,
     searchOpen,
     selectionLookup,
@@ -816,7 +816,7 @@ export default function Home() {
       },
       {
         key: "z",
-        when: () => !!ratingUndoRef.current,
+        when: () => undoStackRef.current.length > 0,
         action: () => undoLastRating(),
       },
       {
@@ -868,7 +868,7 @@ export default function Home() {
     setShuffleSeed(state.shuffleSeed);
     setSelectedSection(state.selectedSection);
     setSelectedUnit(state.selectedUnit);
-    setRatingUndo(undefined);
+    setUndoStack([]);
     setUndoVisible(false);
     refreshClock();
   }
@@ -913,7 +913,7 @@ export default function Home() {
       section: current.section,
       unit: current.unit,
     });
-    setRatingUndo({
+    setUndoStack((stack) => [...stack, {
       reviewId: result.review.id,
       word: current,
       previousProgress,
@@ -927,7 +927,7 @@ export default function Home() {
       studyMode,
       studyScope,
       shuffleSeed,
-    });
+    }].slice(-30));
     setUndoVisible(true);
     setWordProgress((items) => ({ ...items, [current.id!]: result.progress }));
     if (typedRating <= 1) {
@@ -974,66 +974,65 @@ export default function Home() {
     if (soundOn && (!activeSession || wordIndex + 1 < studyWords.length)) {
       setTimeout(speakNext, 80);
     }
-    const ratedReviewId = result.review.id;
     if (ratingUndoTimerRef.current !== undefined) {
       window.clearTimeout(ratingUndoTimerRef.current);
     }
+    // 提示条 5 秒后隐藏，但撤销栈保留，随时可按 Z 或撤销按钮撤回
     ratingUndoTimerRef.current = window.setTimeout(() => {
       setToast((message) => message.endsWith("· Z 撤销") ? "" : message);
       setUndoVisible(false);
-      setRatingUndo((undo) =>
-        undo?.reviewId === ratedReviewId ? undefined : undo);
       ratingUndoTimerRef.current = undefined;
     }, 5000);
   }
 
   function undoLastRating() {
-    if (!ratingUndo) return;
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
     if (ratingUndoTimerRef.current !== undefined) {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
     }
     window.speechSynthesis?.cancel();
     setReviews((items) => {
-      const rest = items.filter((review) => review.id !== ratingUndo.reviewId);
-      return ratingUndo.evictedReview ? [ratingUndo.evictedReview, ...rest] : rest;
+      const rest = items.filter((review) => review.id !== entry.reviewId);
+      return entry.evictedReview ? [entry.evictedReview, ...rest] : rest;
     });
     setWordProgress((items) => {
       const next = { ...items };
-      if (ratingUndo.previousProgress) {
-        next[ratingUndo.word.id!] = ratingUndo.previousProgress;
+      if (entry.previousProgress) {
+        next[entry.word.id!] = entry.previousProgress;
       } else {
-        delete next[ratingUndo.word.id!];
+        delete next[entry.word.id!];
       }
       return next;
     });
     setMistakes((items) => {
-      const rest = items.filter((item) => item.wordId !== ratingUndo.word.id);
-      return ratingUndo.previousMistake
-        ? [ratingUndo.previousMistake, ...rest]
+      const rest = items.filter((item) => item.wordId !== entry.word.id);
+      return entry.previousMistake
+        ? [entry.previousMistake, ...rest]
         : rest;
     });
-    setSelectedSection(ratingUndo.selectedSection);
-    setSelectedUnit(ratingUndo.selectedUnit);
-    setStudyMode(ratingUndo.studyMode);
-    setStudyScope(ratingUndo.studyScope);
-    setShuffleSeed(ratingUndo.shuffleSeed);
-    if (ratingUndo.previousSession) {
-      restoreSession(ratingUndo.previousSession);
+    setSelectedSection(entry.selectedSection);
+    setSelectedUnit(entry.selectedUnit);
+    setStudyMode(entry.studyMode);
+    setStudyScope(entry.studyScope);
+    setShuffleSeed(entry.shuffleSeed);
+    if (entry.previousSession) {
+      restoreSession(entry.previousSession);
     } else {
       clearSession();
       setPositions((items) => ({
         ...items,
-        [ratingUndo.studyKey]: ratingUndo.previousPosition,
+        [entry.studyKey]: entry.previousPosition,
       }));
     }
     setActiveView("learn");
     setRevealed(true);
     setRecallStartedAt(new Date().getTime());
-    setRatingUndo(undefined);
+    setUndoStack((stack) => stack.slice(0, -1));
     setUndoVisible(false);
     refreshClock();
-    showToast(`已撤销 ${ratingUndo.word.word} 的最近评分`, 1800);
+    showToast(`已撤销 ${entry.word.word} 的最近评分`, 1800);
   }
 
   function changeStudyMode(mode: StudyMode) {
@@ -1085,7 +1084,7 @@ export default function Home() {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
     }
-    setRatingUndo(undefined);
+    setUndoStack([]);
     setUndoVisible(false);
     beginLearning();
     setRevealed(false);
@@ -1158,7 +1157,7 @@ export default function Home() {
             window.clearTimeout(ratingUndoTimerRef.current);
             ratingUndoTimerRef.current = undefined;
           }
-          setRatingUndo(undefined);
+          setUndoStack([]);
           setUndoVisible(false);
           setSearchOpen(true);
         },
@@ -1180,7 +1179,7 @@ export default function Home() {
           window.clearTimeout(ratingUndoTimerRef.current);
           ratingUndoTimerRef.current = undefined;
         }
-        setRatingUndo(undefined);
+        setUndoStack([]);
         setUndoVisible(false);
         setWordbookTab(tab);
         setActiveView("wordbook");
@@ -1194,7 +1193,7 @@ export default function Home() {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
     }
-    setRatingUndo(undefined);
+    setUndoStack([]);
     setUndoVisible(false);
     setRevealed(false);
   }
@@ -1426,7 +1425,7 @@ export default function Home() {
                 }}
                 primaryAction={getSessionPrimaryAction()}
                 onFreeStudy={returnToFreeStudy}
-                onUndo={ratingUndo ? undoLastRating : undefined}
+                onUndo={undoStack.length ? undoLastRating : undefined}
               />
             )}
             {!sessionComplete && (
@@ -1449,7 +1448,6 @@ export default function Home() {
                 audioIndex={audioIndex}
                 activeSession={activeSession}
                 newCount={stats.newCount}
-                currentLocation={currentLocation}
                 clock={clock}
                 reinforcementInput={reinforcementInput}
                 reinforcementFeedback={reinforcementFeedback}
@@ -1637,6 +1635,10 @@ export default function Home() {
         <SelectionLookupPopup
           lookup={selectionLookup}
           onTranslate={translateSelection}
+          onSpeak={() => {
+            const result = selectionLookup.result;
+            if (result) speakWord(result.query, result.linkedWordId);
+          }}
           onClose={closeSelectionLookup}
         />
       )}
@@ -1681,11 +1683,28 @@ export default function Home() {
         />
       )}
 
-      {(toast || (undoVisible && ratingUndo)) && (
+      {(toast || (undoVisible && undoStack.length > 0)) && (
         <div className="toast" role="status">
           {toast && <span>{toast}</span>}
-          {undoVisible && ratingUndo && <button type="button" onClick={undoLastRating}>撤销</button>}
+          {undoVisible && undoStack.length > 0 && (
+            <button type="button" onClick={undoLastRating}>撤销</button>
+          )}
         </div>
+      )}
+
+      {/* 常驻撤销按钮：提示条隐藏后仍可随时撤回 */}
+      {!undoVisible && undoStack.length > 0 && (
+        <button
+          className="undo-forever"
+          type="button"
+          onClick={undoLastRating}
+          aria-label={`撤销上一步（还有 ${undoStack.length} 步）`}
+          title="撤销最近评分 (Z)"
+        >
+          <span>↩</span>
+          撤销上一步
+          {undoStack.length > 1 && <small>{undoStack.length}</small>}
+        </button>
       )}
     </main>
   );

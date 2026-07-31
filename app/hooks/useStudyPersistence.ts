@@ -32,6 +32,7 @@ import {
   saveStoredStateImmediate,
 } from "../../lib/storage";
 import {
+  consumeStoredParseRepairCount,
   parseStoredState,
   STORAGE_KEY,
   type StoredState,
@@ -595,7 +596,20 @@ export function useStudyPersistence({
 
       if (!active) return;
       hydratedRef.current = true;
-      if (storedState) applyPersistedState(storedState);
+      if (storedState) {
+        applyPersistedState(storedState);
+        // 若解析时重建了缺失的 FSRS 进度，立即写回，避免下次加载重复全量重建
+        const repairCount = consumeStoredParseRepairCount();
+        if (repairCount > 0) {
+          void persistStateSnapshot(storedState, true)
+            .then((status) => {
+              if (!active) return;
+              setSaveStatus(status);
+              setLastSaveTime(Date.now());
+            })
+            .catch(() => {});
+        }
+      }
       suppressNextSaveRef.current = true;
       updateLoadStatus(nextLoadStatus);
       setSaveStatus(nextSaveStatus);

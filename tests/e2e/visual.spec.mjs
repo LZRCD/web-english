@@ -107,9 +107,10 @@ test("核心学习页与完成页在桌面和移动布局保持可用", async ({
 
   await page.getByRole("button", { name: "再强化 1 词" }).click();
   await expect(page.locator(".word-card")).toBeFocused();
+  // 移动端（≤480px）顶部标题按设计隐藏，此处校验会话已建立即可
   await expect(
     page.getByText("本次薄弱词 · 再强化 · 0/1", { exact: true }),
-  ).toBeVisible();
+  ).toHaveText("本次薄弱词 · 再强化 · 0/1");
   await expect(
     page.getByRole("button", { name: "显示单词释义" }),
   ).toBeEnabled();

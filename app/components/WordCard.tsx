@@ -34,7 +34,6 @@ type WordCardProps = {
   // 上下文
   activeSession?: StudySession;
   newCount: number;
-  currentLocation: string;
   clock: number;
 
   // 强化表单
@@ -77,7 +76,6 @@ export default function WordCard({
   audioIndex,
   activeSession,
   newCount,
-  currentLocation,
   clock,
   reinforcementInput,
   reinforcementFeedback,
@@ -156,7 +154,11 @@ export default function WordCard({
       {/* 词面：单词 + 音标 + 揭示按钮 */}
       <button
         className="word-face"
-        onClick={() => redbookReady && onReveal()}
+        onClick={() => {
+          if (!redbookReady) return;
+          onReveal();
+          onSpeak();
+        }}
         disabled={!redbookReady}
         aria-label="显示单词释义"
       >
@@ -230,10 +232,32 @@ export default function WordCard({
           )}
 
           {/* 例句 / 内容补充 */}
-          {current.sentence ? (
+          {(current.sentence || currentEnrichment?.senseExamples?.length) ? (
             <div className="context-block">
-              <p className="context-sentence">{current.sentence}</p>
-              <p className="context-translation">{current.translation}</p>
+              {currentEnrichment?.senseExamples?.length ? (
+                <>
+                  <span className="sense-examples-label">释义例句</span>
+                  <ol className="sense-examples">
+                    {currentEnrichment.senseExamples.map((example, index) => (
+                      <li
+                        className="sense-example"
+                        key={`${example.meaning}-${index}`}
+                      >
+                        <strong>{index + 1}. {example.meaning}</strong>
+                        <p className="context-sentence">{example.sentence}</p>
+                        <p className="context-translation">
+                          {example.translation}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <p className="context-sentence">{current.sentence}</p>
+                  <p className="context-translation">{current.translation}</p>
+                </>
+              )}
               {currentEnrichment && (
                 <div className="content-meta">
                   <small className="content-source">

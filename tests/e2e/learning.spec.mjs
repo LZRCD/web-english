@@ -57,7 +57,7 @@ test("划选例句中的英文可查义、加入划词集并持久化", async ({
   );
   const popup = page.getByRole("dialog", { name: "划词查询：radiate" });
   await expect(popup).toBeVisible();
-  await popup.getByRole("button", { name: "翻译" }).click();
+  // 红宝书内词直接显示查询结果，不再询问是否翻译
   await expect(popup).toContainText("已加入划词集");
 
   await expect.poll(async () => {

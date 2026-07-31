@@ -149,6 +149,9 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
     historyView,
     settingsView,
     searchPanel,
+    wordCard,
+    ratingBar,
+    wordAudio,
   ] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/study.ts", import.meta.url), "utf8"),
@@ -158,6 +161,9 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
     readFile(new URL("../app/components/HistoryView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SearchPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/WordCard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/RatingBar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/word-audio.ts", import.meta.url), "utf8"),
   ]);
   const ui = [page, historyView, settingsView, searchPanel].join("\n");
 
@@ -166,7 +172,7 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /setStudyScope\("all"\)/);
   assert.match(page, /已打乱 \$\{learningItemCount\} 个学习项/);
   assert.match(page, /redbook-analysis\.json/);
-  assert.match(page, /word-relation/);
+  assert.match(wordCard, /word-relation/);
   assert.match(page, /useStudyPersistence/);
   assert.match(persistenceHook, /loadStoredState\(\)/);
   assert.match(persistenceHook, /persistStateSnapshot\(state\)/);
@@ -182,16 +188,16 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /function startFavoriteSession/);
   assert.match(page, /function startMistakeSession/);
   assert.match(page, /buildExamPlan/);
-  assert.match(page, /FSRS 可提取率/);
-  assert.match(page, /下次复习/);
+  assert.match(wordCard, /FSRS 可提取率/);
+  assert.match(wordCard, /下次复习/);
   assert.doesNotMatch(page, /词表来源/);
-  assert.match(page, /playRecordedWord/);
-  assert.match(page, /浏览器 TTS 回退/);
-  assert.match(page, /aria-keyshortcuts="E"/);
+  assert.match(wordAudio, /playWordAudio/);
+  assert.match(wordCard, /浏览器 TTS 回退/);
+  assert.match(wordCard, /aria-keyshortcuts="E"/);
   assert.match(ui, /<kbd>E<\/kbd> 内容补充/);
   assert.match(page, /function submitReinforcement/);
-  assert.match(page, /趁答案还在短时记忆里，再主动提取一次/);
-  assert.match(page, /reinforcementRating === null \? "rating-bar visible"/);
+  assert.match(wordCard, /趁答案还在短时记忆里，再主动提取一次/);
+  assert.match(ratingBar, /rating-bar visible/);
   assert.match(ui, /全局查词/);
   assert.match(ui, /导出备份/);
   assert.match(enrich, /未配置云端模型/);

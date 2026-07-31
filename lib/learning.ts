@@ -92,10 +92,18 @@ export type StubbornWordRecord = {
 
 export type StubbornWordMap = Record<number, StubbornWordRecord>;
 
+export type SenseExample = {
+  meaning: string;
+  sentence: string;
+  translation: string;
+};
+
 export type WordEnrichment = {
   phonetic?: string;
   sentence?: string;
   translation?: string;
+  /** 按释义逐条生成的例句，sentence/translation 取第一条以便向下兼容 */
+  senseExamples?: SenseExample[];
   collocations?: string[];
   targetMeanings?: string[];
   source: "redbook" | "dictionary" | "ai";

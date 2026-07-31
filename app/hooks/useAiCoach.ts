@@ -3,6 +3,7 @@ import {
   FormEvent,
   SetStateAction,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -24,7 +25,6 @@ const DEFAULT_ANSWER = "我会用语境、联想和小测验帮你真正记住�
 /** AI 记忆教练状态 + API 调用 */
 export function useAiCoach({
   current,
-  enrichments: _enrichments,
   setEnrichments,
   unfamiliarMeanings,
   currentFamiliarMeanings,
@@ -41,9 +41,11 @@ export function useAiCoach({
 
   // 保持 current 引用最新，避免闭包陷阱
   const currentRef = useRef(current);
-  currentRef.current = current;
+  useEffect(() => {
+    currentRef.current = current;
+  });
 
-  async function askCoach(prompt: string) {
+  const askCoach = useCallback(async (prompt: string) => {
     const question = prompt.trim();
     if (!question || aiLoading) return;
     setAiLoading(true);
@@ -69,7 +71,7 @@ export function useAiCoach({
     } finally {
       setAiLoading(false);
     }
-  }
+  }, [aiLoading]);
 
   async function enrichCurrentWord() {
     const word = currentRef.current;
@@ -86,6 +88,7 @@ export function useAiCoach({
         body: JSON.stringify({
           word: word.word,
           meaning: unfamiliarMeanings.join("；"),
+          senses: unfamiliarMeanings.slice(0, 6),
           familiarMeanings: [...currentFamiliarMeanings],
         }),
         signal: AbortSignal.timeout(30000),
@@ -116,7 +119,7 @@ export function useAiCoach({
       event.preventDefault();
       askCoach(aiInput);
     },
-    [aiInput, aiLoading],
+    [aiInput, askCoach],
   );
 
   return {

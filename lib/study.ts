@@ -570,6 +570,18 @@ function normalizeEnrichments(value: unknown) {
       phonetic: typeof item.phonetic === "string" ? item.phonetic : undefined,
       sentence: typeof item.sentence === "string" ? item.sentence : undefined,
       translation: typeof item.translation === "string" ? item.translation : undefined,
+      senseExamples: Array.isArray(item.senseExamples)
+        ? item.senseExamples
+            .filter((entry): entry is { meaning?: unknown; sentence?: unknown; translation?: unknown } =>
+              Boolean(entry) && typeof entry === "object")
+            .map((entry) => ({
+              meaning: typeof entry.meaning === "string" ? entry.meaning.trim() : "",
+              sentence: typeof entry.sentence === "string" ? entry.sentence.trim() : "",
+              translation: typeof entry.translation === "string" ? entry.translation.trim() : "",
+            }))
+            .filter((entry) => entry.meaning && entry.sentence && entry.translation)
+            .slice(0, 8)
+        : undefined,
       collocations: Array.isArray(item.collocations)
         ? item.collocations.filter((entry): entry is string => typeof entry === "string").slice(0, 4)
         : undefined,
@@ -586,6 +598,16 @@ function normalizeEnrichments(value: unknown) {
     };
   }
   return result;
+}
+
+/** 最近一次 parseStoredState 中由评分历史重建的进度词数（0 表示无修复） */
+let lastParseRepairedCount = 0;
+
+/** 读取并重置最近一次状态解析的修复词数，供持久化层判断是否需要写回修复结果 */
+export function consumeStoredParseRepairCount() {
+  const count = lastParseRepairedCount;
+  lastParseRepairedCount = 0;
+  return count;
 }
 
 export function buildStudyKey(
@@ -749,6 +771,7 @@ export function parseStoredState(raw: string): StoredState {
   }
 
   const wordProgress: WordProgressMap = { ...healthyProgress };
+  let repairedCount = 0;
   if (damagedWordIds.size > 0) {
     const damagedReviews = normalizedReviews.filter(
       (review) =>
@@ -765,6 +788,7 @@ export function parseStoredState(raw: string): StoredState {
           }
           wordProgress[wordId] = rebuiltProgress;
           damagedWordIds.delete(wordId);
+          repairedCount += 1;
         }
       }
     }
@@ -773,6 +797,7 @@ export function parseStoredState(raw: string): StoredState {
       delete wordProgress[wordId];
     }
   }
+  lastParseRepairedCount = repairedCount;
   const storedStubbornWords: StubbornWordMap = state.stubbornWords
     && typeof state.stubbornWords === "object"
     ? Object.fromEntries(

@@ -255,27 +255,26 @@ export function combineStoredState(snapshot: IndexedStateSnapshot) {
 }
 
 /** 增量写入：逐条 upsert 后删除快照中不存在的旧记录 */
-function putStore<T>(store: IDBObjectStore, values: T[], keyPath: string) {
+async function putStore<T>(
+  store: IDBObjectStore,
+  values: T[],
+  keyPath: string,
+) {
   // 逐条 upsert（利用主键），不再 clear 全量重写
   for (const value of values) store.put(value);
 
-  // 删除快照中不存在的旧记录（如移出收藏的词）
+  // 删除快照中不存在的旧记录（如移出收藏的词）。
+  // 用 getAllKeys 一次性取出现有主键并求差，避免游标逐条扫描大表。
   const snapshotKeys = new Set(
     values.map((value) => {
       const key = (value as Record<string, unknown>)[keyPath];
       return String(key);
     }),
   );
-  const cursorRequest = store.openCursor();
-  cursorRequest.onsuccess = () => {
-    const cursor = cursorRequest.result;
-    if (cursor) {
-      if (!snapshotKeys.has(String(cursor.key))) {
-        cursor.delete();
-      }
-      cursor.continue();
-    }
-  };
+  const existingKeys = await requestResult(store.getAllKeys());
+  for (const key of existingKeys) {
+    if (!snapshotKeys.has(String(key))) store.delete(key);
+  }
 }
 
 async function writeSnapshot(snapshot: IndexedStateSnapshot) {
@@ -308,15 +307,15 @@ async function writeSnapshot(snapshot: IndexedStateSnapshot) {
       throw new Error(`${CONCURRENT_WRITE_CODE}: 另一标签页已修改数据`);
     }
 
-    putStore(settingsStore, [snapshot.settings], "id");
-    putStore(transaction.objectStore(STORES.reviews), snapshot.reviews, "id");
-    putStore(transaction.objectStore(STORES.wordProgress), snapshot.wordProgress, "wordId");
-    putStore(transaction.objectStore(STORES.favorites), snapshot.favorites, "wordId");
-    putStore(transaction.objectStore(STORES.mistakes), snapshot.mistakes, "wordId");
-    putStore(transaction.objectStore(STORES.positions), snapshot.positions, "key");
-    putStore(transaction.objectStore(STORES.enrichments), snapshot.enrichments, "wordId");
-    putStore(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards, "wordId");
-    putStore(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords, "wordId");
+    await putStore(settingsStore, [snapshot.settings], "id");
+    await putStore(transaction.objectStore(STORES.reviews), snapshot.reviews, "id");
+    await putStore(transaction.objectStore(STORES.wordProgress), snapshot.wordProgress, "wordId");
+    await putStore(transaction.objectStore(STORES.favorites), snapshot.favorites, "wordId");
+    await putStore(transaction.objectStore(STORES.mistakes), snapshot.mistakes, "wordId");
+    await putStore(transaction.objectStore(STORES.positions), snapshot.positions, "key");
+    await putStore(transaction.objectStore(STORES.enrichments), snapshot.enrichments, "wordId");
+    await putStore(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards, "wordId");
+    await putStore(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords, "wordId");
     await completed;
     knownRevision = newRevision;
 

@@ -10,7 +10,9 @@ export function useSyncedRefs<T extends Record<string, unknown>>(
 ): SyncedRefs<T> {
   const refsRef = useRef<SyncedRefs<T> | null>(null);
 
-  // 首次渲染时惰性创建 ref 对象
+  // 首次渲染时惰性创建 ref 对象；refs 只在本 hook 外部的
+  // 事件回调/键盘处理器中读取，渲染期不依赖其值
+  // eslint-disable-next-line react-hooks/refs
   if (!refsRef.current) {
     const refs = {} as SyncedRefs<T>;
     for (const key of Object.keys(values) as (keyof T)[]) {
@@ -29,5 +31,6 @@ export function useSyncedRefs<T extends Record<string, unknown>>(
     }
   });
 
+  // eslint-disable-next-line react-hooks/refs
   return refsRef.current;
 }
