@@ -9,6 +9,8 @@ export function summarize(samples) {
   for (const sample of samples) {
     const variant = [
       ["runMode", sample.runMode],
+      ["networkProfile", sample.benchmarkNetworkProfile],
+      ["cacheState", sample.benchmarkCacheState],
       ...["lookupMode", "source", "status", "resourceCache"]
         .map((key) => [key, sample.tags?.[key]])
         .filter(([, value]) => value !== undefined),
@@ -35,6 +37,90 @@ export function summarize(samples) {
     `${first.metric}:${first.variantKey}`.localeCompare(
       `${second.metric}:${second.variantKey}`,
     ));
+}
+
+function summaryIdentity(summary) {
+  return `${summary.metric}\u0000${summary.variantKey ?? ""}`;
+}
+
+function percentageChange(current, previous) {
+  return previous === 0 ? null : (current - previous) / previous;
+}
+
+/** 以相同 metric + variant 比较两份基线，直接给出绝对值、百分比和告警结论。 */
+export function compareBaselineReports(current, previous, options = {}) {
+  const relativeThreshold = Number(options.relativeThreshold ?? 0.2);
+  const absoluteThresholdMs = Number(options.absoluteThresholdMs ?? 20);
+  const minimumSampleCount = Number(options.minimumSampleCount ?? 5);
+  const previousByIdentity = new Map(
+    (previous?.summaries ?? []).map((summary) => [summaryIdentity(summary), summary]),
+  );
+  const changes = (current?.summaries ?? []).flatMap((summary) => {
+    const prior = previousByIdentity.get(summaryIdentity(summary));
+    if (!prior) return [];
+    const p50ChangeMs = summary.p50 - prior.p50;
+    const p95ChangeMs = summary.p95 - prior.p95;
+    const p50ChangeRatio = percentageChange(summary.p50, prior.p50);
+    const p95ChangeRatio = percentageChange(summary.p95, prior.p95);
+    const enoughSamples = summary.count >= minimumSampleCount
+      && prior.count >= minimumSampleCount;
+    const exceedsWarningThreshold = enoughSamples
+      && p95ChangeMs >= absoluteThresholdMs
+      && p95ChangeRatio !== null
+      && p95ChangeRatio >= relativeThreshold;
+    return [{
+      metric: summary.metric,
+      variantKey: summary.variantKey,
+      previousCount: prior.count,
+      currentCount: summary.count,
+      previousP50: prior.p50,
+      currentP50: summary.p50,
+      p50ChangeMs,
+      p50ChangeRatio,
+      previousP95: prior.p95,
+      currentP95: summary.p95,
+      p95ChangeMs,
+      p95ChangeRatio,
+      enoughSamples,
+      exceedsWarningThreshold,
+    }];
+  }).sort((first, second) =>
+    Number(second.exceedsWarningThreshold) - Number(first.exceedsWarningThreshold)
+    || second.p95ChangeMs - first.p95ChangeMs
+    || `${first.metric}:${first.variantKey}`.localeCompare(
+      `${second.metric}:${second.variantKey}`,
+    ));
+  const warnings = changes.filter((item) => item.exceedsWarningThreshold);
+  return {
+    previous: {
+      generatedAt: previous?.generatedAt ?? null,
+      appBuildId: previous?.build?.appBuildId ?? "unknown",
+      dataVersion: previous?.build?.dataVersion ?? "unknown",
+      diagnosticsSchemaVersion:
+        previous?.build?.diagnosticsSchemaVersion ?? "unknown",
+      runLabel: previous?.run?.label ?? "legacy",
+    },
+    current: {
+      generatedAt: current?.generatedAt ?? null,
+      appBuildId: current?.build?.appBuildId ?? "unknown",
+      dataVersion: current?.build?.dataVersion ?? "unknown",
+      diagnosticsSchemaVersion:
+        current?.build?.diagnosticsSchemaVersion ?? "unknown",
+      runLabel: current?.run?.label ?? "legacy",
+    },
+    comparable: previous?.build?.diagnosticsSchemaVersion
+      === current?.build?.diagnosticsSchemaVersion,
+    sameDataVersion: previous?.build?.dataVersion === current?.build?.dataVersion,
+    thresholds: {
+      relative: relativeThreshold,
+      absoluteMs: absoluteThresholdMs,
+      minimumSampleCount,
+    },
+    matchedSummaryCount: changes.length,
+    warningCount: warnings.length,
+    warnings,
+    changes,
+  };
 }
 
 export function lookupTraceRatios(samples) {
