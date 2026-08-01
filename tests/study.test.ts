@@ -556,6 +556,19 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
     },
     started: true,
   }));
+  state.ratingUndoStack = [{
+    reviewId: "review:pending",
+    wordId: 1,
+    word: "abandon",
+    previousProgress: state.wordProgress[1],
+    previousPosition: 2,
+    studyKey: "selection:必考词:1:ordered",
+    selectedSection: "必考词",
+    selectedUnit: 1,
+    studyMode: "ordered",
+    studyScope: "selection",
+    shuffleSeed: 1,
+  }];
 
   const snapshot = splitStoredState(state);
   const restored = combineStoredState(snapshot);
@@ -564,6 +577,7 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
   assert.equal(snapshot.wordProgress.length, 1);
   assert.equal(snapshot.enrichments[0].wordId, 1);
   assert.equal(snapshot.fsrsCards[0].reps, 1);
+  assert.equal(snapshot.settings.ratingUndoStack.length, 1);
   assert.deepEqual(restored, state);
 });
 

@@ -211,7 +211,6 @@ writeFileSync(
       metadata: {
         title: "2027考研英语红宝书",
         total: words.length,
-        generatedAt: new Date().toISOString(),
         sectionCounts,
         inferredLocations,
         normalizedSourceGlyphs,

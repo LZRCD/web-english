@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { WordEnrichment } from "../../lib/learning";
+import type { SenseExample, WordEnrichment } from "../../lib/learning";
 import type { Word } from "../../lib/study";
 import { buildLocalCoach } from "../../lib/word-utils";
 
@@ -25,6 +25,7 @@ const DEFAULT_ANSWER = "我会用语境、联想和小测验帮你真正记住�
 /** AI 记忆教练状态 + API 调用 */
 export function useAiCoach({
   current,
+  enrichments,
   setEnrichments,
   unfamiliarMeanings,
   currentFamiliarMeanings,
@@ -38,12 +39,106 @@ export function useAiCoach({
     "unknown",
   );
   const [enrichmentLoading, setEnrichmentLoading] = useState(false);
+  const [reviewingSense, setReviewingSense] = useState<number | null>(null);
+  const [rewritingSense, setRewritingSense] = useState<number | null>(null);
 
   // 保持 current 引用最新，避免闭包陷阱
   const currentRef = useRef(current);
+  const enrichmentsRef = useRef(enrichments);
   useEffect(() => {
     currentRef.current = current;
+    enrichmentsRef.current = enrichments;
   });
+
+  const updateSenseExample = useCallback((
+    wordId: number,
+    index: number,
+    update: (example: SenseExample) => SenseExample,
+  ) => {
+    setEnrichments((items) => {
+      const enrichment = items[wordId];
+      if (!enrichment?.senseExamples?.[index]) return items;
+      const senseExamples = enrichment.senseExamples.map((example, itemIndex) =>
+        itemIndex === index ? update(example) : example);
+      return {
+        ...items,
+        [wordId]: {
+          ...enrichment,
+          senseExamples,
+          sentence: senseExamples[0]?.sentence ?? enrichment.sentence,
+          translation: senseExamples[0]?.translation ?? enrichment.translation,
+        },
+      };
+    });
+  }, [setEnrichments]);
+
+  const requestExampleReview = useCallback(async ({
+    word,
+    wordId,
+    index,
+    example,
+    reason,
+  }: {
+    word: string;
+    wordId: number;
+    index: number;
+    example: SenseExample;
+    reason: "meaning-mismatch" | "low-confidence";
+  }) => {
+    setReviewingSense(index);
+    updateSenseExample(wordId, index, (item) => ({
+      ...item,
+      feedback: reason === "meaning-mismatch"
+        ? item.feedback ?? {
+            reason: "meaning-mismatch",
+            reportedAt: new Date().toISOString(),
+          }
+        : item.feedback,
+      review: { status: "pending" },
+    }));
+    try {
+      const response = await fetch("/api/enrich/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word, ...example, reason }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const result = await response.json() as {
+        matches?: boolean;
+        confidence?: number;
+        note?: string;
+        error?: string;
+      };
+      if (!response.ok || typeof result.matches !== "boolean") {
+        throw new Error(result.error ?? "语义二审失败");
+      }
+      updateSenseExample(wordId, index, (item) => ({
+        ...item,
+        review: {
+          status: result.matches ? "passed" : "failed",
+          confidence: result.confidence,
+          note: result.note,
+          reviewedAt: new Date().toISOString(),
+        },
+      }));
+      onNotify(
+        result.matches ? "语义二审通过" : "二审确认例句可能不符合义项，可单条重写",
+        2600,
+      );
+    } catch (error) {
+      updateSenseExample(wordId, index, (item) => ({
+        ...item,
+        review: {
+          status: "failed",
+          note: error instanceof Error ? error.message : "语义二审失败",
+          reviewedAt: new Date().toISOString(),
+        },
+      }));
+      onNotify(error instanceof Error ? error.message : "语义二审失败", 2400);
+    } finally {
+      setReviewingSense((active) => active === index ? null : active);
+    }
+  }, [onNotify, updateSenseExample]);
 
   const askCoach = useCallback(async (prompt: string) => {
     const question = prompt.trim();
@@ -104,6 +199,24 @@ export function useAiCoach({
         `已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`,
         2400,
       );
+      const lowConfidenceExamples = data.senseExamples
+        ?.map((example, index) => ({ example, index }))
+        .filter(({ example }) =>
+          typeof example.confidence === "number" && example.confidence < 0.65)
+        ?? [];
+      if (lowConfidenceExamples.length) {
+        void (async () => {
+          for (const { example, index } of lowConfidenceExamples) {
+            await requestExampleReview({
+              word: word.word,
+              wordId: word.id!,
+              index,
+              example,
+              reason: "low-confidence",
+            });
+          }
+        })();
+      }
     } catch (error) {
       onNotify(
         error instanceof Error ? error.message : "内容补充失败",
@@ -111,6 +224,55 @@ export function useAiCoach({
       );
     } finally {
       setEnrichmentLoading(false);
+    }
+  }
+
+  function reportSenseMismatch(index: number) {
+    const word = currentRef.current;
+    const example = word.id === undefined
+      ? undefined
+      : enrichmentsRef.current[word.id]?.senseExamples?.[index];
+    if (word.id === undefined || !example || reviewingSense !== null) return;
+    void requestExampleReview({
+      word: word.word,
+      wordId: word.id,
+      index,
+      example,
+      reason: "meaning-mismatch",
+    });
+  }
+
+  async function rewriteSenseExample(index: number) {
+    const word = currentRef.current;
+    const enrichment = word.id === undefined
+      ? undefined
+      : enrichmentsRef.current[word.id];
+    const example = enrichment?.senseExamples?.[index];
+    if (word.id === undefined || !example || rewritingSense !== null) return;
+    setRewritingSense(index);
+    try {
+      const response = await fetch("/api/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: word.word,
+          meaning: example.meaning,
+          senses: [example.meaning],
+          familiarMeanings: [...currentFamiliarMeanings],
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await response.json() as WordEnrichment & { error?: string };
+      const replacement = data.senseExamples?.[0];
+      if (!response.ok || data.source !== "ai" || !replacement) {
+        throw new Error(data.error ?? "单条例句重写失败");
+      }
+      updateSenseExample(word.id, index, () => replacement);
+      onNotify(`“${example.meaning}”的例句已单独重写`, 2200);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "单条例句重写失败", 2400);
+    } finally {
+      setRewritingSense(null);
     }
   }
 
@@ -129,6 +291,8 @@ export function useAiCoach({
     aiLoading,
     aiMode,
     enrichmentLoading,
+    reviewingSense,
+    rewritingSense,
     setAiOpen,
     setAiInput,
     setAiAnswer,
@@ -136,5 +300,7 @@ export function useAiCoach({
     submitCoach,
     askCoach,
     enrichCurrentWord,
+    reportSenseMismatch,
+    rewriteSenseExample,
   } as const;
 }

@@ -28,6 +28,26 @@ export function buildDurableRemap(proposal) {
   };
 }
 
+/**
+ * 生成页面播放所需的紧凑索引。审计元数据继续留在 audio-index.json，
+ * 浏览器不再为每次启动下载和解析它们。
+ */
+export function buildRuntimeAudioIndex(index) {
+  const files = [...new Set(
+    Object.values(index.entries).map((clip) => clip.file),
+  )];
+  const fileIndexes = new Map(files.map((file, fileIndex) => [file, fileIndex]));
+  return {
+    files,
+    entries: Object.fromEntries(
+      Object.entries(index.entries).map(([wordId, clip]) => [
+        wordId,
+        [fileIndexes.get(clip.file), clip.start, clip.end],
+      ]),
+    ),
+  };
+}
+
 export function applyAudioRemap(index, remap) {
   const affectedFiles = new Set(Object.keys(remap.files));
   index.entries = Object.fromEntries(

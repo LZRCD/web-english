@@ -75,3 +75,25 @@ test("双标签并发写入时旧 revision 不会覆盖新数据", async ({ cont
   await expect(dailyGoalSelect(secondPage)).toHaveValue("30");
   await expect(secondPage.getByText(/发现 1 份未合并的恢复副本/)).toBeVisible();
 });
+
+test("双标签性能样本批量落盘时按样本 ID 合并", async ({ context }) => {
+  await installStateSeed(context, createState());
+  const firstPage = await context.newPage();
+  await openApp(firstPage);
+  const secondPage = await context.newPage();
+  await openApp(secondPage);
+
+  await expect.poll(() => firstPage.evaluate(() => {
+    const store = JSON.parse(
+      localStorage.getItem("wordloop-performance-v1") ?? '{"samples":[]}',
+    );
+    return store.samples.filter((sample) =>
+      sample.metric === "redbook.load.total").length;
+  })).toBeGreaterThanOrEqual(2);
+
+  const ids = await firstPage.evaluate(() => {
+    const store = JSON.parse(localStorage.getItem("wordloop-performance-v1"));
+    return store.samples.map((sample) => sample.id);
+  });
+  expect(new Set(ids).size).toBe(ids.length);
+});

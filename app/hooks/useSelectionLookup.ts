@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
   type SetStateAction,
 } from "react";
 import {
@@ -27,13 +27,26 @@ import {
   cleanSelectedText,
   formatDictionaryPhonetic,
 } from "../../lib/word-utils";
+import {
+  fetchDictionaryRangeWithFallback,
+  isDictionaryLetterRangeIndexCompatible,
+  type DictionaryLetterRangeIndex,
+  type DictionaryShard,
+} from "../../lib/dictionary-range";
+import {
+  createPerformanceTrace,
+  fetchJsonWithDiagnostics,
+  startPerformanceTimer,
+  type PerformanceOutcome,
+  type PerformanceTags,
+} from "../../lib/performance-diagnostics";
+import {
+  DATA_CONTENT_VERSION,
+  DICTIONARY_RANGE_INDEX,
+  versionedDataUrl,
+} from "../../lib/data-version";
+import { cleanupOldLookupCaches } from "../../lib/storage-diagnostics";
 
-type DictionaryEntry = [
-  displayWord: string,
-  phonetic: string,
-  translation: string,
-];
-type DictionaryShard = Record<string, DictionaryEntry>;
 type PhoneticIndex = Record<string, string>;
 
 type CommonOptions = {
@@ -61,13 +74,14 @@ export type UseSelectionLookupOptions = CommonOptions & WordSource;
 
 export type UseSelectionLookupResult = {
   selectionLookup?: SelectionLookupState;
-  handleTextSelection(event: ReactMouseEvent<HTMLElement>): Promise<void>;
+  handleTextSelection(event: SyntheticEvent<HTMLElement>): Promise<void>;
   translateSelection(options?: { forceAi?: boolean }): Promise<void>;
   closeSelectionLookup(): void;
 };
 
-const LOOKUP_CACHE_KEY = "wordloop-selection-lookups-v1";
+const LOOKUP_CACHE_KEY = `wordloop-selection-lookups-v1:${DATA_CONTENT_VERSION}`;
 const DICTIONARY_BASE_PATH = "/data/dictionary";
+const DICTIONARY_RANGE_DIRECTORY = `${DICTIONARY_BASE_PATH}/ranges`;
 const PHONETIC_INDEX_PATH = "/data/phonetic-index.json";
 
 function readLookupCache() {
@@ -135,9 +149,16 @@ export function useSelectionLookup(
   const [selectionLookup, setSelectionLookup] =
     useState<SelectionLookupState>();
   const lookupAbortRef = useRef<AbortController | null>(null);
+  const lookupAttemptsRef = useRef(new Set<string>());
   const lookupCacheRef = useRef<Record<string, LookupResult>>({});
   const dictionaryShardCacheRef =
     useRef<Record<string, DictionaryShard>>({});
+  const dictionaryPrefixCacheRef =
+    useRef<Record<string, DictionaryShard>>({});
+  const dictionaryPrefixPromiseRef =
+    useRef<Record<string, Promise<DictionaryShard>>>({});
+  const dictionaryLetterRangeIndexPromiseRef =
+    useRef<Record<string, Promise<DictionaryLetterRangeIndex>>>({});
   const phoneticIndexRef = useRef<PhoneticIndex>({});
   const [phoneticIndexReady, setPhoneticIndexReady] = useState(false);
 
@@ -163,20 +184,104 @@ export function useSelectionLookup(
     });
   }, [setLookupWords]);
 
-  const findInLocalDictionary = useCallback(
-    async (query: string): Promise<LookupResult | null> => {
-      if (!/^[A-Za-z][A-Za-z '-]*$/.test(query)) return null;
-      const shardName = query[0].toLowerCase();
-      let shard = dictionaryShardCacheRef.current[shardName];
-      if (!shard) {
-        const response = await fetch(
-          `${DICTIONARY_BASE_PATH}/${shardName}.json`,
-        );
-        if (!response.ok) return null;
-        shard = await response.json() as DictionaryShard;
-        dictionaryShardCacheRef.current[shardName] = shard;
+  const loadDictionaryPrefix = useCallback(async (
+    key: string,
+    tags: PerformanceTags = {},
+  ) => {
+    const rangeIndex = DICTIONARY_RANGE_INDEX;
+    const letter = key[0];
+    const letterIndexPromise = dictionaryLetterRangeIndexPromiseRef.current[letter]
+      ?? fetchJsonWithDiagnostics<DictionaryLetterRangeIndex>(
+        versionedDataUrl(
+          `${DICTIONARY_RANGE_DIRECTORY}/${rangeIndex.rangeIndexFiles[letter]}.json`,
+        ),
+        "dictionary.range_letter_index",
+        undefined,
+        { ...tags, letter },
+      )
+        .then((result) => {
+          if (!isDictionaryLetterRangeIndexCompatible(result.data, letter)) {
+            throw new Error("dictionary letter range index is invalid");
+          }
+          return result.data;
+        })
+        .catch((error) => {
+          delete dictionaryLetterRangeIndexPromiseRef.current[letter];
+          throw error;
+        });
+    dictionaryLetterRangeIndexPromiseRef.current[letter] = letterIndexPromise;
+    const letterIndex = await letterIndexPromise;
+    const prefix = key.slice(0, Math.min(rangeIndex.prefixLength, key.length));
+    const cached = dictionaryPrefixCacheRef.current[prefix];
+    if (cached) return cached;
+    const pending = dictionaryPrefixPromiseRef.current[prefix];
+    if (pending) return pending;
+
+    const request = (async () => {
+      const combined: DictionaryShard = {};
+      const ranges = letterIndex.ranges[prefix] ?? [];
+      if (!ranges.length) throw new Error("dictionary range not indexed");
+      for (const [file, start, end] of ranges) {
+        const fullShard = dictionaryShardCacheRef.current[file];
+        if (fullShard) return fullShard;
+        const releaseFile = rangeIndex.releaseFiles[file] ?? file;
+        const result = await fetchDictionaryRangeWithFallback({
+          url: versionedDataUrl(`${DICTIONARY_BASE_PATH}/${releaseFile}.json`),
+          start,
+          end,
+          tags: { ...tags, rangeCount: ranges.length },
+        });
+        if (result.mode !== "partial-206") {
+          dictionaryShardCacheRef.current[file] = result.shard;
+          return result.shard;
+        }
+        Object.assign(combined, result.shard);
       }
-      const entry = shard[query.toLowerCase()];
+      dictionaryPrefixCacheRef.current[prefix] = combined;
+      return combined;
+    })();
+    dictionaryPrefixPromiseRef.current[prefix] = request;
+    try {
+      return await request;
+    } finally {
+      delete dictionaryPrefixPromiseRef.current[prefix];
+    }
+  }, []);
+
+  const findInLocalDictionary = useCallback(
+    async (
+      query: string,
+      tags: PerformanceTags = {},
+    ): Promise<LookupResult | null> => {
+      if (!/^[A-Za-z][A-Za-z '-]*$/.test(query)) return null;
+      const key = query.toLowerCase();
+      let shard: DictionaryShard;
+      try {
+        shard = await loadDictionaryPrefix(key, tags);
+      } catch (rangeError) {
+        const shardName = key[0];
+        shard = dictionaryShardCacheRef.current[shardName];
+        if (!shard) {
+          const fallbackReason = rangeError instanceof SyntaxError
+            ? "fragment-corrupt"
+            : rangeError instanceof TypeError
+              ? "network-error"
+              : "range-unavailable";
+          try {
+            const result = await fetchJsonWithDiagnostics<DictionaryShard>(
+              versionedDataUrl(`${DICTIONARY_BASE_PATH}/${shardName}.json`),
+              "dictionary.full_shard_fallback",
+              undefined,
+              { ...tags, fallbackReason },
+            );
+            shard = result.data;
+          } catch {
+            return null;
+          }
+          dictionaryShardCacheRef.current[shardName] = shard;
+        }
+      }
+      const entry = shard[key];
       if (!entry) return null;
       return {
         query: entry[0],
@@ -191,16 +296,19 @@ export function useSelectionLookup(
         source: "dictionary",
       };
     },
-    [],
+    [loadDictionaryPrefix],
   );
 
   /** 词典音标索引（秒级）优先，分片兜底 */
   const lookupLocalPhonetic = useCallback(
-    async (query: string): Promise<string> => {
+    async (
+      query: string,
+      tags: PerformanceTags = {},
+    ): Promise<string> => {
       const normalized = query.trim().toLowerCase();
       const indexed = phoneticIndexRef.current[normalized];
       if (indexed) return indexed;
-      const result = await findInLocalDictionary(query).catch(() => null);
+      const result = await findInLocalDictionary(query, tags).catch(() => null);
       return result?.phonetic ?? "";
     },
     [findInLocalDictionary],
@@ -267,7 +375,7 @@ export function useSelectionLookup(
   ]);
 
   const handleTextSelection = useCallback(async (
-    event: ReactMouseEvent<HTMLElement>,
+    event: SyntheticEvent<HTMLElement>,
   ) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, input, textarea, select, a")) return;
@@ -317,6 +425,16 @@ export function useSelectionLookup(
     lookupAbortRef.current?.abort();
     const resolved = resolveKnownLocal(query, context);
     if (resolved) {
+      const normalizedQuery = query.toLowerCase();
+      const lookupMode = lookupAttemptsRef.current.has(normalizedQuery)
+        ? "repeat"
+        : "first";
+      const traceId = createPerformanceTrace("lookup");
+      lookupAttemptsRef.current.add(normalizedQuery);
+      const lookupTimer = startPerformanceTimer("lookup.total", {
+        traceId,
+        lookupMode,
+      });
       saveLookupWord(resolved.result);
       setSelectionLookup({
         query,
@@ -327,6 +445,10 @@ export function useSelectionLookup(
         result: resolved.result,
         cached: resolved.cached,
       });
+      window.requestAnimationFrame(() => lookupTimer.end({
+        source: resolved.result.source,
+        cacheHit: resolved.cached,
+      }));
       // 红宝书词索引未命中音标时，后台用词典分片补全
       if (
         resolved.result.source === "redbook"
@@ -369,6 +491,22 @@ export function useSelectionLookup(
     if (!selectionLookup || selectionLookup.status === "loading") return;
     const { query, context, x, y } = selectionLookup;
     const normalizedQuery = query.toLowerCase();
+    const lookupMode = lookupAttemptsRef.current.has(normalizedQuery)
+      ? "repeat"
+      : "first";
+    const traceId = createPerformanceTrace("lookup");
+    lookupAttemptsRef.current.add(normalizedQuery);
+    const lookupTimer = startPerformanceTimer("lookup.total", {
+      traceId,
+      lookupMode,
+      forceAi: Boolean(translateOptions.forceAi),
+    });
+    const finishLookup = (
+      tags: PerformanceTags,
+      outcome: PerformanceOutcome = "ok",
+    ) => {
+      window.requestAnimationFrame(() => lookupTimer.end(tags, outcome));
+    };
 
     if (!translateOptions.forceAi) {
       const known = resolveKnownLocal(query, context);
@@ -382,6 +520,10 @@ export function useSelectionLookup(
           status: "ready",
           result: known.result,
           cached: known.cached,
+        });
+        finishLookup({
+          source: known.result.source,
+          cacheHit: known.cached,
         });
         // 已知结果仍缺音标时（非红宝书词典词），后台用词典分片补全
         if (!known.result.phonetic) {
@@ -413,7 +555,11 @@ export function useSelectionLookup(
     setSelectionLookup({ query, context, x, y, status: "loading" });
     try {
       if (!translateOptions.forceAi) {
-        const dictionaryResult = await findInLocalDictionary(query);
+        const dictionaryResult = await findInLocalDictionary(query, { traceId });
+        if (controller.signal.aborted || lookupAbortRef.current !== controller) {
+          finishLookup({}, "aborted");
+          return;
+        }
         if (dictionaryResult) {
           saveLookupWord(dictionaryResult);
           setSelectionLookup({
@@ -424,6 +570,7 @@ export function useSelectionLookup(
             status: "ready",
             result: dictionaryResult,
           });
+          finishLookup({ source: "dictionary", cacheHit: false });
           return;
         }
       }
@@ -442,7 +589,11 @@ export function useSelectionLookup(
       if (!response.ok || data.source !== "ai") {
         throw new Error(data.error ?? "划词查询失败");
       }
-      const dictionaryPhonetic = await lookupLocalPhonetic(query);
+      const dictionaryPhonetic = await lookupLocalPhonetic(query, { traceId });
+      if (controller.signal.aborted || lookupAbortRef.current !== controller) {
+        finishLookup({}, "aborted");
+        return;
+      }
       const trustedResult: LookupResult = {
         ...data,
         phonetic: selectionLookup.result?.phonetic || dictionaryPhonetic,
@@ -465,8 +616,10 @@ export function useSelectionLookup(
         status: "ready",
         result: trustedResult,
       });
+      finishLookup({ source: "ai", cacheHit: false });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        finishLookup({}, "aborted");
         return;
       }
       setSelectionLookup({
@@ -479,6 +632,7 @@ export function useSelectionLookup(
           ? error.message
           : "划词查询失败",
       });
+      finishLookup({}, "error");
     }
   }, [
     findInLocalDictionary,
@@ -490,18 +644,18 @@ export function useSelectionLookup(
   ]);
 
   useEffect(() => {
+    cleanupOldLookupCaches(LOOKUP_CACHE_KEY);
     lookupCacheRef.current = readLookupCache();
   }, []);
 
   // 预加载红宝书词音标索引，秒级填充学习卡与划词结果
   useEffect(() => {
     let active = true;
-    fetch(PHONETIC_INDEX_PATH)
-      .then((response) => {
-        if (!response.ok) throw new Error("phonetic index missing");
-        return response.json() as Promise<PhoneticIndex>;
-      })
-      .then((index) => {
+    fetchJsonWithDiagnostics<PhoneticIndex>(
+      versionedDataUrl(PHONETIC_INDEX_PATH),
+      "phonetic.index",
+    )
+      .then(({ data: index }) => {
         if (active) {
           phoneticIndexRef.current = index;
           setPhoneticIndexReady(true);

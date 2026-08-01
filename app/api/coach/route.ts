@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  ApiRequestError,
+  beginApiRequest,
+  boundedText,
+  readJsonBody,
+} from "../../../lib/api-guard";
 
 type CoachRequest = {
   word?: {
@@ -40,17 +46,31 @@ function localAnswer(body: CoachRequest) {
   return `${relationHint}记忆联想：把 ${word} 和这条线索绑在一起——${body.word?.root ?? meaning}。再朗读原句 “${sentence}”，让声音、画面和含义同时出现。`;
 }
 
-export async function POST(request: NextRequest) {
-  let body: CoachRequest;
-  try {
-    body = (await request.json()) as CoachRequest;
-  } catch {
-    return NextResponse.json({ error: "请求内容不是有效 JSON" }, { status: 400 });
-  }
+async function handlePost(request: NextRequest) {
+  const raw = await readJsonBody<CoachRequest>(request, 32 * 1024);
+  const body: CoachRequest = {
+    prompt: boundedText(raw.prompt, 500),
+    word: raw.word ? {
+      word: boundedText(raw.word.word, 160),
+      meaning: boundedText(raw.word.meaning, 1_000),
+      sentence: boundedText(raw.word.sentence, 1_000),
+      translation: boundedText(raw.word.translation, 1_000),
+      root: boundedText(raw.word.root, 300),
+      collocation: boundedText(raw.word.collocation, 500),
+      section: boundedText(raw.word.section, 50),
+      unit: typeof raw.word.unit === "number"
+        ? raw.word.unit
+        : boundedText(raw.word.unit, 30),
+      relation: raw.word.relation ? {
+        label: boundedText(raw.word.relation.label, 160),
+        note: boundedText(raw.word.relation.note, 300),
+        independent: raw.word.relation.independent === true,
+      } : undefined,
+    } : undefined,
+  };
   if (!body.word?.word || typeof body.prompt !== "string" || !body.prompt.trim()) {
     return NextResponse.json({ error: "缺少当前单词或问题" }, { status: 400 });
   }
-  body.prompt = body.prompt.trim().slice(0, 500);
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
   const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
   const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
@@ -85,10 +105,31 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) throw new Error("AI service unavailable");
-    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const answer = data.choices?.[0]?.message?.content?.trim();
+    const data = await readJsonBody<{
+      choices?: Array<{ message?: { content?: string } }>;
+    }>(response, 1024 * 1024);
+    const answer = boundedText(data.choices?.[0]?.message?.content, 500, false);
     return NextResponse.json({ answer: answer || localAnswer(body), mode: "cloud" });
   } catch {
     return NextResponse.json({ answer: localAnswer(body), mode: "local", reason: "upstream_error" });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  let lease: ReturnType<typeof beginApiRequest> | undefined;
+  try {
+    lease = beginApiRequest(request, {
+      name: "coach",
+      requestsPerMinute: 40,
+      maxConcurrent: 4,
+    });
+    return await handlePost(request);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  } finally {
+    lease?.release();
   }
 }

@@ -9,7 +9,10 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { applyAudioRemap } from "./audio-remap.mjs";
+import {
+  applyAudioRemap,
+  buildRuntimeAudioIndex,
+} from "./audio-remap.mjs";
 
 const root = process.cwd();
 const sourceRoot = path.join(
@@ -21,6 +24,12 @@ const sourceRoot = path.join(
 );
 const publicRoot = path.join(root, "public", "audio", "redbook");
 const indexPath = path.join(root, "public", "data", "audio-index.json");
+const runtimeIndexPath = path.join(
+  root,
+  "public",
+  "data",
+  "audio-runtime-index.json",
+);
 const remapPath = path.join(root, "public", "data", "audio-remap.json");
 const redbookPath = path.join(root, "public", "data", "redbook.json");
 const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
@@ -328,7 +337,7 @@ const output = {
       passedFileCount: files.length - needsReview.length,
       needsReviewFileCount: needsReview.length,
       fallbackWordCount: redbook.words.length - indexedWordCount,
-      generatedAt: new Date().toISOString(),
+      schema: "audio-validation-v1",
     },
     files,
   },
@@ -342,7 +351,14 @@ try {
   if (error.code !== "ENOENT") throw error;
 }
 
-await writeFile(indexPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+await Promise.all([
+  writeFile(indexPath, `${JSON.stringify(output, null, 2)}\n`, "utf8"),
+  writeFile(
+    runtimeIndexPath,
+    `${JSON.stringify(buildRuntimeAudioIndex(output))}\n`,
+    "utf8",
+  ),
+]);
 console.log(JSON.stringify({
   sourceFileCount: sourcePaths.length,
   indexedWordCount: output.metadata.indexedWordCount,

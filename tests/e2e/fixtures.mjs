@@ -25,6 +25,7 @@ export function createState(overrides = {}) {
     shuffleSeed: 1,
     selectedSection: "必考词",
     selectedUnit: 1,
+    ratingUndoStack: [],
     ...overrides,
   };
 }
@@ -57,6 +58,34 @@ export const RADIATE_ENRICHMENT = {
   1: {
     sentence: "Stars radiate energy into space.",
     translation: "恒星向太空辐射能量。",
+    senseExamples: [
+      {
+        meaning: "散发",
+        sentence: "Stars radiate energy into space.",
+        translation: "恒星向太空辐射能量。",
+      },
+      {
+        meaning: "流露",
+        sentence: "Her calm voice radiated confidence during the interview.",
+        translation: "面试时，她平静的声音流露出自信。",
+      },
+      {
+        meaning: "发出 (光、辐射等)",
+        sentence: "A careful elucidator radiated light onto the old diagram.",
+        translation: "一位细致的阐释者把光照在旧图表上。",
+      },
+      {
+        meaning: "呈辐射状发散 (或伸展)",
+        sentence: "Several narrow paths radiate from the central square.",
+        translation: "几条狭窄的小路从中心广场向外伸展。",
+      },
+    ],
+    targetMeanings: [
+      "散发",
+      "流露",
+      "发出 (光、辐射等)",
+      "呈辐射状发散 (或伸展)",
+    ],
     collocations: ["radiate energy"],
     source: "dictionary",
     verified: true,

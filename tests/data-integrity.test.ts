@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   BACKUP_FORMAT,
@@ -12,6 +14,7 @@ import {
   removeRecoveryCopyFromRaw,
   serializeRecoveryCopies,
 } from "../lib/recovery.ts";
+import { normalizeSenseExamples } from "../lib/enrichment.ts";
 import {
   parseStoredState,
   STORAGE_VERSION,
@@ -42,6 +45,7 @@ function emptyState(): StoredState {
     shuffleSeed: 1,
     selectedSection: "必考词",
     selectedUnit: 1,
+    ratingUndoStack: [],
   };
 }
 
@@ -71,6 +75,170 @@ test("状态解析拒绝非对象、非法版本和未来版本", () => {
     () => parseStoredState(JSON.stringify({ schemaVersion: STORAGE_VERSION + 1 })),
     /来自更新版本/,
   );
+});
+
+test("内容补充必须为每个释义恰好返回一条例句", () => {
+  const senses = ["辐射", "流露"];
+  const normalized = normalizeSenseExamples([
+    { meaning: "流露", sentence: "She radiates confidence.", translation: "她流露出自信。", confidence: 2 },
+    { meaning: "辐射", sentence: "Stars radiate energy.", translation: "恒星辐射能量。", confidence: 0.6 },
+  ], senses);
+  assert.deepEqual(normalized.map((item) => item.meaning), senses);
+  assert.deepEqual(normalized.map((item) => item.confidence), [0.6, 1]);
+  assert.throws(
+    () => normalizeSenseExamples(normalized.slice(0, 1), senses),
+    /例句数量应为 2 条/,
+  );
+  assert.throws(
+    () => normalizeSenseExamples([
+      normalized[0],
+      { ...normalized[1], meaning: "其他" },
+    ], senses),
+    /未一一对应/,
+  );
+});
+
+test("音标质量清单覆盖全书并记录来源、版本与 IPA 体系", () => {
+  const metadata = JSON.parse(readFileSync(
+    new URL("../public/data/phonetic-metadata.json", import.meta.url),
+    "utf8",
+  ));
+  assert.equal(metadata.coverage.total, 6550);
+  assert.equal(metadata.coverage.covered, 6550);
+  assert.equal(
+    Object.keys(metadata.entries).length,
+    metadata.coverage.uniqueEntries,
+  );
+  const entries = Object.values(metadata.entries as Record<string, {
+    source: string;
+    sourceVersion: string;
+    confidence: string;
+    ipaSystem: string;
+    era: string;
+    evidence: string;
+  }>);
+  assert.equal(
+    entries.filter((entry) =>
+      entry.source === "override").length,
+    metadata.coverage.overrides,
+  );
+  for (const entry of entries) {
+    assert.match(entry.sourceVersion, /^[a-f0-9]{64}$/);
+    assert.ok(["high", "medium"].includes(entry.confidence));
+    if (entry.source === "override") {
+      assert.equal(entry.ipaSystem, "IPA");
+      assert.equal(entry.era, "modern");
+    } else {
+      assert.equal(entry.ipaSystem, "ECDICT-mixed");
+      assert.equal(entry.era, "unverified");
+    }
+    assert.ok(entry.evidence);
+  }
+});
+
+test("数据构建报告绑定内容版本并保留 ASR 模型与验证报告证据", () => {
+  const manifest = JSON.parse(readFileSync(
+    new URL("../public/data/data-manifest.json", import.meta.url),
+    "utf8",
+  ));
+  const report = JSON.parse(readFileSync(
+    new URL("../reports/data-build-report.json", import.meta.url),
+    "utf8",
+  ));
+  const provenanceRaw = readFileSync(
+    new URL("../scripts/data-provenance.json", import.meta.url),
+  );
+  const provenance = JSON.parse(provenanceRaw.toString("utf8"));
+  assert.equal(report.format, "wordloop-data-build-report-v2");
+  assert.equal(report.contentVersion, manifest.contentVersion);
+  assert.equal(
+    report.provenance.sha256,
+    createHash("sha256").update(provenanceRaw).digest("hex"),
+  );
+  assert.equal(report.provenance.liveVerification.complete, true);
+  assert.deepEqual(
+    report.tools.whisper.declaredModels.map((item: { name: string }) => item.name),
+    ["openai/whisper-tiny.en", "openai/whisper-base.en"],
+  );
+  assert.ok(report.tools.whisper.validationReports.length >= 2);
+  for (const evidence of report.tools.whisper.validationReports) {
+    assert.match(
+      evidence.sha256 ?? evidence.recordedSha256,
+      /^[a-f0-9]{64}$/,
+    );
+  }
+  assert.equal(report.tools.whisper.modelHashesComplete, true);
+  assert.deepEqual(report.tools.whisper.modelSnapshots, provenance.whisper.models);
+  for (const model of report.tools.whisper.modelSnapshots) {
+    assert.match(model.revision, /^[a-f0-9]{40}$/);
+    assert.match(model.sha256, /^[a-f0-9]{64}$/);
+    assert.ok(model.bytes > 100_000_000);
+  }
+  assert.match(report.tools.ffmpeg, /^ffmpeg version 8\.1\.2/);
+  assert.equal(
+    report.tools.ffmpegEvidence.binarySha256,
+    provenance.ffmpeg.binarySha256,
+  );
+  assert.equal(report.upstream.ecdict.commit, provenance.ecdict.commit);
+  assert.equal(
+    report.upstream.ecdict.source.recordedSha256,
+    provenance.ecdict.sourceSha256,
+  );
+  assert.equal(report.upstream.ecdict.verification.matchedShards, 26);
+});
+
+test("Range 索引绑定当前分片哈希且所有字节范围有效", () => {
+  const dictionaryUrl = new URL("../public/data/dictionary/", import.meta.url);
+  const rootRaw = readFileSync(new URL("ranges.json", dictionaryUrl));
+  const index = JSON.parse(rootRaw.toString("utf8"));
+  assert.equal(index.version, 4);
+  assert.ok(rootRaw.byteLength < 8 * 1024);
+  const sizes: number[] = [];
+  for (const letter of "abcdefghijklmnopqrstuvwxyz") {
+    const raw = readFileSync(new URL(`${letter}.json`, dictionaryUrl));
+    const hash = createHash("sha256").update(raw).digest("hex");
+    const releaseName = `${letter}.${hash.slice(0, 16)}`;
+    assert.equal(index.shardHashes[letter], hash);
+    assert.equal(index.releaseFiles[letter], releaseName);
+    assert.deepEqual(
+      readFileSync(new URL(`${releaseName}.json`, dictionaryUrl)),
+      raw,
+    );
+    const letterRaw = readFileSync(
+      new URL(`ranges/${letter}.json`, dictionaryUrl),
+    );
+    const letterHash = createHash("sha256").update(letterRaw).digest("hex");
+    const letterReleaseName = `${letter}.${letterHash.slice(0, 16)}`;
+    assert.equal(index.rangeIndexHashes[letter], letterHash);
+    assert.equal(index.rangeIndexFiles[letter], letterReleaseName);
+    assert.ok(letterRaw.byteLength < 64 * 1024);
+    assert.deepEqual(
+      readFileSync(
+        new URL(`ranges/${letterReleaseName}.json`, dictionaryUrl),
+      ),
+      letterRaw,
+    );
+    const letterIndex = JSON.parse(letterRaw.toString("utf8")) as {
+      version: number;
+      letter: string;
+      ranges: Record<string, Array<[string, number, number]>>;
+    };
+    assert.equal(letterIndex.version, 1);
+    assert.equal(letterIndex.letter, letter);
+    for (const [prefix, ranges] of Object.entries(letterIndex.ranges)) {
+      assert.ok(prefix.startsWith(letter));
+      for (const [file, start, end] of ranges) {
+        assert.equal(file, letter);
+        assert.ok(start >= 1 && end >= start && end < raw.byteLength - 1);
+        const fragment = raw.subarray(start, end + 1).toString("utf8");
+        assert.doesNotThrow(() => JSON.parse(`{${fragment}}`));
+        sizes.push(end - start + 1);
+      }
+    }
+  }
+  assert.equal(sizes.length, 11_831);
+  assert.ok(sizes.every((size) => size > 0));
+  assert.ok(Math.max(...sizes) < 1024 * 1024);
 });
 
 test("备份解析校验日期、文档版本和状态版本一致性", () => {

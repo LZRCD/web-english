@@ -4,6 +4,7 @@ import type { ChangeEvent, RefObject } from "react";
 import type { ExamPlan } from "../../lib/learning";
 import type { AutomaticBackup } from "../../lib/backup";
 import type { StudyMode, StudyScope } from "../../lib/study";
+import PerformanceDiagnostics from "./PerformanceDiagnostics";
 
 type SettingsViewProps = {
   dailyGoal: number;
@@ -29,6 +30,7 @@ type SettingsViewProps = {
     createdAt: string;
     restorable: boolean;
   }>;
+  undoCount: number;
   onDailyGoalChange: (value: number) => void;
   onAdaptiveChange: (value: boolean) => void;
   onMinWordsChange: (value: number) => void;
@@ -44,6 +46,7 @@ type SettingsViewProps = {
   onRestoreRecovery: (id: string) => void;
   onDiscardRecovery: (id: string) => void;
   onResetRecords: () => void;
+  onClearUndoHistory: () => void;
   importInputRef: RefObject<HTMLInputElement | null>;
 };
 
@@ -67,6 +70,7 @@ export default function SettingsView({
   dataReplacementDisabled,
   dataActionsLoading,
   recoveryCopies,
+  undoCount,
   onDailyGoalChange,
   onAdaptiveChange,
   onMinWordsChange,
@@ -82,6 +86,7 @@ export default function SettingsView({
   onRestoreRecovery,
   onDiscardRecovery,
   onResetRecords,
+  onClearUndoHistory,
   importInputRef,
 }: SettingsViewProps) {
   const dataActionsLocked = dataActionsDisabled || dataActionsLoading !== null;
@@ -289,6 +294,26 @@ export default function SettingsView({
             </div>
           </div>
         )}
+        <div className="backup-settings">
+          <span>
+            <strong>评分撤销历史</strong>
+            <small>当前可撤销 {undoCount} 步，运行中最多保留 30 步</small>
+          </span>
+          <div>
+            <button
+              type="button"
+              className="quiet"
+              disabled={dataReplacementLocked || undoCount === 0}
+              onClick={() => {
+                if (window.confirm("清空全部评分撤销历史？已提交的评分不会被删除。")) {
+                  onClearUndoHistory();
+                }
+              }}
+            >
+              清空撤销历史
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           className="reset-button"
@@ -298,6 +323,7 @@ export default function SettingsView({
           清空本机学习记录
         </button>
       </div>
+      <PerformanceDiagnostics undoCount={undoCount} />
       <div className="shortcut-panel">
         <h2>快捷键</h2>
         <div>

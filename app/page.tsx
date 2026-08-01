@@ -22,6 +22,7 @@ import {
   type FamiliarMeaningMap,
   type LookupWord,
   type MistakeRecord,
+  type RatingUndo,
   type Review,
   type SavedWord,
   type StudyMode,
@@ -47,7 +48,6 @@ import {
   type StudySession,
   type StubbornWordMap,
   type WordEnrichment,
-  type WordProgress,
   type WordProgressMap,
 } from "../lib/learning";
 import {
@@ -87,25 +87,15 @@ import {
   toLookupStudyWord,
 } from "../lib/selection-lookup";
 import { buildSessionCompletionSummary } from "../lib/session-summary";
+import {
+  createPerformanceTrace,
+  fetchJsonWithDiagnostics,
+  startPerformanceTimer,
+} from "../lib/performance-diagnostics";
+import { versionedDataUrl } from "../lib/data-version";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ActivityRange = 140 | 182 | 365;
-
-type RatingUndo = {
-  reviewId: string;
-  word: Word;
-  previousProgress?: WordProgress;
-  previousMistake?: MistakeRecord;
-  evictedReview?: Review;
-  previousPosition: number;
-  previousSession?: StudySession;
-  studyKey: string;
-  selectedSection: string;
-  selectedUnit: number | string | "all";
-  studyMode: StudyMode;
-  studyScope: StudyScope;
-  shuffleSeed: number;
-};
 
 type RedbookData = {
   metadata: {
@@ -211,6 +201,7 @@ export default function Home() {
   const previousSessionCompleteRef = useRef(sessionComplete);
   const toastTimerRef = useRef<number | undefined>(undefined);
   const ratingUndoTimerRef = useRef<number | undefined>(undefined);
+  const [startupTraceId] = useState(() => createPerformanceTrace("startup"));
   const showToast = useCallback((message: string, duration = 3000) => {
     setToast(message);
     if (toastTimerRef.current !== undefined) {
@@ -461,8 +452,10 @@ export default function Home() {
   const {
     aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
     enrichmentLoading,
+    reviewingSense, rewritingSense,
     setAiOpen, setAiInput, setAiAnswer, setAiMode,
     submitCoach, askCoach, enrichCurrentWord,
+    reportSenseMismatch, rewriteSenseExample,
   } = useAiCoach({
     current,
     enrichments,
@@ -471,7 +464,7 @@ export default function Home() {
     currentFamiliarMeanings,
     onNotify: showToast,
   });
-  const { audioIndex, speak, speakNext, speakWord } = useAudio({
+  const { hasRecordedAudio, speak, speakNext, speakWord } = useAudio({
     current,
     studyWords,
     wordIndex,
@@ -554,6 +547,7 @@ export default function Home() {
     shuffleSeed,
     selectedSection,
     selectedUnit,
+    ratingUndoStack: undoStack,
   }), [
     activeSession,
     adaptiveNewWords,
@@ -575,6 +569,7 @@ export default function Home() {
     stubbornHistory,
     studyMode,
     studyScope,
+    undoStack,
     wordProgress,
   ]);
 
@@ -597,29 +592,43 @@ export default function Home() {
   } = useStudyPersistence({
     state: persistedState,
     todayKey,
+    startupTraceId,
     onApplyState: applyStoredState,
     onNotify: showToast,
   });
 
   useEffect(() => {
-    if (!hydrated) return;
     let active = true;
+    let renderFrame: number | undefined;
+    const controller = new AbortController();
+    const traceId = startupTraceId;
+    const loadTimer = startPerformanceTimer("redbook.load.total", { traceId });
     Promise.all([
-      fetch("/data/redbook.json").then((response) => {
-        if (!response.ok) throw new Error("redbook data missing");
-        return response.json() as Promise<RedbookData>;
-      }),
-      fetch("/data/redbook-analysis.json").then((response) => {
-        if (!response.ok) throw new Error("redbook analysis missing");
-        return response.json() as Promise<RedbookAnalysisData>;
-      }),
+      fetchJsonWithDiagnostics<RedbookData>(
+        versionedDataUrl("/data/redbook.json"),
+        "redbook.data",
+        { signal: controller.signal },
+        { traceId },
+      ),
+      fetchJsonWithDiagnostics<RedbookAnalysisData>(
+        versionedDataUrl("/data/redbook-analysis.json"),
+        "redbook.analysis",
+        { signal: controller.signal },
+        { traceId },
+      ),
     ])
-      .then(([data, analysis]) => {
+      .then(([dataResult, analysisResult]) => {
         if (!active) return;
+        const data = dataResult.data;
+        const analysis = analysisResult.data;
         if (!data.words.length) throw new Error("redbook data empty");
         if (analysis.metadata.auditedEntries !== REDBOOK_SOURCE_TOTAL) {
           throw new Error("redbook analysis incomplete");
         }
+        const indexTimer = startPerformanceTimer("redbook.load.index", {
+          traceId,
+          wordCount: data.words.length,
+        });
         const auditedWords = data.words.map((word) => {
           const audit = word.id === undefined ? undefined : analysis.entries[String(word.id)];
           return {
@@ -628,22 +637,23 @@ export default function Home() {
             relation: audit?.relation,
           };
         });
-        const exactIdLookup = new Map(
-          auditedWords.map((word) => [
-            `${word.section ?? ""}:${word.unit ?? ""}:${word.word}`,
-            word.id,
-          ]),
-        );
-        const foldedIdLookup = new Map<string, number | undefined>();
-        for (const word of auditedWords) {
-          const key = `${word.section ?? ""}:${word.unit ?? ""}:${word.word.toLowerCase()}`;
-          if (!foldedIdLookup.has(key)) foldedIdLookup.set(key, word.id);
-        }
+        indexTimer.end();
         setRedbookWords(auditedWords);
         setLearningItemCount(analysis.metadata.learningItemCount);
         setReviews((items) => {
           if (!items.some((review) => review.wordId === undefined)) {
             return items;
+          }
+          const exactIdLookup = new Map(
+            auditedWords.map((word) => [
+              `${word.section ?? ""}:${word.unit ?? ""}:${word.word}`,
+              word.id,
+            ]),
+          );
+          const foldedIdLookup = new Map<string, number | undefined>();
+          for (const word of auditedWords) {
+            const key = `${word.section ?? ""}:${word.unit ?? ""}:${word.word.toLowerCase()}`;
+            if (!foldedIdLookup.has(key)) foldedIdLookup.set(key, word.id);
           }
           const mappedReviews = items.map((review) => review.wordId
             ? review
@@ -662,15 +672,32 @@ export default function Home() {
           return mappedReviews;
         });
         setRedbookStatus("ready");
+        renderFrame = window.requestAnimationFrame(() => {
+          loadTimer.end({
+            wordCount: auditedWords.length,
+            dataCacheHit: dataResult.cacheHit,
+            analysisCacheHit: analysisResult.cacheHit,
+          });
+        });
       })
-      .catch(() => {
+      .catch((error) => {
+        loadTimer.end(
+          {},
+          error instanceof DOMException && error.name === "AbortError"
+            ? "aborted"
+            : "error",
+        );
+        if (!active) return;
         setRedbookStatus("error");
         showToast("红宝书词库读取失败，请检查本地资源");
       });
     return () => {
       active = false;
+      controller.abort();
+      if (renderFrame !== undefined) window.cancelAnimationFrame(renderFrame);
+      loadTimer.end({}, "aborted");
     };
-  }, [hydrated, showToast]);
+  }, [showToast, startupTraceId]);
 
   useEffect(() => {
     if (!pendingWordId || !studyWords.length) return;
@@ -868,7 +895,7 @@ export default function Home() {
     setShuffleSeed(state.shuffleSeed);
     setSelectedSection(state.selectedSection);
     setSelectedUnit(state.selectedUnit);
-    setUndoStack([]);
+    setUndoStack(state.ratingUndoStack);
     setUndoVisible(false);
     refreshClock();
   }
@@ -915,12 +942,15 @@ export default function Home() {
     });
     setUndoStack((stack) => [...stack, {
       reviewId: result.review.id,
-      word: current,
-      previousProgress,
-      previousMistake,
-      evictedReview: reviews.length >= MAX_REVIEWS ? reviews[0] : undefined,
+      wordId: current.id!,
+      word: current.word,
+      ...(previousProgress ? { previousProgress } : {}),
+      ...(previousMistake ? { previousMistake } : {}),
+      ...(reviews.length >= MAX_REVIEWS ? { evictedReview: reviews[0] } : {}),
       previousPosition: wordIndex,
-      previousSession: activeSession ? { ...activeSession, wordIds: [...activeSession.wordIds] } : undefined,
+      ...(activeSession
+        ? { previousSession: { ...activeSession, wordIds: [...activeSession.wordIds] } }
+        : {}),
       studyKey,
       selectedSection,
       selectedUnit,
@@ -1000,14 +1030,14 @@ export default function Home() {
     setWordProgress((items) => {
       const next = { ...items };
       if (entry.previousProgress) {
-        next[entry.word.id!] = entry.previousProgress;
+        next[entry.wordId] = entry.previousProgress;
       } else {
-        delete next[entry.word.id!];
+        delete next[entry.wordId];
       }
       return next;
     });
     setMistakes((items) => {
-      const rest = items.filter((item) => item.wordId !== entry.word.id);
+      const rest = items.filter((item) => item.wordId !== entry.wordId);
       return entry.previousMistake
         ? [entry.previousMistake, ...rest]
         : rest;
@@ -1032,7 +1062,7 @@ export default function Home() {
     setUndoStack((stack) => stack.slice(0, -1));
     setUndoVisible(false);
     refreshClock();
-    showToast(`已撤销 ${entry.word.word} 的最近评分`, 1800);
+    showToast(`已撤销 ${entry.word} 的最近评分`, 1800);
   }
 
   function changeStudyMode(mode: StudyMode) {
@@ -1084,7 +1114,6 @@ export default function Home() {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
     }
-    setUndoStack([]);
     setUndoVisible(false);
     beginLearning();
     setRevealed(false);
@@ -1157,7 +1186,6 @@ export default function Home() {
             window.clearTimeout(ratingUndoTimerRef.current);
             ratingUndoTimerRef.current = undefined;
           }
-          setUndoStack([]);
           setUndoVisible(false);
           setSearchOpen(true);
         },
@@ -1179,7 +1207,6 @@ export default function Home() {
           window.clearTimeout(ratingUndoTimerRef.current);
           ratingUndoTimerRef.current = undefined;
         }
-        setUndoStack([]);
         setUndoVisible(false);
         setWordbookTab(tab);
         setActiveView("wordbook");
@@ -1193,7 +1220,6 @@ export default function Home() {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
     }
-    setUndoStack([]);
     setUndoVisible(false);
     setRevealed(false);
   }
@@ -1445,7 +1471,7 @@ export default function Home() {
                 currentEnrichment={currentEnrichment}
                 currentProgress={currentProgress}
                 isFavorite={isFavorite}
-                audioIndex={audioIndex}
+                hasRecordedAudio={hasRecordedAudio}
                 activeSession={activeSession}
                 newCount={stats.newCount}
                 clock={clock}
@@ -1454,12 +1480,16 @@ export default function Home() {
                 reinforcementSentence={reinforcementSentence}
                 reinforcementMeaning={reinforcementMeaning}
                 enrichmentLoading={enrichmentLoading}
+                reviewingSense={reviewingSense}
+                rewritingSense={rewritingSense}
                 unfamiliarMeanings={unfamiliarMeanings}
                 onReveal={() => setRevealed(true)}
                 onToggleFavorite={() => toggleFavorite()}
                 onSpeak={speak}
                 onToggleMeaningFamiliar={toggleMeaningFamiliar}
                 onEnrichWord={enrichCurrentWord}
+                onReportSenseMismatch={reportSenseMismatch}
+                onRewriteSenseExample={rewriteSenseExample}
                 onTextSelection={handleTextSelection}
                 onSetReinforcementInput={setReinforcementInput}
                 onClearReinforcementFeedback={() => setReinforcementFeedback("")}
@@ -1604,6 +1634,7 @@ export default function Home() {
               createdAt: copy.createdAt,
               restorable: copy.state !== undefined,
             }))}
+            undoCount={undoStack.length}
             onDailyGoalChange={setDailyGoal}
             onAdaptiveChange={setAdaptiveNewWords}
             onMinWordsChange={setMinimumNewWords}
@@ -1626,6 +1657,11 @@ export default function Home() {
             onRestoreRecovery={restoreRecoveryCopy}
             onDiscardRecovery={discardRecoveryCopy}
             onResetRecords={resetLearningRecords}
+            onClearUndoHistory={() => {
+              setUndoStack([]);
+              setUndoVisible(false);
+              showToast("撤销历史已清空", 1800);
+            }}
             importInputRef={importInputRef}
           />
         )}

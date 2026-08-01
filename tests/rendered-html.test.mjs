@@ -82,6 +82,53 @@ test("ECDICT 离线辞典按首字母分片并保留音标", async () => {
   assert.match(shard.intensive[2], /密集|加强|强化/);
 });
 
+test("ECDICT 支持按词头读取小范围数据", async () => {
+  const rangesRaw = await readFile(
+    new URL("../public/data/dictionary/ranges.json", import.meta.url),
+    "utf8",
+  );
+  const ranges = JSON.parse(rangesRaw);
+  const letterRangeRaws = await Promise.all(
+    [..."abcdefghijklmnopqrstuvwxyz"].map((letter) => readFile(
+      new URL(`../public/data/dictionary/ranges/${letter}.json`, import.meta.url),
+      "utf8",
+    )),
+  );
+  const letterRanges = letterRangeRaws.map(JSON.parse);
+  const [file, start, end] = letterRanges
+    .find((item) => item.letter === "i").ranges.int[0];
+  const shard = await readFile(
+    new URL(`../public/data/dictionary/${file}.json`, import.meta.url),
+  );
+  const fragment = JSON.parse(`{${shard.subarray(start, end + 1).toString("utf8")}}`);
+  const largestRange = Math.max(
+    ...letterRanges.flatMap((item) => Object.values(item.ranges))
+      .flat()
+      .map(([, rangeStart, rangeEnd]) => rangeEnd - rangeStart + 1),
+  );
+
+  assert.equal(ranges.version, 4);
+  assert.equal(ranges.prefixLength, 3);
+  assert.equal(fragment.intensive[0], "intensive");
+  assert.ok(rangesRaw.length < 8_000);
+  assert.ok(Math.max(...letterRangeRaws.map((raw) => raw.length)) < 64_000);
+  assert.ok(largestRange < 650_000);
+});
+
+test("红宝书 6550 条词目均可取得音标", async () => {
+  const [redbookRaw, phoneticRaw] = await Promise.all([
+    readFile(new URL("../public/data/redbook.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/data/phonetic-index.json", import.meta.url), "utf8"),
+  ]);
+  const words = JSON.parse(redbookRaw).words;
+  const phonetics = JSON.parse(phoneticRaw);
+  const missing = words.filter((word) =>
+    !(word.phonetic || phonetics[word.word.trim().toLowerCase()]));
+
+  assert.equal(missing.length, 0);
+  assert.ok(Object.keys(phonetics).length >= 6548);
+});
+
 test("全量审计保留 6550 条来源并生成 6549 个学习项", async () => {
   const raw = await readFile(
     new URL("../public/data/redbook-analysis.json", import.meta.url),
@@ -102,11 +149,18 @@ test("全量审计保留 6550 条来源并生成 6549 个学习项", async () =>
 });
 
 test("红宝书原声音频经逐词 ASR 校对并对低置信度片段使用 TTS 回退", async () => {
-  const raw = await readFile(
-    new URL("../public/data/audio-index.json", import.meta.url),
-    "utf8",
-  );
+  const [raw, runtimeRaw] = await Promise.all([
+    readFile(
+      new URL("../public/data/audio-index.json", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../public/data/audio-runtime-index.json", import.meta.url),
+      "utf8",
+    ),
+  ]);
   const index = JSON.parse(raw);
+  const runtimeIndex = JSON.parse(runtimeRaw);
   const entries = Object.entries(index.entries);
 
   assert.equal(index.metadata.scope, "2027 红宝书全套配套音频");
@@ -137,6 +191,20 @@ test("红宝书原声音频经逐词 ASR 校对并对低置信度片段使用 TT
     ).lastIndexedWord,
     "exclusive",
   );
+  assert.equal(runtimeIndex.files.length, 66);
+  assert.equal(Object.keys(runtimeIndex.entries).length, 6326);
+  assert.ok(runtimeRaw.length < raw.length / 4);
+  for (const wordId of ["1", "1036", "1114"]) {
+    const [fileIndex, start, end] = runtimeIndex.entries[wordId];
+    assert.deepEqual(
+      { file: runtimeIndex.files[fileIndex], start, end },
+      {
+        file: index.entries[wordId].file,
+        start: index.entries[wordId].start,
+        end: index.entries[wordId].end,
+      },
+    );
+  }
 });
 
 test("全书乱序与本地状态保存已接入学习流程", async () => {
@@ -174,7 +242,7 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(page, /redbook-analysis\.json/);
   assert.match(wordCard, /word-relation/);
   assert.match(page, /useStudyPersistence/);
-  assert.match(persistenceHook, /loadStoredState\(\)/);
+  assert.match(persistenceHook, /loadStoredState\(/);
   assert.match(persistenceHook, /persistStateSnapshot\(state\)/);
   assert.match(persistenceHook, /saveStoredState\(state\)/);
   assert.match(historyView, /buildActivityCalendar\(reviews, activityRange/);
@@ -193,6 +261,7 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.doesNotMatch(page, /词表来源/);
   assert.match(wordAudio, /playWordAudio/);
   assert.match(wordCard, /浏览器 TTS 回退/);
+  assert.match(wordCard, /onReveal\(\);\s*onSpeak\(\);/);
   assert.match(wordCard, /aria-keyshortcuts="E"/);
   assert.match(ui, /<kbd>E<\/kbd> 内容补充/);
   assert.match(page, /function submitReinforcement/);

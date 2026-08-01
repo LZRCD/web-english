@@ -37,6 +37,9 @@ import {
   STORAGE_KEY,
   type StoredState,
 } from "../../lib/study";
+import {
+  startPerformanceTimer,
+} from "../../lib/performance-diagnostics";
 
 const RECOVERY_STATE_KEY = "wordloop-unsaved-recovery";
 const RECOVERY_COPY_PREFIX = `${RECOVERY_STATE_KEY}:`;
@@ -44,6 +47,7 @@ const AUTOMATIC_BACKUP_DATE_KEY = "wordloop-last-auto-backup";
 const FALLBACK_REVISION_KEY = "wordloop-state-fallback-revision";
 const FALLBACK_WRITE_LOCK = "wordloop-state-fallback-write";
 const FALLBACK_CONFLICT_CODE = "FALLBACK_CONCURRENT_WRITE";
+const MAX_RECOVERY_COPIES = 10;
 
 export type SaveStatus = "idle" | "saving" | "saved" | "fallback" | "error";
 export type PersistenceLoadStatus = "loading" | "ready" | "error";
@@ -51,6 +55,7 @@ export type PersistenceLoadStatus = "loading" | "ready" | "error";
 type UseStudyPersistenceOptions = {
   state: StoredState;
   todayKey: string;
+  startupTraceId: string;
   onApplyState: (state: StoredState) => void;
   onNotify: (message: string, duration?: number) => void;
 };
@@ -163,6 +168,7 @@ function downloadJson(raw: string, filename: string) {
 export function useStudyPersistence({
   state,
   todayKey,
+  startupTraceId,
   onApplyState,
   onNotify,
 }: UseStudyPersistenceOptions) {
@@ -356,7 +362,11 @@ export function useStudyPersistence({
       recoveryCopyStorageKey(copy.id),
       serializeRecoveryCopies([copy]),
     );
-    const copies = readRecoveryCopiesFromStorage();
+    let copies = readRecoveryCopiesFromStorage();
+    for (const stale of copies.slice(0, -MAX_RECOVERY_COPIES)) {
+      removeLocalStorage(recoveryCopyStorageKey(stale.id));
+    }
+    copies = readRecoveryCopiesFromStorage();
     updateRecoveryCopies(copies);
     return written;
   }, [updateRecoveryCopies]);
@@ -469,8 +479,16 @@ export function useStudyPersistence({
 
   useEffect(() => {
     let active = true;
+    let renderFrame: number | undefined;
+    const traceId = startupTraceId;
+    const diagnosticTags = { traceId };
+    const restoreTimer = startPerformanceTimer(
+      "state.restore.total",
+      diagnosticTags,
+    );
     void (async () => {
       let storedState: StoredState | null = null;
+      let restoreSource: "indexeddb" | "fallback" | "empty" = "empty";
       let nextLoadStatus: PersistenceLoadStatus = "ready";
       let nextSaveStatus: SaveStatus = "idle";
       let notice = "";
@@ -480,12 +498,23 @@ export function useStudyPersistence({
       }
 
       let fallbackState: StoredState | null = null;
+      const fallbackReadTimer = startPerformanceTimer(
+        "state.restore.fallback_read",
+        diagnosticTags,
+      );
       let fallbackRaw = readLocalStorage(STORAGE_KEY);
+      fallbackReadTimer.end({ found: fallbackRaw !== null });
       adoptFallback(fallbackRaw);
       if (fallbackRaw) {
+        const parseTimer = startPerformanceTimer("state.restore.json_parse", {
+          traceId,
+          bytes: new TextEncoder().encode(fallbackRaw).byteLength,
+        });
         try {
           fallbackState = parseStoredState(fallbackRaw);
+          parseTimer.end();
         } catch {
+          parseTimer.end({}, "error");
           const stashed = stashRawRecoveryCopy(fallbackRaw);
           if (stashed && await clearCanonicalFallback()) {
             fallbackRaw = null;
@@ -503,8 +532,9 @@ export function useStudyPersistence({
 
       if ("indexedDB" in window) {
         try {
-          const indexedState = await loadStoredState();
+          const indexedState = await loadStoredState(diagnosticTags);
           storedState = indexedState;
+          if (indexedState) restoreSource = "indexeddb";
           usingFallbackRef.current = false;
           if (fallbackState) {
             if (indexedState) {
@@ -525,6 +555,7 @@ export function useStudyPersistence({
               }
             } else {
               storedState = fallbackState;
+              restoreSource = "fallback";
               nextSaveStatus = await persistStateSnapshot(fallbackState, true);
             }
           }
@@ -536,6 +567,7 @@ export function useStudyPersistence({
             const latestRaw = readLocalStorage(STORAGE_KEY);
             try {
               storedState = latestRaw ? parseStoredState(latestRaw) : null;
+              if (storedState) restoreSource = "fallback";
               adoptFallback(latestRaw);
               storageBlockedRef.current = !stashed;
               nextLoadStatus = stashed ? "ready" : "error";
@@ -556,7 +588,8 @@ export function useStudyPersistence({
               : stashRecoveryCopy(fallbackState);
             if (stashed) await clearCanonicalFallback();
             try {
-              storedState = await loadStoredState();
+              storedState = await loadStoredState(diagnosticTags);
+              if (storedState) restoreSource = "indexeddb";
               storageBlockedRef.current = !stashed;
               nextLoadStatus = stashed ? "ready" : "error";
               nextSaveStatus = stashed ? "saved" : "error";
@@ -572,6 +605,7 @@ export function useStudyPersistence({
             }
           } else if (fallbackState) {
             storedState = fallbackState;
+            restoreSource = "fallback";
             usingFallbackRef.current = true;
             nextSaveStatus = "fallback";
             notice = "本地数据库暂不可用，已载入兼容存储副本";
@@ -584,6 +618,7 @@ export function useStudyPersistence({
         }
       } else if (fallbackState) {
         storedState = fallbackState;
+        restoreSource = "fallback";
         usingFallbackRef.current = true;
         nextSaveStatus = "fallback";
       } else if (fallbackRaw) {
@@ -597,17 +632,27 @@ export function useStudyPersistence({
       if (!active) return;
       hydratedRef.current = true;
       if (storedState) {
+        const applyTimer = startPerformanceTimer("state.restore.apply", {
+          traceId,
+          source: restoreSource,
+        });
         applyPersistedState(storedState);
+        applyTimer.end();
         // 若解析时重建了缺失的 FSRS 进度，立即写回，避免下次加载重复全量重建
         const repairCount = consumeStoredParseRepairCount();
         if (repairCount > 0) {
+          const repairTimer = startPerformanceTimer(
+            "state.restore.repair_write",
+            { traceId, repairCount },
+          );
           void persistStateSnapshot(storedState, true)
             .then((status) => {
+              repairTimer.end({ status });
               if (!active) return;
               setSaveStatus(status);
               setLastSaveTime(Date.now());
             })
-            .catch(() => {});
+            .catch(() => repairTimer.end({}, "error"));
         }
       }
       suppressNextSaveRef.current = true;
@@ -616,9 +661,18 @@ export function useStudyPersistence({
       if (nextSaveStatus === "saved") setLastSaveTime(Date.now());
       if (notice) notify(notice);
       setHydrated(true);
+      renderFrame = window.requestAnimationFrame(() => {
+        restoreTimer.end({
+          source: restoreSource,
+          loadStatus: nextLoadStatus,
+          fallback: nextSaveStatus === "fallback",
+        }, nextLoadStatus === "ready" ? "ok" : "error");
+      });
     })();
     return () => {
       active = false;
+      if (renderFrame !== undefined) window.cancelAnimationFrame(renderFrame);
+      restoreTimer.end({}, "aborted");
     };
   }, [
     adoptFallback,
@@ -630,6 +684,7 @@ export function useStudyPersistence({
     stashRecoveryCopy,
     updateLoadStatus,
     updateRecoveryCopies,
+    startupTraceId,
   ]);
 
   useEffect(() => {
@@ -1294,6 +1349,7 @@ export function useStudyPersistence({
         stubbornWords: {},
         positions: {},
         activeSession: undefined,
+        ratingUndoStack: [],
       };
       const status = await persistStateSnapshot(resetState, true);
       const protectedAfterCommit = await protectNewerState(

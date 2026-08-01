@@ -4,11 +4,11 @@ import {
   playWordAudio,
   preloadWordAudio,
   stopWordAudio,
+  type RuntimeAudioIndex,
 } from "../../lib/word-audio";
 import { useSyncedRefs } from "./useSyncedRefs";
-
-type AudioIndexData = { entries: Record<string, AudioClip> };
-type AudioClip = { file: string; start: number; end: number };
+import { fetchJsonWithDiagnostics } from "../../lib/performance-diagnostics";
+import { versionedDataUrl } from "../../lib/data-version";
 
 type UseAudioOptions = {
   current: Word;
@@ -26,7 +26,10 @@ export function useAudio({
   redbookReady,
   onNotify,
 }: UseAudioOptions) {
-  const [audioIndex, setAudioIndex] = useState<Record<string, AudioClip>>({});
+  const [audioIndex, setAudioIndex] = useState<RuntimeAudioIndex>({
+    files: [],
+    entries: {},
+  });
 
   // 用 ref 保持 studyWords/wordIndex 最新，供 speakNext 闭包使用
   const { studyWords: swRef, wordIndex: wiRef } = useSyncedRefs({
@@ -36,20 +39,23 @@ export function useAudio({
 
   // 加载音频索引
   useEffect(() => {
+    if (!redbookReady) return;
     let active = true;
-    fetch("/data/audio-index.json")
-      .then((response) => {
-        if (!response.ok) throw new Error("audio index missing");
-        return response.json() as Promise<AudioIndexData>;
-      })
-      .then((audio) => {
-        if (active) setAudioIndex(audio.entries);
+    const controller = new AbortController();
+    fetchJsonWithDiagnostics<RuntimeAudioIndex>(
+      versionedDataUrl("/data/audio-runtime-index.json"),
+      "audio.index",
+      { signal: controller.signal },
+    )
+      .then(({ data: audio }) => {
+        if (active) setAudioIndex(audio);
       })
       .catch(() => {});
     return () => {
       active = false;
+      controller.abort();
     };
-  }, []);
+  }, [redbookReady]);
 
   // 当前词切换时预加载录音片段，让点击播放更即时
   useEffect(() => {
@@ -88,5 +94,8 @@ export function useAudio({
     }
   }
 
-  return { audioIndex, speak, speakNext, speakWord } as const;
+  const hasRecordedAudio = current.id !== undefined
+    && Boolean(audioIndex.entries[String(current.id)]);
+
+  return { hasRecordedAudio, speak, speakNext, speakWord } as const;
 }

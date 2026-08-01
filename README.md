@@ -25,9 +25,10 @@
 - 可设置考研日期，按必考词、基础词、超纲词安排新词优先级，并预测每日工作量和复习预留期
 - 学习页显示人工确认的词族轨道，AI 教练同步遵守词形关系
 - DeepSeek AI 记忆教练；密钥缺失或调用失败时使用本地提示
-- 可按需生成并缓存音标、原创语境例句、翻译和常用搭配；内容补充按每个未熟练释义各生成 1 句例句（1/2/3/4 逐条对应），明确标注为 AI 生成内容
+- 可按需生成并缓存原创语境例句、翻译和常用搭配；内容补充按每个未熟练释义各生成 1 句例句（1/2/3/4 逐条对应），可反馈义项不符、单条重写，并只对反馈项或低置信项执行语义二审
 - 点击单词本身即可播放发音；划词弹窗内也可直接播放查询词的读音；当前词音频后台预加载，首播即时
 - 接入 66 个红宝书原始音频/视频文件的时间索引，并用 Whisper Tiny、Whisper Base、CMU 音素及全局一对一匹配逐词校对 6540 个原音频候选；6326 词使用校验后的原声，214 个低置信度词自动回退浏览器 TTS。另有必考 Unit 15 原文件未收录的末尾 6 词及两份 MP4 中 4 个声明占位词同样回退 TTS，共 224 词回退
+- 设置页内置本地性能诊断：关联同一次操作的 trace，区分应用首次标签/重载、资源网络/缓存、首次/重复查词、原声/TTS、Range 206/200，显示 P50/P95、存储占用和可撤销步数；样本空闲批量落盘并跨标签合并，诊断数据不上传
 
 ## 本地运行
 
@@ -62,7 +63,7 @@ npm run data:audit
 npm run audio:index
 ```
 
-脚本保留 66 个原文件，通过硬链接提供本地播放入口，并生成 `public/data/audio-index.json`。逐词校对结果固化在 `public/data/audio-remap.json`，以后重建索引时会自动重新应用；无法可靠识别或切分的片段不会启用，页面自动回退浏览器 TTS。
+脚本保留 66 个原文件，通过硬链接提供本地播放入口，并生成完整审计用的 `public/data/audio-index.json` 和页面播放用的紧凑 `public/data/audio-runtime-index.json`。逐词校对结果固化在 `public/data/audio-remap.json`，以后重建索引时会自动重新应用；无法可靠识别或切分的片段不会启用，页面自动回退浏览器 TTS。
 
 ## DeepSeek
 
@@ -78,13 +79,42 @@ OPENAI_MODEL=deepseek-v4-flash
 
 ## 离线辞典
 
-划词后只有点击“翻译”才会查询。应用先查红宝书与 ECDICT 离线辞典；未命中或主动选择“结合当前语境辨义”时，才调用 DeepSeek Flash。查询结果会加入划词集，并可单独建立学习队列。
+划词后会直接显示红宝书词目、已查记录和缓存结果；陌生内容确认后先查 ECDICT 离线辞典，未命中或主动选择“结合当前语境辨义”时才调用 DeepSeek Flash。查询结果会加入划词集，并可单独建立学习队列。红宝书 6550 条词目均有本地音标，ECDICT 首次查询按前三个字符做 Range 小范围读取，避免下载整个首字母分片。
 
 ECDICT 数据采用 MIT 许可证。需要从上游 CSV 重建分片时：
 
 ```bash
 npm run dictionary:build -- path/to/ecdict.csv
+npm run dictionary:ranges
 ```
+
+## 数据版本与性能基线
+
+词典分片、Range 索引、音标、红宝书和音频运行时索引均使用 SHA-256 内容哈希生成版本 URL，数据升级后不会误读旧浏览器缓存。任何数据构建完成后运行：
+
+```bash
+npm run data:manifest
+```
+
+`npm run build` 会先校验 59 个运行时数据文件的大小和哈希；Range v4 的 5KB 根映射随构建清单内嵌，首次查词只按首字母懒加载对应索引，并同时绑定词典分片和字母索引的 SHA-256。响应范围或版本不一致时自动回退整分片；清单过期时构建失败并要求重新生成，不会静默覆盖。
+
+生成数据来源、工具版本、音标覆盖率和 Range 片段统计报告：
+
+```bash
+npm run data:report
+```
+
+报告写入 `reports/data-build-report.json`，已绑定 `scripts/data-provenance.json`：ECDICT commit/CSV 哈希经 26 个分片重建比对，Whisper Tiny/Base 分别记录 snapshot commit 与 `model.safetensors` 哈希，FFmpeg 记录版本和二进制哈希。生成报告时可通过 `ECDICT_SOURCE`、`ECDICT_UPSTREAM_COMMIT`、`FFMPEG_PATH` 和 `WHISPER_MODEL_PATHS` 对本机文件现场复核；三类证据全部匹配时 `provenance.liveVerification.complete` 才为 `true`。内容数据不写实时构建时间，构建报告支持 `SOURCE_DATE_EPOCH`。
+
+固定端口 3000 已有服务时，可自动运行 30 轮真实冷/热、首次/重复和四类 Range 路径，输出统一基线与拆分建议：
+
+```bash
+npm run perf:baseline
+```
+
+可用 `PERF_ROUNDS=50` 提高到 50 轮。修正分析逻辑后可运行 `npm run perf:reanalyze`，直接用已有样本重算首次查词 Range 占比，不会重开浏览器。报告会区分未拆分的 `evaluate-split` 与已完成首字母拆分的 `split-applied-monitor`，避免重复提出同一改造。设置页会限量保存每组最近 80 条样本；构建号同时包含 Git commit 和运行时代码指纹，后续同一变体的 P95 同时增加 20% 且超过 20ms 时只显示提醒，不阻断 CI。
+
+三条 AI API 会在 JSON 解析前限制请求体字节数，并执行同源校验、进程内限流、并发限制及输入输出字段上限。仅本机部署时可设置 `WORDLOOP_LOCAL_ONLY=1`；跨来源部署需显式配置 `WORDLOOP_ALLOWED_ORIGINS`。
 
 ## 检查命令
 

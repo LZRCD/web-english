@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { writeDictionaryRangeIndex } from "./dictionary-range-index.mjs";
 
 const sourcePath = resolve(process.argv[2] ?? "tmp/ecdict.csv");
 const outputDirectory = resolve(process.argv[3] ?? "public/data/dictionary");
@@ -39,6 +41,14 @@ function clean(value) {
     .replace(/\u0000/g, "")
     .trim();
 }
+
+async function sha256(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+const sourceSha256 = await sha256(sourcePath);
 
 const shards = Object.fromEntries(
   "abcdefghijklmnopqrstuvwxyz".split("").map((letter) => [letter, Object.create(null)]),
@@ -84,8 +94,10 @@ for (const [letter, entries] of Object.entries(shards)) {
 const metadata = {
   name: "ECDICT",
   upstream: "https://github.com/skywind3000/ECDICT",
+  upstreamCommit: process.env.ECDICT_UPSTREAM_COMMIT ?? null,
+  sourceFile: basename(sourcePath),
+  sourceSha256,
   license: "MIT",
-  generatedAt: new Date().toISOString(),
   entries: kept,
   fields: ["word", "phonetic", "translation"],
   shards: Object.fromEntries(
@@ -97,5 +109,7 @@ writeFileSync(
   JSON.stringify(metadata, null, 2),
   "utf8",
 );
+
+writeDictionaryRangeIndex(outputDirectory);
 
 console.log(`ECDICT 分片完成：${kept} 条 -> ${outputDirectory}`);

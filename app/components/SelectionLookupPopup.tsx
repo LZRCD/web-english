@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { SelectionLookupState } from "../../lib/selection-lookup";
 
 type SelectionLookupPopupProps = {
@@ -15,11 +16,49 @@ export default function SelectionLookupPopup({
   onSpeak,
   onClose,
 }: SelectionLookupPopupProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    if (!dialog) return;
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )];
+    focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener("keydown", onKeyDown);
+    return () => {
+      dialog.removeEventListener("keydown", onKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [onClose]);
+
   return (
     <section
+      ref={dialogRef}
       className="selection-lookup"
       style={{ left: lookup.x, top: lookup.y }}
       role="dialog"
+      aria-modal="true"
       aria-label={`划词查询：${lookup.query}`}
       aria-live="polite"
     >

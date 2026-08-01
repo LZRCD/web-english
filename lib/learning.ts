@@ -96,6 +96,17 @@ export type SenseExample = {
   meaning: string;
   sentence: string;
   translation: string;
+  confidence?: number;
+  feedback?: {
+    reason: "meaning-mismatch";
+    reportedAt: string;
+  };
+  review?: {
+    status: "pending" | "passed" | "failed";
+    confidence?: number;
+    note?: string;
+    reviewedAt?: string;
+  };
 };
 
 export type WordEnrichment = {

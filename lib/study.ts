@@ -68,6 +68,23 @@ export type MistakeRecord = SavedWord & {
   lastMistakeAt: string;
 };
 
+export type RatingUndo = {
+  reviewId: string;
+  wordId: number;
+  word: string;
+  previousProgress?: WordProgress;
+  previousMistake?: MistakeRecord;
+  evictedReview?: Review;
+  previousPosition: number;
+  previousSession?: StudySession;
+  studyKey: string;
+  selectedSection: string;
+  selectedUnit: number | string | "all";
+  studyMode: StudyMode;
+  studyScope: StudyScope;
+  shuffleSeed: number;
+};
+
 export type LookupWord = {
   id: number;
   /** 命中红宝书词目时关联原始学习项，避免生成第二份学习进度。 */
@@ -112,6 +129,7 @@ export type StoredState = {
   shuffleSeed: number;
   selectedSection: string;
   selectedUnit: number | string | "all";
+  ratingUndoStack: RatingUndo[];
 };
 
 export const STORAGE_KEY = "wordloop-state";
@@ -572,13 +590,53 @@ function normalizeEnrichments(value: unknown) {
       translation: typeof item.translation === "string" ? item.translation : undefined,
       senseExamples: Array.isArray(item.senseExamples)
         ? item.senseExamples
-            .filter((entry): entry is { meaning?: unknown; sentence?: unknown; translation?: unknown } =>
+            .filter((entry): entry is Record<string, unknown> =>
               Boolean(entry) && typeof entry === "object")
-            .map((entry) => ({
-              meaning: typeof entry.meaning === "string" ? entry.meaning.trim() : "",
-              sentence: typeof entry.sentence === "string" ? entry.sentence.trim() : "",
-              translation: typeof entry.translation === "string" ? entry.translation.trim() : "",
-            }))
+            .map((entry) => {
+              const feedback = entry.feedback
+                && typeof entry.feedback === "object"
+                && !Array.isArray(entry.feedback)
+                ? entry.feedback as Record<string, unknown>
+                : undefined;
+              const review = entry.review
+                && typeof entry.review === "object"
+                && !Array.isArray(entry.review)
+                ? entry.review as Record<string, unknown>
+                : undefined;
+              const reviewStatus: "pending" | "passed" | "failed" | undefined =
+                review?.status === "pending"
+                || review?.status === "passed"
+                || review?.status === "failed"
+                ? review.status
+                : undefined;
+              return {
+                meaning: typeof entry.meaning === "string" ? entry.meaning.trim() : "",
+                sentence: typeof entry.sentence === "string" ? entry.sentence.trim() : "",
+                translation: typeof entry.translation === "string" ? entry.translation.trim() : "",
+                confidence: Number.isFinite(entry.confidence)
+                  ? Math.max(0, Math.min(1, Number(entry.confidence)))
+                  : undefined,
+                feedback: feedback?.reason === "meaning-mismatch"
+                  && typeof feedback.reportedAt === "string"
+                  ? {
+                      reason: "meaning-mismatch" as const,
+                      reportedAt: feedback.reportedAt,
+                    }
+                  : undefined,
+                review: reviewStatus ? {
+                  status: reviewStatus,
+                  confidence: Number.isFinite(review?.confidence)
+                    ? Math.max(0, Math.min(1, Number(review?.confidence)))
+                    : undefined,
+                  note: typeof review?.note === "string"
+                    ? review.note.slice(0, 200)
+                    : undefined,
+                  reviewedAt: typeof review?.reviewedAt === "string"
+                    ? review.reviewedAt
+                    : undefined,
+                } : undefined,
+              };
+            })
             .filter((entry) => entry.meaning && entry.sentence && entry.translation)
             .slice(0, 8)
         : undefined,
@@ -623,7 +681,85 @@ export function buildStudyKey(
 }
 
 export function parseStoredState(raw: string): StoredState {
-  const parsed = JSON.parse(raw);
+  return normalizeStoredState(JSON.parse(raw));
+}
+
+function normalizeRatingUndo(value: unknown): RatingUndo | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const rawWordId = Number(item.wordId);
+  if (
+    !isValidStudyWordId(rawWordId)
+    || typeof item.reviewId !== "string"
+    || !item.reviewId.trim()
+    || typeof item.word !== "string"
+    || !item.word.trim()
+    || typeof item.studyKey !== "string"
+    || !item.studyKey.trim()
+    || typeof item.selectedSection !== "string"
+    || !REDBOOK_SECTIONS.includes(item.selectedSection as (typeof REDBOOK_SECTIONS)[number])
+    || !(typeof item.selectedUnit === "string" || Number.isFinite(item.selectedUnit))
+    || !Number.isInteger(item.previousPosition)
+    || Number(item.previousPosition) < 0
+    || !Number.isFinite(item.shuffleSeed)
+  ) {
+    return null;
+  }
+  const wordId = canonicalWordId(rawWordId);
+  const previousProgress = item.previousProgress === undefined
+    ? undefined
+    : normalizeWordProgress(item.previousProgress, wordId);
+  const previousMistake = item.previousMistake === undefined
+    ? undefined
+    : normalizeMistake(item.previousMistake);
+  const evictedReview = item.evictedReview === undefined
+    ? undefined
+    : normalizeReview(item.evictedReview);
+  const previousSession = item.previousSession === undefined
+    ? undefined
+    : normalizeSession(item.previousSession);
+  if (
+    (item.previousProgress !== undefined && !previousProgress?.fsrsCard)
+    || (previousProgress && previousProgress.wordId !== wordId)
+    || (item.previousMistake !== undefined && previousMistake?.wordId !== wordId)
+    || (item.evictedReview !== undefined && !evictedReview)
+    || (item.previousSession !== undefined && !previousSession)
+  ) {
+    return null;
+  }
+  return {
+    reviewId: item.reviewId.trim(),
+    wordId,
+    word: item.word.trim(),
+    ...(previousProgress?.fsrsCard
+      ? { previousProgress: previousProgress as WordProgress }
+      : {}),
+    ...(previousMistake ? { previousMistake } : {}),
+    ...(evictedReview ? { evictedReview } : {}),
+    previousPosition: Number(item.previousPosition),
+    ...(previousSession ? { previousSession } : {}),
+    studyKey: item.studyKey.trim(),
+    selectedSection: item.selectedSection,
+    selectedUnit: item.selectedUnit as RatingUndo["selectedUnit"],
+    studyMode: item.studyMode === "shuffled" ? "shuffled" : "ordered",
+    studyScope: item.studyScope === "all" ? "all" : "selection",
+    shuffleSeed: Number(item.shuffleSeed),
+  };
+}
+
+function normalizeRatingUndoStack(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeRatingUndo)
+    .filter((item): item is RatingUndo => item !== null)
+    .slice(-30);
+}
+
+/**
+ * 归一化已解析的持久化状态。IndexedDB 返回的本来就是对象，
+ * 直接走该入口可避免一次完整的 JSON.stringify + JSON.parse。
+ */
+export function normalizeStoredState(parsed: unknown): StoredState {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("状态数据格式无效：期望对象");
   }
@@ -681,13 +817,14 @@ export function parseStoredState(raw: string): StoredState {
     const review = normalizedReviewInput[i];
     if (!seenIds.has(review.id)) {
       seenIds.add(review.id);
-      dedupedReviews.unshift(review);
+      dedupedReviews.push(review);
     }
   }
+  dedupedReviews.reverse();
   // IndexedDB getAll() 按主键返回；统一按事件时间排序后再保留最近记录。
   const normalizedReviews = dedupedReviews
     .sort((a, b) =>
-      new Date(a.reviewedAt).getTime() - new Date(b.reviewedAt).getTime()
+      a.reviewedAt.localeCompare(b.reviewedAt)
       || a.id.localeCompare(b.id))
     .slice(-MAX_REVIEWS);
 
@@ -740,23 +877,20 @@ export function parseStoredState(raw: string): StoredState {
     }
   }
 
-  const latestReviewAtByWordId = new Map<number, number>();
+  const latestReviewAtByWordId = new Map<number, string>();
   for (const review of normalizedReviews) {
     if (review.wordId === undefined) continue;
-    latestReviewAtByWordId.set(
-      review.wordId,
-      Math.max(
-        latestReviewAtByWordId.get(review.wordId) ?? 0,
-        new Date(review.reviewedAt).getTime(),
-      ),
-    );
+    const latestReviewAt = latestReviewAtByWordId.get(review.wordId);
+    if (!latestReviewAt || review.reviewedAt > latestReviewAt) {
+      latestReviewAtByWordId.set(review.wordId, review.reviewedAt);
+    }
   }
   for (const [wordIdText, progress] of Object.entries(healthyProgress)) {
     const wordId = Number(wordIdText);
     const latestReviewAt = latestReviewAtByWordId.get(wordId);
     if (
       latestReviewAt !== undefined
-      && latestReviewAt > new Date(progress.lastReviewedAt).getTime()
+      && latestReviewAt > progress.lastReviewedAt
     ) {
       delete healthyProgress[wordId];
       damagedWordIds.add(wordId);
@@ -853,6 +987,7 @@ export function parseStoredState(raw: string): StoredState {
     shuffleSeed,
     selectedSection,
     selectedUnit,
+    ratingUndoStack: normalizeRatingUndoStack(state.ratingUndoStack),
   };
 }
 
