@@ -61,17 +61,17 @@ IndexedDB 禁用、数据库损坏、localStorage 配额耗尽、Range 网络中
 
 ### P0：近期工程固化
 
-- [ ] 人工检查当前工作区，按主题建立干净的 Git 提交或里程碑；建议拆分为“性能与 Range”“存储/API/交互”“数据与 provenance”。
-- [ ] 在 CI 中固定运行 `npm run lint`、`npm run typecheck` 和 `npm test`。
-- [ ] 在发布前 CI 或独立验证任务中运行 `npm run test:e2e`；不要让普通小改动每次都承担完整浏览器成本。
-- [ ] 将来源现场校验封装为独立命令，例如 `npm run data:verify`，按固定 commit 下载或定位源文件并验证 provenance。
+- [x] 人工检查当前工作区，保留路线图里程碑提交，并为生产基线/来源校验、CI/发布文档建立后续主题提交；用户资料与协作规则不纳入提交。
+- [x] 在 CI 中固定运行 `npm run lint`、`npm run typecheck` 和 `npm test`。
+- [x] 在发布前 CI 或独立验证任务中运行 `npm run test:e2e`；普通 push/PR 不承担完整浏览器成本。
+- [x] 将来源现场校验封装为独立命令 `npm run data:verify`，自动定位或按固定 commit 下载来源并验证 provenance。
 
 ### P1：生产环境验证
 
-- [ ] 使用生产构建在固定端口 3000 运行一份独立 30 轮基线，与当前开发服务器基线分开保存。
-- [ ] 在慢速网络、高延迟和缓存命中三种条件下复核首次查词、音频首播和应用恢复耗时。
-- [ ] 将 30 轮性能基线作为发布前或重大数据结构改动后的检查，不必在每次提交运行。
-- [ ] 给基线报告增加跨版本对照摘要，直接输出绝对耗时变化、百分比变化和是否超过告警门槛。
+- [x] 使用生产构建在固定端口 3000 运行一份独立 30 轮基线，与开发服务器基线分开保存。
+- [x] 在慢速网络、高延迟和缓存命中三种条件下复核首次查词、音频首播和应用恢复耗时。
+- [x] 将 30 轮性能基线封装为 `npm run perf:production`，只用于发布前或重大数据结构改动后。
+- [x] 给基线报告增加跨版本对照摘要，直接输出绝对耗时变化、百分比变化和是否超过告警门槛。
 
 ### P2：真人体验与长期数据
 
@@ -79,6 +79,8 @@ IndexedDB 禁用、数据库损坏、localStorage 配额耗尽、Range 网络中
 - [ ] 使用真实读屏器检查学习卡、划词弹窗、设置页和完成摘要的朗读顺序。
 - [ ] 使用积累数月的大体量学习记录验证启动、迁移、备份、恢复和清理耗时。
 - [ ] 定期抽样检查例句反馈、语义二审和 TTS 回退案例，只有真实失败模式稳定出现时再扩大自动审查范围。
+
+P2 必须由真人在真实设备和真实长期数据上填写，不使用模拟器或自动化结果冒充。统一执行与证据模板见 [人工体验与长期数据验收单](./manual-experience-validation.md)。
 
 ## 四、执行原则
 
@@ -91,4 +93,32 @@ IndexedDB 禁用、数据库损坏、localStorage 配额耗尽、Range 网络中
 
 ## 五、建议的下一步
 
-优先完成 P0 的 Git 里程碑和 CI 固化；随后补生产构建基线。P2 项目按实际使用反馈逐步推进，不需要阻塞当前版本。
+P0 与 P1 已完成。下一步按 [人工体验与长期数据验收单](./manual-experience-validation.md) 积累 P2 的真人证据；P2 不阻塞当前版本。
+
+## 六、后续事项执行结果（2026-08-01）
+
+### 工程与发布固化
+
+- 新增 `Quality` CI：普通 push/PR 固定执行 lint、typecheck 和单元/结构测试。
+- 新增独立 `Release browser verification`：仅手动触发、`v*` 标签或发布工作流调用，生产构建下运行 Playwright。
+- 新增 `npm run data:verify`；本机 ECDICT 固定 commit CSV、Whisper Tiny/Base snapshot 权重和 WinGet FFmpeg 二进制全部现场匹配，报告为 `reports/data-provenance-verification.json`。
+- 新增跨平台生产启动器，修复 vinext 0.0.50 在 Windows 将静态缓存路径保留为反斜杠而造成的 404，并为本地生产静态资源补标准单 Range `206`。
+- `npm run test:e2e:production` 统一执行生产构建、固定端口 3000、PID/日志、健康检查、25 项 Playwright 和服务清理。
+
+### 正式生产基线
+
+- 构建：`0.1.0+53195431a59e.b72e25375394`；数据版本：`a9b0000495913c32`；运行标签明确记录 `serverMode=production`。
+- 正常网络：30 轮、1623 个样本、60 条查词 trace；报告为 `reports/performance-baseline-production.json`，固定报告为 `reports/performance-baseline-0.1.0-53195431a59e.b72e25375394-production-20260801T123333Z.json`。
+- 正常网络 P50：首次查词总体 `78.7ms`（总体包含 200、损坏与断网注入），原生 206 首次查词 `12.8ms`，原声音频首播 `16.1ms`，冷状态恢复 `32.2ms`。
+- 相对上一份开发基线：首次查词 P50 `+3.8ms / +5.1%`，原声音频首播 P50 `-7.9ms / -32.9%`，没有指标同时超过 `20%` 和 `20ms` 双门槛；Range 决策保持 `split-applied-monitor`。
+- 高延迟 5 轮：首次查词 P50 `343.7ms`、原声音频首播 P50 `121.8ms`；报告为 `reports/performance-baseline-production-high-latency.json`。
+- 受控慢速网络 5 轮：首次查词 P50 `265.9ms`、原声音频首播 P50 `237.0ms`；报告为 `reports/performance-baseline-production-slow-network.json`。
+- 缓存命中 5 轮：首次查词 P50 `79.3ms`、原声音频首播 P50 `9.8ms`，没有超过告警门槛；报告为 `reports/performance-baseline-production-cache-hit.json`。
+
+### 最终检查
+
+- `npm run lint`：通过。
+- `npm run typecheck`：通过。
+- `npm test`：生产构建成功，84/84 通过。
+- `npm run test:e2e:production`：25/25 通过。
+- 正式基线结束后 PID 记录已清理，端口 3000 已释放。

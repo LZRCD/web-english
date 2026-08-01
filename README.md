@@ -106,6 +106,14 @@ npm run data:report
 
 报告写入 `reports/data-build-report.json`，已绑定 `scripts/data-provenance.json`：ECDICT commit/CSV 哈希经 26 个分片重建比对，Whisper Tiny/Base 分别记录 snapshot commit 与 `model.safetensors` 哈希，FFmpeg 记录版本和二进制哈希。生成报告时可通过 `ECDICT_SOURCE`、`ECDICT_UPSTREAM_COMMIT`、`FFMPEG_PATH` 和 `WHISPER_MODEL_PATHS` 对本机文件现场复核；三类证据全部匹配时 `provenance.liveVerification.complete` 才为 `true`。内容数据不写实时构建时间，构建报告支持 `SOURCE_DATE_EPOCH`。
 
+独立核对本机固定来源与 provenance（缺失或哈希不一致会失败）：
+
+```bash
+npm run data:verify
+```
+
+命令会自动定位 `tmp/ecdict-upstream/ecdict.csv`、Hugging Face snapshot 缓存和 WinGet FFmpeg，并写入 `reports/data-provenance-verification.json`。也可使用 `--ecdict`、`--ffmpeg` 和 `DATA_VERIFY_WHISPER_PATHS` 显式指定；ECDICT 不在本机时可执行 `npm run data:verify -- --download-ecdict`，下载地址固定到 provenance 中记录的 commit。
+
 固定端口 3000 已有服务时，可自动运行 30 轮真实冷/热、首次/重复和四类 Range 路径，输出统一基线与拆分建议：
 
 ```bash
@@ -113,6 +121,14 @@ npm run perf:baseline
 ```
 
 可用 `PERF_ROUNDS=50` 提高到 50 轮。修正分析逻辑后可运行 `npm run perf:reanalyze`，直接用已有样本重算首次查词 Range 占比，不会重开浏览器。报告会区分未拆分的 `evaluate-split` 与已完成首字母拆分的 `split-applied-monitor`，避免重复提出同一改造。设置页会限量保存每组最近 80 条样本；构建号同时包含 Git commit 和运行时代码指纹，后续同一变体的 P95 同时增加 20% 且超过 20ms 时只显示提醒，不阻断 CI。
+
+发布或重大数据结构调整后，使用一键生产验证：
+
+```bash
+npm run perf:production
+```
+
+它会在固定端口 3000 启动当前生产构建，正式运行 30 轮，再分别用高延迟、受控慢速网络和预热缓存各复核 5 轮；每次启动使用独立日志和 PID，健康检查成功后才测量，结束时自动关闭服务。报告按运行标签分开保存，并与上一份基线逐项输出 P50/P95 绝对变化、百分比变化及是否超过 20% 且 20ms 的告警门槛。Windows 下项目生产启动器同时修复 vinext 0.0.50 静态路径分隔符问题，并为本地生产服务提供标准单 Range `206`。
 
 三条 AI API 会在 JSON 解析前限制请求体字节数，并执行同源校验、进程内限流、并发限制及输入输出字段上限。仅本机部署时可设置 `WORDLOOP_LOCAL_ONLY=1`；跨来源部署需显式配置 `WORDLOOP_ALLOWED_ORIGINS`。
 
@@ -123,4 +139,7 @@ npm run lint
 npm run typecheck
 npm run build
 npm test
+npm run test:e2e
 ```
+
+GitHub Actions 的 `Quality` 在普通 push/PR 固定执行 lint、typecheck 和测试；完整 Playwright 位于独立的 `Release browser verification`，只在手动触发、`v*` 发布标签或其他发布工作流调用时运行。
