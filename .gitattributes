@@ -1,0 +1,16 @@
+# 数据资产字节级固定：跨平台不转换换行符，保证内容哈希与 data-manifest 一致
+public/data/**/*.json -text
+public/data/**/*.txt -text
+public/data/**/*.md -text
+public/data/**/*.csv -text
+public/data/**/*.tsv -text
+
+# 数据构建产物（被哈希校验）
+reports/**/*.json -text
+scripts/data-provenance.json -text
+
+# 生成的数据版本模块：固定 LF
+lib/data-versions.generated.ts text eol=lf
+
+# 二进制文件
+*.tsbuildinfo binary
