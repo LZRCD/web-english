@@ -391,7 +391,7 @@ export default function WordCard({
             </div>
             {currentProgress && (
               <div>
-                <span>FSRS 可提取率</span>
+                <span>记忆牢固度</span>
                 <strong>
                   {wordRetrievability(currentProgress, new Date(clock))}%
                 </strong>

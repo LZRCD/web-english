@@ -3,12 +3,15 @@
  * span 先进入内存，空闲或页面隐藏时批量落盘，避免计时期间同步序列化。
  */
 
-import { APP_BUILD_ID } from "./build-info.generated.ts";
+import {
+  APP_BUILD_ID,
+  APP_RUNTIME_MODE,
+} from "./build-info.generated.ts";
 import { DATA_CONTENT_VERSION } from "./data-versions.generated.ts";
 
 export const PERFORMANCE_DIAGNOSTICS_KEY = "wordloop-performance-v1";
 export const PERFORMANCE_DIAGNOSTICS_EVENT = "wordloop-performance-updated";
-export const PERFORMANCE_DIAGNOSTICS_SCHEMA_VERSION = 2;
+export const PERFORMANCE_DIAGNOSTICS_SCHEMA_VERSION = 3;
 
 const STORE_VERSION = 2;
 const MAX_SAMPLES_PER_GROUP = 80;
@@ -105,10 +108,10 @@ function browserStorageAvailable() {
 }
 
 function runtimeMode(): PerformanceEnvironment["runtimeMode"] {
-  if (typeof process === "undefined") return "unknown";
-  const mode = process.env.NODE_ENV;
-  return mode === "development" || mode === "production" || mode === "test"
-    ? mode
+  return APP_RUNTIME_MODE === "development"
+    || APP_RUNTIME_MODE === "production"
+    || APP_RUNTIME_MODE === "test"
+    ? APP_RUNTIME_MODE
     : "unknown";
 }
 

@@ -17,6 +17,7 @@ import {
   readStorageDiagnostics,
   type StorageDiagnostics,
 } from "../../lib/storage-diagnostics";
+import { readAudioPreloadDiagnostics } from "../../lib/word-audio";
 
 const PRIMARY_METRICS = [
   ["state.restore.total", "状态恢复"],
@@ -94,6 +95,7 @@ export default function PerformanceDiagnostics({ undoCount = 0 }: {
   );
   const rangeSamples = currentSamples.filter((sample) =>
     sample.metric === "dictionary.range.request");
+  const audioPreload = readAudioPreloadDiagnostics();
   const variants = useMemo(() => {
     const definitions = [
       ["状态恢复 · 首个标签", "state.restore.total", "runMode", "cold"],
@@ -219,6 +221,18 @@ export default function PerformanceDiagnostics({ undoCount = 0 }: {
         <span>
           <strong>Cache Storage</strong>
           <small>{formatBytes(storage?.cacheStorageBytes)}</small>
+        </span>
+        <span>
+          <strong>音频预载池</strong>
+          <small>
+            {audioPreload.elementCount}/{audioPreload.elementLimit} 个元素 · 下一词{
+              audioPreload.nextStatus === "ready"
+                ? "已就绪"
+                : audioPreload.nextStatus === "loading"
+                  ? "加载中"
+                  : "未预载"
+            }
+          </small>
         </span>
         <span>
           <strong>可撤销评分</strong>

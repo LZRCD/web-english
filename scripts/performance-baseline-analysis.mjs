@@ -47,13 +47,80 @@ function percentageChange(current, previous) {
   return previous === 0 ? null : (current - previous) / previous;
 }
 
+function browserMajor(version) {
+  const match = String(version ?? "").match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+/** 只允许诊断版本、数据、网络与主要运行环境一致的报告互相比较。 */
+export function baselineCompatibility(current, previous) {
+  if (!previous) {
+    return { comparable: false, reasons: ["找不到上一份同条件报告"] };
+  }
+  const reasons = [];
+  const checks = [
+    ["诊断 schema", current?.build?.diagnosticsSchemaVersion, previous?.build?.diagnosticsSchemaVersion],
+    ["数据版本", current?.build?.dataVersion, previous?.build?.dataVersion],
+    ["网络条件", current?.run?.networkProfile, previous?.run?.networkProfile],
+    ["服务模式", current?.run?.serverMode, previous?.run?.serverMode],
+    ["操作系统", current?.environment?.platform, previous?.environment?.platform],
+    ["处理器架构", current?.environment?.arch, previous?.environment?.arch],
+    ["浏览器通道", current?.environment?.browserChannel, previous?.environment?.browserChannel],
+    [
+      "浏览器主版本",
+      browserMajor(current?.environment?.browserVersion),
+      browserMajor(previous?.environment?.browserVersion),
+    ],
+  ];
+  for (const [label, currentValue, previousValue] of checks) {
+    if (
+      currentValue === undefined
+      || currentValue === null
+      || currentValue === "unknown"
+      || previousValue === undefined
+      || previousValue === null
+      || previousValue === "unknown"
+    ) {
+      reasons.push(`${label}缺失`);
+    } else if (currentValue !== previousValue) {
+      reasons.push(`${label}不一致（当前 ${currentValue}，对照 ${previousValue}）`);
+    }
+  }
+  return { comparable: reasons.length === 0, reasons };
+}
+
+/** 校验页面样本的构建模式与外部基线运行器声明一致。 */
+export function validateRuntimeModes(samples, serverMode) {
+  if (!serverMode || serverMode === "unknown") {
+    return {
+      status: "not-checked",
+      expected: serverMode ?? "unknown",
+      actual: [],
+      errors: [],
+    };
+  }
+  const actual = [...new Set(samples.map((sample) => sample.runtimeMode ?? "unknown"))]
+    .sort();
+  const errors = actual.length === 1 && actual[0] === serverMode
+    ? []
+    : [`样本模式 ${actual.join(", ") || "缺失"} 与运行器模式 ${serverMode} 不一致`];
+  return {
+    status: errors.length ? "error" : "ok",
+    expected: serverMode,
+    actual,
+    errors,
+  };
+}
+
 /** 以相同 metric + variant 比较两份基线，直接给出绝对值、百分比和告警结论。 */
 export function compareBaselineReports(current, previous, options = {}) {
   const relativeThreshold = Number(options.relativeThreshold ?? 0.2);
   const absoluteThresholdMs = Number(options.absoluteThresholdMs ?? 20);
   const minimumSampleCount = Number(options.minimumSampleCount ?? 5);
+  const compatibility = baselineCompatibility(current, previous);
   const previousByIdentity = new Map(
-    (previous?.summaries ?? []).map((summary) => [summaryIdentity(summary), summary]),
+    (compatibility.comparable ? previous?.summaries ?? [] : [])
+      .map((summary) => [summaryIdentity(summary), summary]),
   );
   const changes = (current?.summaries ?? []).flatMap((summary) => {
     const prior = previousByIdentity.get(summaryIdentity(summary));
@@ -92,6 +159,7 @@ export function compareBaselineReports(current, previous, options = {}) {
     ));
   const warnings = changes.filter((item) => item.exceedsWarningThreshold);
   return {
+    status: compatibility.comparable ? "compared" : "no-compatible-baseline",
     previous: {
       generatedAt: previous?.generatedAt ?? null,
       appBuildId: previous?.build?.appBuildId ?? "unknown",
@@ -108,8 +176,11 @@ export function compareBaselineReports(current, previous, options = {}) {
         current?.build?.diagnosticsSchemaVersion ?? "unknown",
       runLabel: current?.run?.label ?? "legacy",
     },
-    comparable: previous?.build?.diagnosticsSchemaVersion
-      === current?.build?.diagnosticsSchemaVersion,
+    comparable: compatibility.comparable,
+    reason: compatibility.comparable
+      ? null
+      : `无可比基线：${compatibility.reasons.join("；")}`,
+    incompatibilities: compatibility.reasons,
     sameDataVersion: previous?.build?.dataVersion === current?.build?.dataVersion,
     thresholds: {
       relative: relativeThreshold,

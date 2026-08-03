@@ -50,6 +50,7 @@ export const STORES = {
   backups: "backups",
   fsrsCards: "fsrs-cards",
   stubbornWords: "stubborn-words",
+  quizAttempts: "quiz-attempts",
   stateDomains: "state-domains",
 } as const;
 
@@ -90,6 +91,7 @@ type StateSettings = Pick<
   | "selectedSection"
   | "selectedUnit"
   | "ratingUndoStack"
+  | "activeQuiz"
 > & {
   id: typeof CURRENT_STATE_ID;
   /** 单调递增计数器，跨标签页冲突检测 */
@@ -124,6 +126,7 @@ export type IndexedStateSnapshot = {
   enrichments: EnrichmentRecord[];
   fsrsCards: FsrsCardRecord[];
   stubbornWords: StoredState["stubbornWords"][number][];
+  quizAttempts: StoredState["quizAttempts"];
 };
 
 function createStore(
@@ -211,6 +214,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       shuffleSeed: state.shuffleSeed,
       selectedSection: state.selectedSection,
       selectedUnit: state.selectedUnit,
+      activeQuiz: state.activeQuiz,
       ratingUndoStack: state.ratingUndoStack,
     },
     reviews: state.reviews.map((review) => ({ ...review })),
@@ -231,6 +235,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
     })),
     stubbornWords: Object.values(state.stubbornWords)
       .map((record) => ({ ...record })),
+    quizAttempts: state.quizAttempts.map((attempt) => ({ ...attempt })),
   };
 }
 
@@ -266,6 +271,7 @@ export function combineStoredState(snapshot: IndexedStateSnapshot) {
     stubbornWords: Object.fromEntries(
       snapshot.stubbornWords.map((record) => [record.wordId, record]),
     ),
+    quizAttempts: snapshot.quizAttempts,
   });
 }
 
@@ -287,6 +293,7 @@ function buildStateDomainRecords(
     { key: STORES.enrichments, value: snapshot.enrichments },
     { key: STORES.fsrsCards, value: snapshot.fsrsCards },
     { key: STORES.stubbornWords, value: snapshot.stubbornWords },
+    { key: STORES.quizAttempts, value: snapshot.quizAttempts },
   ];
 }
 
@@ -320,6 +327,7 @@ function combineStateDomainRecords(records: StateDomainRecord[]) {
       enrichments: domainValue(STORES.enrichments, []),
       fsrsCards: domainValue(STORES.fsrsCards, []),
       stubbornWords: domainValue(STORES.stubbornWords, []),
+      quizAttempts: domainValue(STORES.quizAttempts, []),
     }),
   };
 }
@@ -538,6 +546,7 @@ export async function readStoredState(
       enrichments: enrichments as IndexedStateSnapshot["enrichments"],
       fsrsCards: fsrsCards as IndexedStateSnapshot["fsrsCards"],
       stubbornWords: stubbornWords as IndexedStateSnapshot["stubbornWords"],
+      quizAttempts: [],
     });
     await cacheLegacyState(database, state, revision, diagnosticTags);
     return (await readStateDomains(database, diagnosticTags)) ?? { state, revision };

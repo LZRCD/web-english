@@ -1,6 +1,7 @@
 "use client";
 
-import type { FormEvent } from "react";
+import { useRef, type FormEvent } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 type CoachPanelProps = {
   open: boolean;
@@ -31,8 +32,12 @@ export default function CoachPanel({
   onSubmit,
   onClose,
 }: CoachPanelProps) {
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef, open);
+
   return (
     <aside
+      ref={panelRef}
       className={open ? "coach-panel open" : "coach-panel"}
       aria-label="AI 记忆教练"
       aria-hidden={!open}
@@ -57,7 +62,7 @@ export default function CoachPanel({
         ))}
       </div>
       <form onSubmit={onSubmit}>
-        <input value={aiInput} maxLength={500} onChange={(event) => onInputChange(event.target.value)} placeholder="问问这个词该怎么记…" aria-label="向 AI 教练提问" />
+        <input value={aiInput} maxLength={500} autoFocus onChange={(event) => onInputChange(event.target.value)} placeholder="问问这个词该怎么记…" aria-label="向 AI 教练提问" />
         <button type="submit" aria-label="发送问题">↗</button>
       </form>
       <p className="coach-note">

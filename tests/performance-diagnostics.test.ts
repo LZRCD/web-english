@@ -17,6 +17,15 @@ import {
   DATA_CONTENT_VERSION,
   versionedDataUrl,
 } from "../lib/data-version.ts";
+import {
+  allowsBackgroundPrefetch,
+  likelyDictionaryLetters,
+  MAX_DICTIONARY_PREFETCH_BYTES,
+} from "../lib/background-prefetch.ts";
+import {
+  AUDIO_PRELOAD_ELEMENT_LIMIT,
+  nextAudioWordId,
+} from "../lib/word-audio.ts";
 
 function sample(
   metric: string,
@@ -38,6 +47,35 @@ function sample(
     tags: {},
   };
 }
+
+test("后台词典预取受网络状态和固定字节预算约束", () => {
+  assert.equal(allowsBackgroundPrefetch(), true);
+  assert.equal(allowsBackgroundPrefetch({ online: false }), false);
+  assert.equal(allowsBackgroundPrefetch({
+    connection: { saveData: true, effectiveType: "4g" },
+  }), false);
+  assert.equal(allowsBackgroundPrefetch({
+    connection: { effectiveType: "2g" },
+  }), false);
+  assert.equal(allowsBackgroundPrefetch({ visibilityState: "hidden" }), false);
+  assert.deepEqual(
+    likelyDictionaryLetters([
+      "Radiate",
+      "A careful elucidator radiated light onto the old diagram.",
+    ]),
+    ["r", "e", "c"],
+  );
+  assert.equal(MAX_DICTIONARY_PREFETCH_BYTES, 192_000);
+});
+
+test("下一词音频预载只选择一个不同词并限制为两个媒体元素", () => {
+  const words = [{ id: 10 }, { id: 11 }, {}, { id: 12 }];
+  assert.equal(nextAudioWordId(words, 0, 10), 11);
+  assert.equal(nextAudioWordId(words, 3, 12), 10);
+  assert.equal(nextAudioWordId([{ id: 10 }], 0, 10), undefined);
+  assert.equal(nextAudioWordId([{ id: 10 }, { id: 10 }], 0, 10), undefined);
+  assert.equal(AUDIO_PRELOAD_ELEMENT_LIMIT, 2);
+});
 
 test("性能样本生成 P50/P95 并单独统计失败", () => {
   const samples = [

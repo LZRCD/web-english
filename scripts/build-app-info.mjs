@@ -9,6 +9,11 @@ const packageJson = JSON.parse(await readFile(
   path.join(root, "package.json"),
   "utf8",
 ));
+const modeIndex = process.argv.indexOf("--mode");
+const requestedMode = modeIndex >= 0 ? process.argv[modeIndex + 1] : process.env.NODE_ENV;
+const runtimeMode = ["development", "production", "test"].includes(requestedMode)
+  ? requestedMode
+  : "unknown";
 
 let commit = "unknown";
 try {
@@ -62,6 +67,7 @@ export const APP_VERSION = ${JSON.stringify(packageJson.version)};
 export const APP_GIT_COMMIT = ${JSON.stringify(commit)};
 export const APP_SOURCE_HASH = ${JSON.stringify(sourceFingerprint)};
 export const APP_BUILD_ID = ${JSON.stringify(buildId)};
+export const APP_RUNTIME_MODE: "development" | "production" | "test" | "unknown" = ${JSON.stringify(runtimeMode)};
 `;
 
 await writeFile(
@@ -69,4 +75,4 @@ await writeFile(
   output,
   "utf8",
 );
-console.log(`应用构建版本：${buildId}`);
+console.log(`应用构建版本：${buildId} · ${runtimeMode}`);

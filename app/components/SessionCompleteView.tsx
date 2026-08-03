@@ -159,7 +159,7 @@ export default function SessionCompleteView({
           </button>
         )}
         <button className="quiet" type="button" onClick={onFreeStudy}>
-          返回自由学习
+          返回额外练习
         </button>
       </footer>
     </section>

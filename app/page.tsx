@@ -16,7 +16,6 @@ import {
   buildStudyKey,
   dateKey,
   learningStats,
-  MAX_REVIEWS,
   splitMeaning,
   STORAGE_VERSION,
   type FamiliarMeaningMap,
@@ -36,6 +35,7 @@ import {
   applyRating,
   buildExamPlan,
   buildTodayQueue,
+  examProgressTiers,
   dueWordIds,
   formatInterval,
   isWeakProgress,
@@ -53,6 +53,7 @@ import {
 import {
   buildLearningInsights,
   buildReviewForecast,
+  buildWeeklyLearningReport,
 } from "../lib/insights";
 import { useAiCoach } from "./hooks/useAiCoach";
 import { useAudio } from "./hooks/useAudio";
@@ -93,58 +94,27 @@ import {
   startPerformanceTimer,
 } from "../lib/performance-diagnostics";
 import { versionedDataUrl } from "../lib/data-version";
+import type { QuizQuestion, QuizAttempt, QuizSessionState } from "../lib/quiz";
+import { shouldApplyQuizToSchedule } from "../lib/quiz";
+import QuizView from "./components/QuizView";
+import {
+  ACTIVITY_RANGE_LABELS as activityRangeLabels,
+  RATING_LABELS as ratingLabels,
+  REDBOOK_PLACEHOLDER,
+  SECTION_META,
+  SECTION_PRIORITY as sectionPriority,
+  type ActivityRange,
+  type RedbookAnalysisData,
+  type RedbookData,
+  type RedbookStatus,
+  type ReinforcementRating,
+} from "./constants";
 
-type RedbookStatus = "loading" | "ready" | "error";
-type ActivityRange = 140 | 182 | 365;
-
-type RedbookData = {
-  metadata: {
-    title: string;
-    total: number;
-    sectionCounts: Record<string, number>;
-    learningItemCount?: number;
-  };
-  words: Word[];
-};
-
-type RedbookAnalysisData = {
-  metadata: {
-    auditedEntries: number;
-    learningItemCount: number;
-  };
-  entries: Record<string, {
-    correctedWord?: string;
-    relation?: Word["relation"];
-  }>;
-};
-
-type ReinforcementRating = 0 | 1;
-
-const SECTION_META = [
-  { name: "必考词", detail: "26 个单元", total: 1856, color: "mint", marker: "必" },
-  { name: "基础词", detail: "31 个单元", total: 3680, color: "blue", marker: "基" },
-  { name: "超纲词", detail: "按首字母编排", total: 1014, color: "peach", marker: "超" },
-];
-
-const ratingLabels = ["忘记", "模糊", "认识", "熟练"];
-const sectionPriority: Record<string, number> = {
-  必考词: 0,
-  基础词: 1,
-  超纲词: 2,
-};
-const activityRangeLabels: Record<ActivityRange, string> = {
-  140: "20 周",
-  182: "半年",
-  365: "一年",
-};
-const REDBOOK_PLACEHOLDER: Word = {
-  word: "红宝书",
-  meaning: "正在载入本地词库",
-  section: "2027 考研英语",
-};
 export default function Home() {
   const [started, setStarted] = useState(false);
-  const [activeView, setActiveView] = useState<"learn" | "books" | "wordbook" | "history" | "settings">("learn");
+  // 移动端判断：手机端 AI 面板打开时隔离底层焦点
+  const [isMobile, setIsMobile] = useState(false);
+  const [activeView, setActiveView] = useState<"learn" | "books" | "wordbook" | "quiz" | "history" | "settings">("learn");
   const [revealed, setRevealed] = useState(false);
   const [positions, setPositions] = useState<StudyPositions>({});
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -170,6 +140,8 @@ export default function Home() {
   const [mistakes, setMistakes] = useState<MistakeRecord[]>([]);
   const [lookupWords, setLookupWords] = useState<LookupWord[]>([]);
   const [familiarMeanings, setFamiliarMeanings] = useState<FamiliarMeaningMap>({});
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
+  const [activeQuiz, setActiveQuiz] = useState<QuizSessionState | undefined>(undefined);
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
   const [studyScope, setStudyScope] = useState<StudyScope>("selection");
@@ -191,7 +163,7 @@ export default function Home() {
   const [redbookStatus, setRedbookStatus] = useState<RedbookStatus>("loading");
   const [selectedSection, setSelectedSection] = useState("必考词");
   const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
-  const [activityRange, setActivityRange] = useState<ActivityRange>(365);
+  const [activityRange, setActivityRange] = useState<ActivityRange>(140);
   const [activityOffset, setActivityOffset] = useState(0);
   const [selectedActivityDate, setSelectedActivityDate] = useState("");
   const [learningItemCount, setLearningItemCount] = useState(REDBOOK_SOURCE_TOTAL);
@@ -408,14 +380,30 @@ export default function Home() {
     }
     return counts;
   }, [redbookWords, wordProgress]);
+  const examProgress = useMemo(
+    () => examProgressTiers(wordProgress, examDate),
+    [examDate, wordProgress],
+  );
+
   const examPlan = useMemo(
     () => buildExamPlan({
       examDate,
       remainingBySection,
       dailyNewGoal: dailyGoal,
-      now: new Date(clock),
+      now: new Date(`${todayKey}T12:00:00`),
     }),
-    [clock, dailyGoal, examDate, remainingBySection],
+    [dailyGoal, examDate, remainingBySection, todayKey],
+  );
+  const weeklyReport = useMemo(
+    () => buildWeeklyLearningReport({
+      reviews,
+      progress: wordProgress,
+      stubbornWords,
+      now: new Date(`${todayKey}T12:00:00`),
+      examPlan,
+      dailyNewGoal: effectiveNewGoal,
+    }),
+    [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, wordProgress],
   );
   const availableUnits = useMemo(() => {
     const values = redbookWords
@@ -464,6 +452,15 @@ export default function Home() {
     currentFamiliarMeanings,
     onNotify: showToast,
   });
+
+  // 监听视口宽度：手机端 AI 面板打开时隔离底层焦点
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 820px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const { hasRecordedAudio, speak, speakNext, speakWord } = useAudio({
     current,
     studyWords,
@@ -548,6 +545,8 @@ export default function Home() {
     selectedSection,
     selectedUnit,
     ratingUndoStack: undoStack,
+    quizAttempts,
+    activeQuiz,
   }), [
     activeSession,
     adaptiveNewWords,
@@ -570,6 +569,8 @@ export default function Home() {
     studyMode,
     studyScope,
     undoStack,
+    quizAttempts,
+    activeQuiz,
     wordProgress,
   ]);
 
@@ -806,7 +807,7 @@ export default function Home() {
       {
         key: "Space",
         action: () => {
-          if (!startedRef.current) beginLearning();
+          if (!startedRef.current) beginFromWelcome();
           else if (
             activeViewRef.current === "learn"
             && redbookReadyRef.current
@@ -890,6 +891,8 @@ export default function Home() {
     setFavorites(state.favorites);
     setMistakes(state.mistakes);
     setStubbornHistory(state.stubbornWords);
+    setQuizAttempts(state.quizAttempts);
+    setActiveQuiz(state.activeQuiz);
     setStudyMode(state.studyMode);
     setStudyScope(state.studyScope);
     setShuffleSeed(state.shuffleSeed);
@@ -903,6 +906,12 @@ export default function Home() {
   function beginLearning() {
     setStarted(true);
     setRecallStartedAt(new Date().getTime());
+  }
+
+  function beginFromWelcome() {
+    // 默认主入口 = 今日任务；无可用队列时退回自由学习（额外练习）
+    if (redbookReadyRef.current && startTodaySession()) return;
+    beginLearning();
   }
 
   function rateWord(rating: number, skipReinforcement = false) {
@@ -946,7 +955,6 @@ export default function Home() {
       word: current.word,
       ...(previousProgress ? { previousProgress } : {}),
       ...(previousMistake ? { previousMistake } : {}),
-      ...(reviews.length >= MAX_REVIEWS ? { evictedReview: reviews[0] } : {}),
       previousPosition: wordIndex,
       ...(activeSession
         ? { previousSession: { ...activeSession, wordIds: [...activeSession.wordIds] } }
@@ -975,7 +983,7 @@ export default function Home() {
     } else if (!isWeakProgress(result.progress)) {
       setMistakes((items) => items.filter((item) => item.wordId !== current.id));
     }
-    setReviews((items) => [...items, result.review].slice(-MAX_REVIEWS));
+    setReviews((items) => [...items, result.review]);
     const recallMessage = recallMs === undefined
       ? ""
       : ` · 用时 ${formatRecallTime(recallMs)}${recallMs >= 15000 ? "，回忆偏慢" : ""}`;
@@ -1015,6 +1023,82 @@ export default function Home() {
     }, 5000);
   }
 
+  function recordQuizResult(
+    question: QuizQuestion,
+    correct: boolean,
+    recallMs: number,
+  ) {
+    const word = question.word;
+    if (!redbookReady || word.id === undefined) return;
+    const now = new Date();
+    const nowIso = now.toISOString();
+    // 仅「每日首次有效作答」或「到期词首次作答」写入 FSRS，
+    // 避免反复「再来一组」不断改写同一批词的排程。
+    const applyToSchedule = shouldApplyQuizToSchedule(
+      quizAttempts,
+      word.id,
+      now,
+    );
+    const attempt: QuizAttempt = {
+      id: `quiz:${question.mode}:${word.id}:${nowIso}`,
+      wordId: word.id,
+      mode: question.mode,
+      correct,
+      recallMs,
+      answeredAt: nowIso,
+      appliedToSchedule: applyToSchedule,
+    };
+    setQuizAttempts((items) => [...items, attempt].slice(-5000));
+    refreshClock();
+
+    if (!correct) {
+      // 错词始终进入薄弱词队列（独立于 FSRS 排程）
+      setMistakes((items) => {
+        const previous = items.find((item) => item.wordId === word.id);
+        const record: MistakeRecord = {
+          wordId: word.id!,
+          addedAt: previous?.addedAt ?? nowIso,
+          mistakeCount: (previous?.mistakeCount ?? 0) + 1,
+          lastRating: 0,
+          lastMistakeAt: nowIso,
+        };
+        return [record, ...items.filter((item) => item.wordId !== word.id)];
+      });
+    }
+
+    if (!applyToSchedule) {
+      showToast(
+        correct ? "测验正确（今日已记录，不重复改写复习计划）" : "测验答错 · 已加入薄弱词",
+        1800,
+      );
+      return;
+    }
+
+    const rating = correct ? 2 : 0;
+    const previousProgress = wordProgress[word.id];
+    const result = applyRating(previousProgress, {
+      wordId: word.id,
+      word: word.word,
+      rating,
+      reviewedAt: nowIso,
+      recallMs,
+      section: word.section,
+      unit: word.unit,
+      sessionId: `quiz:${question.mode}:${dateKey(nowIso)}`,
+    });
+    setWordProgress((items) => ({ ...items, [word.id!]: result.progress }));
+    if (correct && !isWeakProgress(result.progress)) {
+      setMistakes((items) => items.filter((item) => item.wordId !== word.id));
+    }
+    setReviews((items) => [...items, result.review]);
+    showToast(
+      correct
+        ? `专项测验正确 · ${formatInterval(result.review.intervalMs)}后复习`
+        : `专项测验答错 · 已加入薄弱词，${formatInterval(result.review.intervalMs)}后复习`,
+      2200,
+    );
+  }
+
   function undoLastRating() {
     const entry = undoStack[undoStack.length - 1];
     if (!entry) return;
@@ -1025,7 +1109,7 @@ export default function Home() {
     window.speechSynthesis?.cancel();
     setReviews((items) => {
       const rest = items.filter((review) => review.id !== entry.reviewId);
-      return entry.evictedReview ? [entry.evictedReview, ...rest] : rest;
+      return rest;
     });
     setWordProgress((items) => {
       const next = { ...items };
@@ -1104,10 +1188,10 @@ export default function Home() {
     title: string,
     wordIds: number[],
     originKind?: StudySession["originKind"],
-  ) {
+  ): boolean {
     if (!wordIds.length) {
       showToast("当前没有可加入学习队列的单词", 1800);
-      return;
+      return false;
     }
     createActiveSession(kind, title, wordIds, originKind);
     if (ratingUndoTimerRef.current !== undefined) {
@@ -1119,10 +1203,11 @@ export default function Home() {
     setRevealed(false);
     setActiveView("learn");
     showToast(`已建立${title} · ${wordIds.length} 词`, 1800);
+    return true;
   }
 
-  function startTodaySession() {
-    startSession(
+  function startTodaySession(): boolean {
+    return startSession(
       "today",
       "今日任务",
       buildTodayQueue(
@@ -1295,6 +1380,7 @@ export default function Home() {
     { id: "learn", label: "学习", mark: "⌁" },
     { id: "books", label: "词书", mark: "□" },
     { id: "wordbook", label: "词本", mark: "◇" },
+    { id: "quiz", label: "测验", mark: "✓" },
     { id: "history", label: "轨迹", mark: "↗" },
     { id: "settings", label: "设置", mark: "○" },
   ] as const;
@@ -1304,7 +1390,7 @@ export default function Home() {
       className="app-shell"
       aria-busy={operationInProgress || loadStatus === "loading"}
     >
-      {!started && <WelcomeScreen onBegin={beginLearning} />}
+      {!started && <WelcomeScreen onBegin={beginFromWelcome} />}
       {(operationInProgress || loadStatus === "loading") && (
         <div
           className="data-operation-shield"
@@ -1319,7 +1405,11 @@ export default function Home() {
         </div>
       )}
 
-      <aside className="side-rail" aria-label="主导航">
+      <aside
+        className="side-rail"
+        aria-label="主导航"
+        inert={!started || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+      >
         <button className="brand" onClick={() => setActiveView("learn")} aria-label="词环首页">
           <span className="brand-orbit"><i /></span>
           <span>词环</span>
@@ -1343,7 +1433,10 @@ export default function Home() {
         </button>
       </aside>
 
-      <section className="workspace">
+      <section
+        className="workspace"
+        inert={!started || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+      >
         <header className={activeView === "learn" ? "topbar learn-topbar" : "topbar"}>
           <div>
             <p className="eyebrow">{activeView === "learn" ? "2027 红宝书伴学" : "词环 WordLoop"}</p>
@@ -1564,6 +1657,19 @@ export default function Home() {
           />
         )}
 
+        {activeView === "quiz" && (
+          <QuizView
+            words={redbookWords}
+            wordProgress={wordProgress}
+            familiarMeanings={familiarMeanings}
+            soundOn={soundOn}
+            onSpeak={speakWord}
+            onRecordResult={recordQuizResult}
+            savedQuiz={activeQuiz}
+            onQuizStateChange={setActiveQuiz}
+          />
+        )}
+
         {activeView === "history" && (
           <HistoryView
             stats={stats}
@@ -1578,6 +1684,8 @@ export default function Home() {
             ratingLabels={ratingLabels}
             insights={insights}
             reviewForecast={reviewForecast}
+            weeklyReport={weeklyReport}
+            examProgress={examProgress}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {
               setActivityRange(range);
@@ -1619,6 +1727,7 @@ export default function Home() {
             minimumNewWords={minimumNewWords}
             examDate={examDate}
             examPlan={examPlan}
+            examProgress={examProgress}
             soundOn={soundOn}
             studyMode={studyMode}
             studyScope={studyScope}

@@ -3,6 +3,8 @@
 import type { WordProgressMap } from "../../lib/learning";
 import { wordRetrievability } from "../../lib/learning";
 import { formatDueTime, splitMeaning } from "../../lib/study";
+import { useRef } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { Word } from "../../lib/study";
 
 type SearchPanelProps = {
@@ -32,12 +34,16 @@ export default function SearchPanel({
   onStartWordSession,
   onClose,
 }: SearchPanelProps) {
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef, open);
+
   if (!open) return null;
   const now = new Date(clock);
 
   return (
     <div className="search-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
         className="search-panel"
         role="dialog"
         aria-modal="true"
@@ -94,7 +100,7 @@ export default function SearchPanel({
                   <small>
                     {word.section} · Unit {word.unit}
                     {progressItem
-                      ? ` · R ${wordRetrievability(progressItem, now)}% · ${progressItem.status === "mastered" ? "已掌握" : formatDueTime(progressItem.nextDueAt, now)}`
+                      ? ` · 牢固度 ${wordRetrievability(progressItem, now)}% · ${progressItem.status === "mastered" ? "已掌握" : formatDueTime(progressItem.nextDueAt, now)}`
                       : " · 未学习"}
                   </small>
                 </div>

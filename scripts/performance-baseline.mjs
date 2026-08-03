@@ -14,6 +14,7 @@ import {
   compareBaselineReports,
   lookupTraceRatios,
   summarize,
+  validateRuntimeModes,
 } from "./performance-baseline-analysis.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -204,6 +205,10 @@ function formatChange(value, ratio) {
 
 function printComparison(comparison) {
   if (!comparison) return;
+  if (!comparison.comparable) {
+    console.log(`跨版本对照：${comparison.reason}`);
+    return;
+  }
   console.log(
     `跨版本对照：${comparison.matchedSummaryCount} 组指标，${comparison.warningCount} 组超过告警门槛`,
   );
@@ -238,9 +243,7 @@ if (process.argv.includes("--reanalyze")) {
   report.rangeDecision = buildRangeDecision(traceRatios);
   report.reanalyzedAt = new Date().toISOString();
   const previous = await loadComparisonReport();
-  report.comparison = previous
-    ? compareBaselineReports(report, previous)
-    : report.comparison ?? null;
+  report.comparison = compareBaselineReports(report, previous);
   const latestPath = await writeReportFiles(report);
   printComparison(report.comparison);
   console.log(`性能基线重算完成：${traceRatios.length} 条查词 trace -> ${latestPath}`);
@@ -344,6 +347,7 @@ try {
 process.stdout.write("\n");
 
 const traceRatios = lookupTraceRatios(allSamples);
+const runtimeValidation = validateRuntimeModes(allSamples, serverMode);
 const report = {
   format: "wordloop-performance-baseline-v1",
   generatedAt: new Date().toISOString(),
@@ -371,7 +375,9 @@ const report = {
     dataVersion: allSamples.at(-1)?.dataVersion ?? "unknown",
     diagnosticsSchemaVersion:
       allSamples.at(-1)?.diagnosticsSchemaVersion ?? "unknown",
+    runtimeMode: allSamples.at(-1)?.runtimeMode ?? "unknown",
   },
+  runtimeValidation,
   summaries: summarize(allSamples),
   lookupTraceRatios: traceRatios,
   rangeDecision: buildRangeDecision(traceRatios),
@@ -379,10 +385,12 @@ const report = {
 };
 
 const previous = await loadComparisonReport();
-report.comparison = previous
-  ? compareBaselineReports(report, previous)
-  : null;
+report.comparison = compareBaselineReports(report, previous);
 
 const latestPath = await writeReportFiles(report);
 printComparison(report.comparison);
+if (runtimeValidation.status === "error") {
+  console.error(`运行模式校验失败：${runtimeValidation.errors.join("；")}`);
+  process.exitCode = 1;
+}
 console.log(`性能基线完成：${allSamples.length} 个样本 -> ${latestPath}`);

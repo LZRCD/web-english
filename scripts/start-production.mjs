@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -32,6 +32,15 @@ const contentTypes = {
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
+
+/** 本地生产服务启动前加载私密配置；已存在的进程环境变量保持最高优先级。 */
+export function loadLocalEnvironment(
+  envPath = path.join(root, ".env.local"),
+) {
+  if (!existsSync(envPath)) return false;
+  process.loadEnvFile(envPath);
+  return true;
+}
 
 function argumentValue(name) {
   const index = process.argv.indexOf(name);
@@ -178,6 +187,7 @@ export async function startProductionServer({
   port = Number(argumentValue("--port") ?? process.env.PORT ?? 3000),
   outDirectory = path.resolve(process.env.VINEXT_OUT_DIR ?? path.join(root, "dist")),
 } = {}) {
+  loadLocalEnvironment();
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error(`无效端口：${port}`);
   }
@@ -212,7 +222,9 @@ export async function startProductionServer({
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   const server = await startProductionServer();
-  const close = () => server.close(() => process.exit(0));
+  const close = () => server.close(() => {
+    process.exitCode = 0;
+  });
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
 }

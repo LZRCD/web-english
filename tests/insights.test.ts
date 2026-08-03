@@ -3,9 +3,16 @@ import test from "node:test";
 import {
   buildLearningInsights,
   buildReviewForecast,
+  buildWeeklyLearningReport,
   type LearningInsightReview,
   type ReviewForecastMap,
 } from "../lib/insights.ts";
+import type {
+  ExamPlan,
+  ReviewEvent,
+  StubbornWordMap,
+  WordProgressMap,
+} from "../lib/learning.ts";
 
 function localIso(
   year: number,
@@ -115,4 +122,76 @@ test("复习预测把逾期和今天到期放入首日并跨月按本地日期�
     { date: "2026-08-01", count: 1 },
     { date: "2026-08-02", count: 1 },
   ]);
+});
+
+test("每周报告按本地周一统计变化并给出考研节奏建议", () => {
+  const makeReview = (
+    reviewedAt: string,
+    rating: 0 | 1 | 2 | 3,
+    wordId: number,
+  ): ReviewEvent => ({
+    id: `${wordId}:${reviewedAt}`,
+    wordId,
+    word: `word-${wordId}`,
+    rating,
+    kind: "review",
+    intervalMs: 86_400_000,
+    dueAt: localIso(2026, 8, 3),
+    reviewedAt,
+    section: "必考词",
+    unit: 1,
+  });
+  const reviews = [
+    makeReview(localIso(2026, 7, 22, 8), 0, 1),
+    makeReview(localIso(2026, 7, 28, 8), 0, 2),
+    makeReview(localIso(2026, 7, 29, 8), 0, 2),
+  ];
+  const progress = {
+    1: { status: "mastered", nextDueAt: localIso(2026, 8, 3) },
+    2: { status: "reviewing", nextDueAt: localIso(2026, 8, 4) },
+    3: { status: "reviewing", nextDueAt: localIso(2026, 8, 1) },
+  } as unknown as WordProgressMap;
+  const stubbornWords = {
+    2: {
+      wordId: 2,
+      active: true,
+      reason: "again-3",
+      triggeredAt: localIso(2026, 7, 29),
+      lastChangedAt: localIso(2026, 7, 29),
+      triggerCount: 1,
+    },
+  } satisfies StubbornWordMap;
+  const examPlan = {
+    daysRemaining: 140,
+    phase: "强化期",
+    reviewReserveDays: 21,
+    remainingWords: 3000,
+    requiredDailyNew: 25,
+    projectedDays: 150,
+    onTrack: false,
+    focusSection: "必考词",
+  } satisfies ExamPlan;
+
+  const report = buildWeeklyLearningReport({
+    reviews,
+    progress,
+    stubbornWords,
+    now: new Date(2026, 7, 2, 12),
+    examPlan,
+    dailyNewGoal: 20,
+  });
+
+  assert.equal(report.weekStart, "2026-07-27");
+  assert.equal(report.weekEnd, "2026-08-02");
+  assert.equal(report.masteredCount, 1);
+  assert.equal(report.masteredChange, 1);
+  assert.equal(report.forgottenWordCount, 1);
+  assert.equal(report.forgottenChange, 0);
+  assert.equal(report.stubbornCount, 1);
+  assert.equal(report.stubbornChange, 1);
+  assert.equal(report.nextWeekReviewCount, 3);
+  assert.equal(report.nextWeekPeak?.date, "2026-08-03");
+  assert.equal(report.nextWeekPeak?.count, 2);
+  assert.equal(report.paceStatus, "adjust");
+  assert.match(report.paceAdvice, /每日新词由 20 调到至少 25 个/);
 });

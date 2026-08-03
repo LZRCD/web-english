@@ -14,13 +14,36 @@ export type RuntimeAudioIndex = {
   entries: Record<string, [fileIndex: number, start: number, end: number]>;
 };
 
+export const AUDIO_PRELOAD_ELEMENT_LIMIT = 2;
+
 let sharedAudio: HTMLAudioElement | null = null;
 let loadedClipKey = "";
 let activePlaybackCancel: (() => void) | undefined;
 let activePreloadCancel: (() => void) | undefined;
+let nextPreloadAudio: HTMLAudioElement | null = null;
+let nextPreloadClipKey = "";
+let activeNextPreloadCancel: (() => void) | undefined;
 
 function clipKey(clip: AudioClip) {
   return `${clip.file}#t=${clip.start},${clip.end}`;
+}
+
+/** 从当前学习位置寻找下一个不同且有稳定 ID 的词，队列末尾按原学习顺序循环。 */
+export function nextAudioWordId(
+  words: ReadonlyArray<{ id?: number }>,
+  currentIndex: number,
+  currentId?: number,
+) {
+  if (words.length < 2) return undefined;
+  const baseIndex = ((Math.trunc(currentIndex) % words.length) + words.length)
+    % words.length;
+  for (let offset = 1; offset < words.length; offset += 1) {
+    const candidateId = words[(baseIndex + offset) % words.length]?.id;
+    if (candidateId !== undefined && candidateId !== currentId) {
+      return candidateId;
+    }
+  }
+  return undefined;
 }
 
 function resolveClip(
@@ -34,19 +57,57 @@ function resolveClip(
   return file ? { file, start: entry[1], end: entry[2] } : undefined;
 }
 
-/** 预加载指定录音片段（不播放），使首次点击更即时 */
+function releaseAudio(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  audio.pause();
+  audio.ontimeupdate = null;
+  audio.removeAttribute("src");
+  audio.load();
+}
+
+/** 取得播放元素；下一词已在独立元素中预载时直接提升为当前播放元素。 */
 function ensureLoaded(clip: AudioClip) {
   const key = clipKey(clip);
   if (loadedClipKey === key && sharedAudio) {
     return { audio: sharedAudio, key, reused: true };
   }
+  if (nextPreloadClipKey === key && nextPreloadAudio) {
+    const audio = nextPreloadAudio;
+    activePlaybackCancel?.();
+    activePreloadCancel?.();
+    activeNextPreloadCancel?.();
+    if (sharedAudio && sharedAudio !== audio) releaseAudio(sharedAudio);
+    sharedAudio = audio;
+    loadedClipKey = key;
+    nextPreloadAudio = null;
+    nextPreloadClipKey = "";
+    activeNextPreloadCancel = undefined;
+    return { audio, key, reused: true };
+  }
+  activePlaybackCancel?.();
+  activePreloadCancel?.();
   const audio = sharedAudio ?? new Audio();
   sharedAudio = audio;
   audio.pause();
+  audio.ontimeupdate = null;
   audio.preload = "auto";
   audio.src = key;
   loadedClipKey = key;
   return { audio, key, reused: false };
+}
+
+export function readAudioPreloadDiagnostics() {
+  const nextReadyState = nextPreloadAudio?.readyState ?? 0;
+  return {
+    elementCount: Number(Boolean(sharedAudio)) + Number(Boolean(nextPreloadAudio)),
+    elementLimit: AUDIO_PRELOAD_ELEMENT_LIMIT,
+    nextStatus: !nextPreloadAudio
+      ? "empty" as const
+      : nextReadyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        ? "ready" as const
+        : "loading" as const,
+    nextReadyState,
+  };
 }
 
 /** 浏览器 TTS 播放，返回是否成功开始 */
@@ -120,10 +181,9 @@ export function playWordAudio(
     return speakWithTts(word, 0.82, "missing-recording", playbackTimer);
   }
   window.speechSynthesis?.cancel();
+  activePlaybackCancel?.();
   const loaded = ensureLoaded(clip);
   const audio = loaded.audio;
-  activePlaybackCancel?.();
-  if (!loaded.reused) activePreloadCancel?.();
   let finished = false;
   const seekTimer = startPerformanceTimer("audio.seek", {
     traceId,
@@ -207,38 +267,41 @@ export function playWordAudio(
   return true;
 }
 
-/** 后台预加载某词的录音片段，供播放时秒开 */
-export function preloadWordAudio(
-  wordId: number | undefined,
-  audioIndex: RuntimeAudioIndex,
+function observeAudioPreload(
+  clip: AudioClip,
+  audio: HTMLAudioElement,
+  reused: boolean,
+  target: "current" | "next",
 ) {
-  const clip = resolveClip(wordId, audioIndex);
-  if (!clip) return;
   const traceId = createPerformanceTrace("audio-preload");
-  const preloadTimer = startPerformanceTimer("audio.preload.ready", { traceId });
+  const timerTags = { traceId, preloadTarget: target };
+  const preloadTimer = startPerformanceTimer("audio.preload.ready", timerTags);
   const metadataTimer = startPerformanceTimer(
     "audio.preload.loadedmetadata",
-    { traceId },
+    timerTags,
   );
   const loadedDataTimer = startPerformanceTimer(
     "audio.preload.loadeddata",
-    { traceId },
+    timerTags,
   );
   const canPlayTimer = startPerformanceTimer(
     "audio.preload.canplay",
-    { traceId },
+    timerTags,
   );
-  const loaded = ensureLoaded(clip);
-  const audio = loaded.audio;
-  if (loaded.reused && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-    const tags = { cacheHit: true, readyState: audio.readyState };
+  if (reused && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    const tags = {
+      cacheHit: true,
+      readyState: audio.readyState,
+      preloadTarget: target,
+      poolEntries: readAudioPreloadDiagnostics().elementCount,
+      poolLimit: AUDIO_PRELOAD_ELEMENT_LIMIT,
+    };
     metadataTimer.end(tags);
     loadedDataTimer.end(tags);
     canPlayTimer.end(tags);
     preloadTimer.end(tags);
-    return;
+    return undefined;
   }
-  activePreloadCancel?.();
   let settled = false;
   const finish = (
     outcome: "ok" | "error" | "aborted",
@@ -251,13 +314,15 @@ export function preloadWordAudio(
     audio.removeEventListener("loadeddata", onLoadedData);
     audio.removeEventListener("canplay", onCanPlay);
     audio.removeEventListener("error", onError);
-    if (activePreloadCancel === cancelPreload) activePreloadCancel = undefined;
     const transfer = resourceTransferDetails(clip.file);
     const tags = {
-      cacheHit: transfer?.cacheHit ?? loaded.reused,
+      cacheHit: transfer?.cacheHit ?? reused,
       resourceCache: transfer?.resourceCache,
       transferBytes: transfer?.transferBytes,
       readyState: audio.readyState,
+      preloadTarget: target,
+      poolEntries: readAudioPreloadDiagnostics().elementCount,
+      poolLimit: AUDIO_PRELOAD_ELEMENT_LIMIT,
       failureReason,
     };
     metadataTimer.end(tags, outcome);
@@ -271,10 +336,13 @@ export function preloadWordAudio(
   const eventTags = () => {
     const transfer = resourceTransferDetails(clip.file);
     return {
-      cacheHit: transfer?.cacheHit ?? loaded.reused,
+      cacheHit: transfer?.cacheHit ?? reused,
       resourceCache: transfer?.resourceCache,
       transferBytes: transfer?.transferBytes,
       readyState: audio.readyState,
+      preloadTarget: target,
+      poolEntries: readAudioPreloadDiagnostics().elementCount,
+      poolLimit: AUDIO_PRELOAD_ELEMENT_LIMIT,
     };
   };
   const onMetadata = () => metadataTimer.end(eventTags());
@@ -288,7 +356,6 @@ export function preloadWordAudio(
   };
   const onError = () => finish("error", "audio-error");
   const cancelPreload = () => finish("aborted", "cancelled");
-  activePreloadCancel = cancelPreload;
   audio.addEventListener("loadedmetadata", onMetadata, { once: true });
   audio.addEventListener("loadeddata", onLoadedData, { once: true });
   audio.addEventListener("canplay", onCanPlay, { once: true });
@@ -297,12 +364,77 @@ export function preloadWordAudio(
     () => finish("error", "preload-timeout"),
     15_000,
   );
+  try {
+    audio.load();
+  } catch {
+    finish("error", "load-error");
+  }
+  return cancelPreload;
+}
+
+/** 预加载当前词录音片段，继续复用主播放元素。 */
+export function preloadWordAudio(
+  wordId: number | undefined,
+  audioIndex: RuntimeAudioIndex,
+) {
+  const clip = resolveClip(wordId, audioIndex);
+  if (!clip) return;
+  const loaded = ensureLoaded(clip);
+  activePreloadCancel = observeAudioPreload(
+    clip,
+    loaded.audio,
+    loaded.reused,
+    "current",
+  );
+}
+
+/** 用第二个、受上限约束的浏览器音频元素预载下一词，不改写当前播放源。 */
+export function preloadNextWordAudio(
+  wordId: number | undefined,
+  audioIndex: RuntimeAudioIndex,
+) {
+  const clip = resolveClip(wordId, audioIndex);
+  if (!clip) {
+    clearNextWordAudioPreload();
+    return;
+  }
+  const key = clipKey(clip);
+  if (key === loadedClipKey) {
+    clearNextWordAudioPreload();
+    return;
+  }
+  if (key === nextPreloadClipKey && nextPreloadAudio) return;
+  clearNextWordAudioPreload();
+  const audio = new Audio();
+  audio.preload = "auto";
+  audio.src = key;
+  nextPreloadAudio = audio;
+  nextPreloadClipKey = key;
+  activeNextPreloadCancel = observeAudioPreload(
+    clip,
+    audio,
+    false,
+    "next",
+  );
+}
+
+export function clearNextWordAudioPreload() {
+  activeNextPreloadCancel?.();
+  activeNextPreloadCancel = undefined;
+  releaseAudio(nextPreloadAudio);
+  nextPreloadAudio = null;
+  nextPreloadClipKey = "";
 }
 
 /** 停止当前播放并清理共享资源 */
 export function stopWordAudio() {
   activePlaybackCancel?.();
   activePreloadCancel?.();
-  sharedAudio?.pause();
+  clearNextWordAudioPreload();
+  releaseAudio(sharedAudio);
+  sharedAudio = null;
+  loadedClipKey = "";
+  activePlaybackCancel = undefined;
+  activePreloadCancel = undefined;
   window.speechSynthesis?.cancel();
 }

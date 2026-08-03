@@ -46,6 +46,7 @@ function emptyState(): StoredState {
     selectedSection: "必考词",
     selectedUnit: 1,
     ratingUndoStack: [],
+    quizAttempts: [],
   };
 }
 

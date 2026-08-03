@@ -2,7 +2,12 @@
 
 import type { KeyboardEvent } from "react";
 import { dateKey, formatDueTime, buildActivityCalendar, type Review } from "../../lib/study";
-import type { LearningInsights, ReviewForecastDay } from "../../lib/insights";
+import type {
+  LearningInsights,
+  ReviewForecastDay,
+  WeeklyLearningReport,
+} from "../../lib/insights";
+import type { ExamProgressTiers } from "../../lib/learning";
 
 type ActivityRange = 140 | 182 | 365;
 
@@ -27,6 +32,8 @@ type HistoryViewProps = {
   ratingLabels: string[];
   insights: LearningInsights;
   reviewForecast: ReviewForecastDay[];
+  weeklyReport: WeeklyLearningReport;
+  examProgress: ExamProgressTiers | null;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
@@ -47,6 +54,8 @@ export default function HistoryView({
   ratingLabels,
   insights,
   reviewForecast,
+  weeklyReport,
+  examProgress,
   onStartTodaySession,
   onActivityRangeChange,
   onActivityNavigate,
@@ -125,11 +134,74 @@ export default function HistoryView({
         <div><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
         <div><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
         <div><span>完成次数</span><strong>{stats.completionCount}</strong><small>{stats.coveredCount} 个不同单词</small></div>
-        <div><span>平均可提取率</span><strong>{stats.retrievability}%</strong><small>FSRS 当前回忆概率</small></div>
+        <div><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
         <button type="button" onClick={onStartTodaySession}>
           <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
         </button>
       </div>
+      {examProgress && (
+        <section className="exam-progress" aria-labelledby="exam-progress-title">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">EXAM READINESS</p>
+              <h2 id="exam-progress-title">考研备考就绪度</h2>
+            </div>
+            <small>考试日 {examProgress.examDate.replaceAll("-", ".")} · 可提取率 ≥ {examProgress.thresholdPercent}%</small>
+          </div>
+          <div className="exam-progress-grid">
+            <div><span>已覆盖</span><strong>{examProgress.covered}</strong><small>至少学习一次</small></div>
+            <div><span>已掌握</span><strong>{examProgress.mastered}</strong><small>达到稳定性门槛</small></div>
+            <div><span>考试日就绪</span><strong>{examProgress.examReady}</strong><small>预测考试当天仍可提取</small></div>
+          </div>
+        </section>
+      )}
+
+      <section className="weekly-report" aria-labelledby="weekly-report-title">
+        <div className="panel-title">
+          <div>
+            <p className="eyebrow">WEEKLY REPORT</p>
+            <h2 id="weekly-report-title">每周学习报告</h2>
+          </div>
+          <small>{weeklyReport.weekStart.replaceAll("-", ".")} — {weeklyReport.weekEnd.replaceAll("-", ".")}</small>
+        </div>
+        <div className="weekly-report-grid">
+          <div>
+            <span>当前已掌握</span>
+            <strong>{weeklyReport.masteredCount}</strong>
+            <small className={weeklyReport.masteredChange >= 0 ? "positive" : "negative"}>
+              本周 {weeklyReport.masteredChange >= 0 ? "+" : ""}{weeklyReport.masteredChange}
+            </small>
+          </div>
+          <div>
+            <span>本周遗忘</span>
+            <strong>{weeklyReport.forgottenWordCount}</strong>
+            <small className={weeklyReport.forgottenChange <= 0 ? "positive" : "negative"}>
+              较上周 {weeklyReport.forgottenChange > 0 ? "+" : ""}{weeklyReport.forgottenChange}
+            </small>
+          </div>
+          <div>
+            <span>活跃顽固词</span>
+            <strong>{weeklyReport.stubbornCount}</strong>
+            <small className={weeklyReport.stubbornChange <= 0 ? "positive" : "negative"}>
+              本周 {weeklyReport.stubbornChange > 0 ? "+" : ""}{weeklyReport.stubbornChange}
+            </small>
+          </div>
+          <div>
+            <span>下周预计复习</span>
+            <strong>{weeklyReport.nextWeekReviewCount}</strong>
+            <small>
+              日均 {weeklyReport.nextWeekDailyAverage}
+              {weeklyReport.nextWeekPeak
+                ? ` · 峰值 ${weeklyReport.nextWeekPeak.date.slice(5)} ${weeklyReport.nextWeekPeak.count} 词`
+                : ""}
+            </small>
+          </div>
+        </div>
+        <div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
+          <span aria-hidden="true">↗</span>
+          <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>
+        </div>
+      </section>
       <section className="insights-panel" aria-labelledby="insights-title">
         <div className="panel-title">
           <h2 id="insights-title">学习趋势</h2>
@@ -255,6 +327,12 @@ export default function HistoryView({
           </div>
         </div>
         <div className="activity-scroll">
+          {reviews.length === 0 ? (
+            <div className="activity-empty" role="status">
+              <p>还没有学习记录</p>
+              <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
+            </div>
+          ) : (
           <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
             {activityDays.map((day, index) => (
               <button
@@ -271,6 +349,7 @@ export default function HistoryView({
               />
             ))}
           </div>
+          )}
           <div className="activity-legend" aria-hidden="true">
             <span>少</span>
             {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}

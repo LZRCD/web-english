@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRangeDecision,
+  baselineCompatibility,
   compareBaselineReports,
   lookupTraceRatios,
   summarize,
+  validateRuntimeModes,
 } from "../scripts/performance-baseline-analysis.mjs";
 
 function sample(traceId, metric, durationMs, options = {}) {
@@ -116,8 +118,17 @@ test("基线摘要按网络条件和缓存状态独立分组", () => {
 });
 
 test("跨版本摘要输出绝对变化、百分比和告警门槛", () => {
+  const run = { label: "production", serverMode: "production", networkProfile: "normal" };
+  const environment = {
+    platform: "win32",
+    arch: "x64",
+    browserChannel: "chrome",
+    browserVersion: "140.0.0.0",
+  };
   const previous = {
     generatedAt: "2026-07-01T00:00:00.000Z",
+    run,
+    environment,
     build: { appBuildId: "old", dataVersion: "data", diagnosticsSchemaVersion: 2 },
     summaries: [{
       metric: "lookup.total",
@@ -129,6 +140,8 @@ test("跨版本摘要输出绝对变化、百分比和告警门槛", () => {
   };
   const current = {
     generatedAt: "2026-08-01T00:00:00.000Z",
+    run,
+    environment,
     build: { appBuildId: "new", dataVersion: "data", diagnosticsSchemaVersion: 2 },
     summaries: [{
       metric: "lookup.total",
@@ -147,4 +160,42 @@ test("跨版本摘要输出绝对变化、百分比和告警门槛", () => {
   assert.equal(change.p95ChangeRatio, 0.25);
   assert.equal(change.exceedsWarningThreshold, true);
   assert.equal(comparison.warningCount, 1);
+});
+
+test("不同网络条件或主要环境不产生误导性回归告警", () => {
+  const base = {
+    build: { dataVersion: "data", diagnosticsSchemaVersion: 3 },
+    run: { serverMode: "production", networkProfile: "normal" },
+    environment: {
+      platform: "win32",
+      arch: "x64",
+      browserChannel: "chrome",
+      browserVersion: "140.0.0.0",
+    },
+    summaries: [],
+  };
+  const current = {
+    ...base,
+    run: { ...base.run, networkProfile: "high-latency" },
+  };
+  const compatibility = baselineCompatibility(current, base);
+  const comparison = compareBaselineReports(current, base);
+
+  assert.equal(compatibility.comparable, false);
+  assert.match(compatibility.reasons.join("；"), /网络条件不一致/);
+  assert.equal(comparison.status, "no-compatible-baseline");
+  assert.equal(comparison.warningCount, 0);
+  assert.match(comparison.reason, /无可比基线/);
+});
+
+test("页面样本运行模式必须与外部运行器声明一致", () => {
+  assert.equal(validateRuntimeModes([
+    { runtimeMode: "production" },
+    { runtimeMode: "production" },
+  ], "production").status, "ok");
+  const invalid = validateRuntimeModes([
+    { runtimeMode: "unknown" },
+  ], "production");
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.errors[0], /不一致/);
 });

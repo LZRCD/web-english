@@ -16,6 +16,7 @@ import {
   type WordProgress,
   type WordProgressMap,
 } from "./learning.ts";
+import type { QuizAttempt, QuizSessionState } from "./quiz.ts";
 
 export type {
   Rating,
@@ -115,6 +116,8 @@ export type StoredState = {
   stubbornWords: StubbornWordMap;
   positions: StudyPositions;
   activeSession?: StudySession;
+  quizAttempts: QuizAttempt[];
+  activeQuiz?: QuizSessionState;
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
   familiarMeanings: FamiliarMeaningMap;
@@ -134,7 +137,6 @@ export type StoredState = {
 
 export const STORAGE_KEY = "wordloop-state";
 export const STORAGE_VERSION = 5;
-export const MAX_REVIEWS = 10000;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;
 export const CUSTOM_WORD_ID_START = 1_000_000;
 
@@ -755,6 +757,81 @@ function normalizeRatingUndoStack(value: unknown) {
     .slice(-30);
 }
 
+
+const QUIZ_MODES = new Set(["listening-spelling", "chinese-to-english", "meaning-choice"]);
+
+function normalizeQuizAttempt(value: unknown): QuizAttempt | null {
+  if (!value || typeof value !== "object") return null;
+  const attempt = value as Partial<QuizAttempt>;
+  const wordId = attempt.wordId;
+  if (
+    !Number.isSafeInteger(wordId)
+    || typeof attempt.answeredAt !== "string"
+    || !Number.isFinite(new Date(attempt.answeredAt).getTime())
+  ) {
+    return null;
+  }
+  const mode = typeof attempt.mode === "string" && QUIZ_MODES.has(attempt.mode)
+    ? attempt.mode
+    : "meaning-choice";
+  return {
+    id: typeof attempt.id === "string"
+      ? attempt.id
+      : `quiz:${wordId}:${attempt.answeredAt}:${Math.random().toString(36).slice(2, 7)}`,
+    wordId: wordId as number,
+    mode: mode as QuizAttempt["mode"],
+    correct: attempt.correct === true,
+    recallMs: Math.max(0, Number(attempt.recallMs) || 0),
+    answeredAt: attempt.answeredAt,
+    appliedToSchedule: attempt.appliedToSchedule === true,
+  };
+}
+
+function normalizeQuizAttempts(value: unknown): QuizAttempt[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeQuizAttempt)
+    .filter((item): item is QuizAttempt => item !== null)
+    .slice(-5000);
+}
+
+function normalizeQuizSession(value: unknown): QuizSessionState | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const session = value as Partial<QuizSessionState>;
+  if (
+    typeof session.mode !== "string"
+    || !QUIZ_MODES.has(session.mode)
+    || !Number.isFinite(Number(session.seed))
+    || !Number.isFinite(Number(session.index))
+  ) {
+    return undefined;
+  }
+  const answers: QuizSessionState["answers"] = {};
+  if (session.answers && typeof session.answers === "object") {
+    for (const [questionId, entry] of Object.entries(session.answers)) {
+      if (entry && typeof entry === "object" && "correct" in entry) {
+        const record = entry as { answer?: unknown; correct?: unknown };
+        answers[questionId] = {
+          answer: typeof record.answer === "string" ? record.answer : "",
+          correct: record.correct === true,
+        };
+      }
+    }
+  }
+  return {
+    id: typeof session.id === "string" ? session.id : "quiz:restored",
+    mode: session.mode as QuizSessionState["mode"],
+    seed: Number(session.seed),
+    index: Math.max(0, Math.trunc(Number(session.index))),
+    correctCount: Math.max(0, Math.trunc(Number(session.correctCount) || 0)),
+    answers,
+    complete: session.complete === true,
+    startedAt: typeof session.startedAt === "string"
+      ? session.startedAt
+      : new Date().toISOString(),
+  };
+}
+
 /**
  * 归一化已解析的持久化状态。IndexedDB 返回的本来就是对象，
  * 直接走该入口可避免一次完整的 JSON.stringify + JSON.parse。
@@ -821,12 +898,11 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     }
   }
   dedupedReviews.reverse();
-  // IndexedDB getAll() 按主键返回；统一按事件时间排序后再保留最近记录。
+  // IndexedDB getAll() 按主键返回；统一按事件时间排序（完整保留历史，不静默截断）。
   const normalizedReviews = dedupedReviews
     .sort((a, b) =>
       a.reviewedAt.localeCompare(b.reviewedAt)
       || a.id.localeCompare(b.id))
-    .slice(-MAX_REVIEWS);
 
   if (sourceVersion < 4) {
     const seen = new Set<number>();
@@ -988,6 +1064,8 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     selectedSection,
     selectedUnit,
     ratingUndoStack: normalizeRatingUndoStack(state.ratingUndoStack),
+    quizAttempts: normalizeQuizAttempts(state.quizAttempts),
+    activeQuiz: normalizeQuizSession(state.activeQuiz),
   };
 }
 
@@ -1045,19 +1123,50 @@ export function learningStats(
   };
 }
 
+export type DailyAggregate = {
+  /** 当天新学次数 */
+  newCount: number;
+  /** 当天复习次数 */
+  reviewCount: number;
+  /** 当天覆盖的不同单词数 */
+  coveredCount: number;
+};
+
+/**
+ * 每日聚合：把完整评分日志折叠为按自然日的轻量汇总，
+ * 供年度日历与趋势展示使用，避免长期使用后每次都要扫描全量日志。
+ */
+export function buildDailyAggregates(
+  reviews: Review[],
+): Record<string, DailyAggregate> {
+  const aggregates: Record<string, DailyAggregate> = {};
+  const coveredPerDay = new Map<string, Set<string>>();
+  for (const review of reviews) {
+    const day = dateKey(review.reviewedAt);
+    const aggregate = aggregates[day] ?? { newCount: 0, reviewCount: 0, coveredCount: 0 };
+    aggregate.newCount += review.kind === "new" ? 1 : 0;
+    aggregate.reviewCount += review.kind === "review" ? 1 : 0;
+    aggregates[day] = aggregate;
+    const words = coveredPerDay.get(day) ?? new Set<string>();
+    words.add(review.wordId !== undefined
+      ? `id:${canonicalWordId(review.wordId)}`
+      : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`);
+    coveredPerDay.set(day, words);
+  }
+  for (const [day, words] of coveredPerDay) {
+    const aggregate = aggregates[day];
+    if (aggregate) aggregate.coveredCount = words.size;
+  }
+  return aggregates;
+}
+
 export function buildActivityCalendar(
   reviews: Review[],
   days = 140,
   now = new Date(),
 ) {
-  const counts = new Map<string, Set<string>>();
-  for (const review of reviews) {
-    const day = dateKey(review.reviewedAt);
-    const words = counts.get(day) ?? new Set<string>();
-    words.add(reviewKey(review));
-    counts.set(day, words);
-  }
-
+  // 基于每日聚合计算，避免长期使用后每次都扫描全量日志
+  const aggregates = buildDailyAggregates(reviews);
   const end = new Date(now);
   end.setHours(12, 0, 0, 0);
   const start = new Date(end);
@@ -1067,7 +1176,7 @@ export function buildActivityCalendar(
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     const key = dateKey(date);
-    const count = counts.get(key)?.size ?? 0;
+    const count = aggregates[key]?.coveredCount ?? 0;
     const level = count === 0 ? 0 : count < 5 ? 1 : count < 10 ? 2 : count < 20 ? 3 : 4;
     return { date: key, count, level };
   });

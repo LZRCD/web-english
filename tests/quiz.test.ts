@@ -1,0 +1,134 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { applyRating, type WordProgressMap } from "../lib/learning.ts";
+import {
+  createQuizSession,
+  shouldApplyQuizToSchedule,
+  buildQuizQuestions,
+  isQuizAnswerCorrect,
+} from "../lib/quiz.ts";
+import type { Word } from "../lib/study.ts";
+
+const WORDS: Word[] = [
+  { id: 1, word: "radiate", meaning: "vt. 散发;发出光线", section: "必考词", unit: 1 },
+  { id: 2, word: "objective", meaning: "n. 目标 adj. 客观的", section: "必考词", unit: 1 },
+  { id: 3, word: "obligation", meaning: "n. 义务,责任", section: "必考词", unit: 1 },
+  { id: 4, word: "radical", meaning: "adj. 根本的;激进的 n. 激进分子", section: "必考词", unit: 1 },
+  { id: 5, word: "oblige", meaning: "vt. 强迫;迫使;帮忙", section: "必考词", unit: 1 },
+];
+
+function progressFor(ratings: Array<0 | 1 | 2 | 3>) {
+  return Object.fromEntries(ratings.map((rating, index) => {
+    const word = WORDS[index];
+    const result = applyRating(undefined, {
+      wordId: word.id!,
+      word: word.word,
+      rating,
+      reviewedAt: `2026-08-0${index + 1}T08:00:00.000Z`,
+      section: word.section,
+      unit: word.unit,
+    });
+    return [word.id!, result.progress];
+  })) as WordProgressMap;
+}
+
+test("专项测验优先抽取薄弱词并只使用已学习词", () => {
+  const questions = buildQuizQuestions({
+    words: WORDS,
+    progress: progressFor([2, 0, 2, 2]),
+    mode: "listening-spelling",
+    count: 2,
+    seed: 42,
+  });
+
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].wordId, 2);
+  assert.ok(questions.every((question) => question.wordId !== 5));
+});
+
+test("拼写答案忽略大小写、空格和连字符差异", () => {
+  const progress = applyRating(undefined, {
+    wordId: 8,
+    word: "passer-by",
+    rating: 2,
+    reviewedAt: "2026-08-01T08:00:00.000Z",
+    section: "必考词",
+    unit: 1,
+  }).progress;
+  const [question] = buildQuizQuestions({
+    words: [{ id: 8, word: "passer-by", meaning: "n. 过路人" }],
+    progress: { 8: progress },
+    mode: "chinese-to-english",
+    seed: 1,
+  });
+
+  assert.equal(isQuizAnswerCorrect(question, "Passer by"), true);
+  assert.equal(isQuizAnswerCorrect(question, "passer"), false);
+  assert.equal(isQuizAnswerCorrect(question, "   "), false);
+});
+
+test("熟词僻义与近义辨析题包含唯一正确选项", () => {
+  const questions = buildQuizQuestions({
+    words: WORDS,
+    progress: progressFor([2, 2, 2, 2, 2]),
+    familiarMeanings: { 1: ["散发"] },
+    mode: "meaning-choice",
+    count: 5,
+    seed: 7,
+  });
+
+  assert.ok(questions.length >= 4);
+  for (const question of questions) {
+    assert.equal(question.options?.length, 4);
+    assert.equal(
+      question.options?.filter((option) => option === question.answer).length,
+      1,
+    );
+    assert.ok(["熟词僻义", "近义辨析"].includes(question.label));
+    assert.equal(isQuizAnswerCorrect(question, question.answer), true);
+  }
+});
+
+test("测验每日首次作答才写入 FSRS，重复作答不再改写排程", () => {
+  const now = new Date("2026-08-03T12:00:00.000Z");
+  // 空记录：首次作答应写入
+  assert.equal(shouldApplyQuizToSchedule([], 1, now), true);
+
+  // 同日已有作答：不再写入
+  const attempt = {
+    id: "quiz:a:1:now",
+    wordId: 1,
+    mode: "listening-spelling" as const,
+    correct: true,
+    recallMs: 1200,
+    answeredAt: "2026-08-03T09:00:00.000Z",
+    appliedToSchedule: true,
+  };
+  assert.equal(shouldApplyQuizToSchedule([attempt], 1, now), false);
+
+  // 其他词的作答不影响本词判定
+  assert.equal(shouldApplyQuizToSchedule([attempt], 2, now), true);
+
+  // 昨天的作答不阻止今天首次写入
+  const yesterday = { ...attempt, answeredAt: "2026-08-02T09:00:00.000Z" };
+  assert.equal(shouldApplyQuizToSchedule([yesterday], 1, now), true);
+})
+
+test("测验会话按 seed 可重建同一组题目", () => {
+  const session = createQuizSession("chinese-to-english", 2026);
+  const first = buildQuizQuestions({
+    words: WORDS,
+    progress: progressFor([2, 2, 2, 2, 2]),
+    mode: "chinese-to-english",
+    count: 3,
+    seed: 2026,
+  });
+  const restored = buildQuizQuestions({
+    words: WORDS,
+    progress: progressFor([2, 2, 2, 2, 2]),
+    mode: session.mode,
+    count: 3,
+    seed: session.seed,
+  });
+  assert.deepEqual(restored.map((question) => question.id), first.map((question) => question.id));
+})

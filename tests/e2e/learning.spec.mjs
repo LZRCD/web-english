@@ -64,6 +64,85 @@ test("点击单词主体立即触发发音并显示音标", async ({ context, pa
   )).toBe(1);
 });
 
+test("只保留当前词与下一词两个浏览器音频源", async ({ context, page }) => {
+  await context.addInitScript(() => {
+    globalThis.__wordloopAudioElements = [];
+    globalThis.Audio = new Proxy(globalThis.Audio, {
+      construct(Target, args) {
+        const audio = Reflect.construct(Target, args);
+        globalThis.__wordloopAudioElements.push(audio);
+        return audio;
+      },
+    });
+  });
+  await installStateSeed(context, createState());
+  await openApp(page);
+
+  const activeSources = () => page.evaluate(() =>
+    globalThis.__wordloopAudioElements
+      .map((audio) => audio.getAttribute("src"))
+      .filter(Boolean));
+
+  await expect.poll(activeSources).toHaveLength(2);
+  const initialSources = await activeSources();
+  expect(new Set(initialSources).size).toBe(2);
+
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await page.getByRole("button", { name: /认识/ }).click();
+  await expect.poll(activeSources).toHaveLength(2);
+  await expect.poll(async () => new Set(await activeSources()).size).toBe(2);
+
+  await openSettings(page);
+  const diagnostics = page.locator(".performance-diagnostics");
+  await expect(diagnostics).toContainText("音频预载池");
+  await expect(diagnostics).toContainText("2/2 个元素");
+});
+
+test("专项测验答错写入 FSRS 薄弱词并更新每周报告", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  await openApp(page);
+
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await page.getByRole("button", { name: /认识/ }).click();
+  await expect.poll(async () =>
+    (await readStoreRecord(page, "word-progress", 1))?.lastRating).toBe(2);
+
+  const navigation = page.getByRole("complementary", { name: "主导航" });
+  await navigation.getByRole("button", { name: /测验$/ }).click();
+  await expect(page.getByRole("heading", { name: "主动写出来，才算真正会" }))
+    .toBeVisible();
+  await page.getByRole("button", { name: /听音拼写/ }).click();
+  await page.getByLabel("你的答案").fill("incorrect");
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("已加入薄弱词");
+  await expect.poll(async () =>
+    (await readStoreRecord(page, "word-progress", 1))?.lastRating).toBe(0);
+  await expect.poll(() => readStoreCount(page, "mistakes")).toBe(1);
+
+  await navigation.getByRole("button", { name: /轨迹$/ }).click();
+  await expect(page.getByRole("heading", { name: "每周学习报告" }))
+    .toBeVisible();
+  await expect(page.getByText("下周预计复习", { exact: true })).toBeVisible();
+  await expect(page.getByText(/设置考研日期后可获得每日新词调整建议/))
+    .toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileReportViewport = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(mobileReportViewport.scrollWidth)
+    .toBeLessThanOrEqual(mobileReportViewport.clientWidth + 1);
+  await navigation.getByRole("button", { name: /测验$/ }).click();
+  await page.getByRole("button", { name: /听音拼写/ }).click();
+  const mobileQuizViewport = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(mobileQuizViewport.scrollWidth)
+    .toBeLessThanOrEqual(mobileQuizViewport.clientWidth + 1);
+});
+
 test("多义词严格按义项数量显示例句", async ({ context, page }) => {
   await installStateSeed(context, createState({
     enrichments: RADIATE_ENRICHMENT,

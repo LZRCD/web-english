@@ -46,6 +46,10 @@ import {
   versionedDataUrl,
 } from "../../lib/data-version";
 import { cleanupOldLookupCaches } from "../../lib/storage-diagnostics";
+import {
+  allowsBackgroundPrefetch,
+  likelyDictionaryLetters,
+} from "../../lib/background-prefetch";
 
 type PhoneticIndex = Record<string, string>;
 
@@ -162,6 +166,39 @@ export function useSelectionLookup(
   const phoneticIndexRef = useRef<PhoneticIndex>({});
   const [phoneticIndexReady, setPhoneticIndexReady] = useState(false);
 
+  const loadDictionaryLetterIndex = useCallback((
+    letter: string,
+    tags: PerformanceTags = {},
+  ) => {
+    const rangeIndex = DICTIONARY_RANGE_INDEX;
+    const rangeIndexFile = rangeIndex.rangeIndexFiles[letter];
+    if (!rangeIndexFile) {
+      return Promise.reject(new Error("dictionary letter range index is missing"));
+    }
+    const cached = dictionaryLetterRangeIndexPromiseRef.current[letter];
+    if (cached) return cached;
+    const request = fetchJsonWithDiagnostics<DictionaryLetterRangeIndex>(
+      versionedDataUrl(
+        `${DICTIONARY_RANGE_DIRECTORY}/${rangeIndexFile}.json`,
+      ),
+      "dictionary.range_letter_index",
+      undefined,
+      { ...tags, letter },
+    )
+      .then((result) => {
+        if (!isDictionaryLetterRangeIndexCompatible(result.data, letter)) {
+          throw new Error("dictionary letter range index is invalid");
+        }
+        return result.data;
+      })
+      .catch((error) => {
+        delete dictionaryLetterRangeIndexPromiseRef.current[letter];
+        throw error;
+      });
+    dictionaryLetterRangeIndexPromiseRef.current[letter] = request;
+    return request;
+  }, []);
+
   const closeSelectionLookup = useCallback(() => {
     lookupAbortRef.current?.abort();
     setSelectionLookup(undefined);
@@ -190,27 +227,7 @@ export function useSelectionLookup(
   ) => {
     const rangeIndex = DICTIONARY_RANGE_INDEX;
     const letter = key[0];
-    const letterIndexPromise = dictionaryLetterRangeIndexPromiseRef.current[letter]
-      ?? fetchJsonWithDiagnostics<DictionaryLetterRangeIndex>(
-        versionedDataUrl(
-          `${DICTIONARY_RANGE_DIRECTORY}/${rangeIndex.rangeIndexFiles[letter]}.json`,
-        ),
-        "dictionary.range_letter_index",
-        undefined,
-        { ...tags, letter },
-      )
-        .then((result) => {
-          if (!isDictionaryLetterRangeIndexCompatible(result.data, letter)) {
-            throw new Error("dictionary letter range index is invalid");
-          }
-          return result.data;
-        })
-        .catch((error) => {
-          delete dictionaryLetterRangeIndexPromiseRef.current[letter];
-          throw error;
-        });
-    dictionaryLetterRangeIndexPromiseRef.current[letter] = letterIndexPromise;
-    const letterIndex = await letterIndexPromise;
+    const letterIndex = await loadDictionaryLetterIndex(letter, tags);
     const prefix = key.slice(0, Math.min(rangeIndex.prefixLength, key.length));
     const cached = dictionaryPrefixCacheRef.current[prefix];
     if (cached) return cached;
@@ -246,7 +263,7 @@ export function useSelectionLookup(
     } finally {
       delete dictionaryPrefixPromiseRef.current[prefix];
     }
-  }, []);
+  }, [loadDictionaryLetterIndex]);
 
   const findInLocalDictionary = useCallback(
     async (
@@ -666,6 +683,68 @@ export function useSelectionLookup(
       active = false;
     };
   }, []);
+
+  // 首屏稳定后预取当前卡片最可能涉及的字母索引，省去高延迟网络的一次串行往返。
+  useEffect(() => {
+    const letters = likelyDictionaryLetters([
+      current.word,
+      current.sentence,
+      current.collocation,
+      current.meaning,
+    ]);
+    if (!letters.length) return;
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      if (cancelled) return;
+      const connection = (
+        navigator as Navigator & {
+          connection?: { saveData?: boolean; effectiveType?: string };
+        }
+      ).connection;
+      if (!allowsBackgroundPrefetch({
+        online: navigator.onLine,
+        visibilityState: document.visibilityState,
+        connection,
+      })) return;
+      const queue = [...letters];
+      const worker = async () => {
+        while (!cancelled) {
+          const letter = queue.shift();
+          if (!letter) return;
+          await loadDictionaryLetterIndex(letter, {
+            prefetch: true,
+            prefetchBudgetLetters: letters.length,
+          }).catch(() => undefined);
+        }
+      };
+      void Promise.all([worker(), worker()]);
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      idleId = idleWindow.requestIdleCallback(run, { timeout: 2_000 });
+    } else {
+      timeoutId = globalThis.setTimeout(run, 750);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined) idleWindow.cancelIdleCallback?.(idleId);
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    };
+  }, [
+    current.collocation,
+    current.meaning,
+    current.sentence,
+    current.word,
+    loadDictionaryLetterIndex,
+  ]);
 
   useEffect(() => {
     if (

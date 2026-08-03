@@ -1,5 +1,6 @@
 /** 由 scripts/build-app-info.mjs 自动生成，请勿手改。 */
 export const APP_VERSION = "0.1.0";
-export const APP_GIT_COMMIT = "53195431a59e";
-export const APP_SOURCE_HASH = "b72e25375394ad526f643da34fb843e3169695c2a9ece168023a752bfdb75a0b";
-export const APP_BUILD_ID = "0.1.0+53195431a59e.b72e25375394";
+export const APP_GIT_COMMIT = "1520c7e76ef4";
+export const APP_SOURCE_HASH = "491c67bfbfe811ea09f69fdfe35efecb955deaaa808403cae03a9441ab568e58";
+export const APP_BUILD_ID = "0.1.0+1520c7e76ef4.491c67bfbfe8";
+export const APP_RUNTIME_MODE: "development" | "production" | "test" | "unknown" = "production";

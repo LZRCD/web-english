@@ -213,9 +213,12 @@ async function main() {
     );
     return;
   }
+  const outputDirectory = path.resolve(
+    process.env.PERF_OUTPUT_DIR ?? path.join(root, "reports"),
+  );
   const comparisonPath = process.env.PERF_COMPARE_TO
     ? path.resolve(process.env.PERF_COMPARE_TO)
-    : path.join(root, "reports", "performance-baseline.json");
+    : path.join(outputDirectory, "performance-baseline-production.json");
   await runBaseline({
     label: "production",
     profile: "normal",
@@ -228,23 +231,20 @@ async function main() {
       5,
       Number(process.env.PERF_CONDITION_ROUNDS) || 5,
     );
-    const outputDirectory = path.resolve(
-      process.env.PERF_OUTPUT_DIR ?? path.join(root, "reports"),
-    );
-    const productionReport = path.join(
-      outputDirectory,
-      "performance-baseline-production.json",
-    );
     const conditionProfiles = (
       process.env.PERF_CONDITION_PROFILES
         ?? "high-latency,slow-network,cache-hit"
     ).split(",").map((item) => item.trim()).filter(Boolean);
     for (const profile of conditionProfiles) {
+      const conditionReport = path.join(
+        outputDirectory,
+        `performance-baseline-production-${profile}.json`,
+      );
       await runBaseline({
         label: `production-${profile}`,
         profile,
         rounds: conditionRounds,
-        compareTo: productionReport,
+        compareTo: existsSync(conditionReport) ? conditionReport : undefined,
       });
     }
   }

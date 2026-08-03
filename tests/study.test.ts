@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildActivityCalendar,
+  buildDailyAggregates,
   buildStudyKey,
   learningStats,
   lookupWordId,
@@ -19,6 +20,8 @@ import {
   rebuildStubbornWords,
   resolveWeakProgress,
   sessionProgress,
+  type WordProgress,
+  examProgressTiers,
 } from "../lib/learning.ts";
 import {
   createBackupDocument,
@@ -604,3 +607,79 @@ test("释义中的词性只展示一次", () => {
     ],
   });
 });
+
+test("考研进度三层口径：看过不等于考试日就绪", () => {
+  // 无效考试日期返回 null
+  assert.equal(examProgressTiers({}, ""), null);
+  assert.equal(examProgressTiers({}, "2026/08/03"), null);
+
+  // 空进度全为 0
+  const empty = examProgressTiers({}, "2027-12-25");
+  assert.deepEqual(empty, {
+    covered: 0, mastered: 0, examReady: 0, thresholdPercent: 90, examDate: "2027-12-25",
+  });
+})
+
+test("只评分过一次的词计入已覆盖但不会误报考试日就绪", () => {
+  const single = applyRating(undefined, {
+    wordId: 1,
+    word: "radiate",
+    rating: 2,
+    reviewedAt: "2027-01-01T10:00:00.000Z",
+  }).progress;
+  const tiers = examProgressTiers({ 1: single }, "2027-12-25");
+  assert.equal(tiers?.covered, 1);
+  assert.equal(tiers?.mastered, 0);
+  // 距离考试还有近一年，单次评分无法预测考试当天仍可提取
+  assert.equal(tiers?.examReady, 0);
+})
+
+test("多次稳定复习后计入已掌握且考试日就绪", () => {
+  let progress: WordProgress | undefined;
+  const reviews: Array<[string, 0 | 1 | 2 | 3]> = [
+    ["2027-01-01T10:00:00.000Z", 2],
+    ["2027-01-08T10:00:00.000Z", 2],
+    ["2027-02-01T10:00:00.000Z", 3],
+    ["2027-03-01T10:00:00.000Z", 3],
+    ["2027-04-05T10:00:00.000Z", 3],
+    ["2027-05-10T10:00:00.000Z", 3],
+    ["2027-06-15T10:00:00.000Z", 3],
+  ];
+  for (const [reviewedAt, rating] of reviews) {
+    progress = applyRating(progress, {
+      wordId: 2,
+      word: "radiant",
+      rating,
+      reviewedAt,
+    }).progress;
+  }
+  const tiers = examProgressTiers({ 2: progress! }, "2027-12-25");
+  assert.equal(tiers?.covered, 1);
+  assert.equal(tiers?.mastered, 1);
+  assert.equal(tiers?.examReady, 1);
+})
+
+test("每日聚合把评分日志折叠为按自然日的轻量汇总", () => {
+  const reviews = [
+    createReview({ wordId: 1, word: "radiate", rating: 2, reviewedAt: "2026-08-03T08:00:00.000Z", dueAt: "2026-08-04T08:00:00.000Z" }),
+    createReview({ wordId: 2, word: "radiant", rating: 0, reviewedAt: "2026-08-03T09:00:00.000Z", dueAt: "2026-08-03T09:10:00.000Z", kind: "review" }),
+    createReview({ wordId: 1, word: "radiate", rating: 3, reviewedAt: "2026-08-03T10:00:00.000Z", dueAt: "2026-08-10T10:00:00.000Z", kind: "review" }),
+    createReview({ wordId: 3, word: "radical", rating: 2, reviewedAt: "2026-08-02T08:00:00.000Z", dueAt: "2026-08-03T08:00:00.000Z" }),
+  ];
+  const aggregates = buildDailyAggregates(reviews);
+  assert.equal(aggregates["2026-08-03"].newCount, 1);
+  assert.equal(aggregates["2026-08-03"].reviewCount, 2);
+  assert.equal(aggregates["2026-08-03"].coveredCount, 2);
+  assert.equal(aggregates["2026-08-02"].coveredCount, 1);
+})
+
+test("评分日志追加写入，不再静默截断旧历史", () => {
+  const reviews = Array.from({ length: 10010 }, (_, index) => ({
+    word: `word${index}`,
+    rating: 2,
+    reviewedAt: new Date(2026, 0, 1, 0, 0, index % 60).toISOString(),
+    section: "必考词",
+  }));
+  const state = parseStoredState(JSON.stringify({ schemaVersion: 5, reviews, wordProgress: {} }));
+  assert.ok(state.reviews.length > 10000, `完整保留历史（实际 ${state.reviews.length} 条）`);
+})
