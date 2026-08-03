@@ -70,6 +70,40 @@ export async function readStoreRecord(page, storeName, key) {
         openRequest.onerror = () => reject(openRequest.error);
         openRequest.onsuccess = () => {
           const database = openRequest.result;
+          if (
+            requestedStore !== "backups"
+            && database.objectStoreNames.contains("state-domains")
+          ) {
+            const transaction = database.transaction("state-domains", "readonly");
+            const request = transaction.objectStore("state-domains").get(requestedStore);
+            request.onerror = () => {
+              database.close();
+              reject(request.error);
+            };
+            request.onsuccess = () => {
+              const domain = request.result;
+              let result = null;
+              if (requestedStore === "settings" && requestedKey === "current") {
+                result = domain
+                  ? { id: "current", revision: domain.revision, ...domain.value }
+                  : null;
+              } else if (Array.isArray(domain?.value)) {
+                const keyField = requestedStore === "reviews"
+                  ? "id"
+                  : requestedStore === "positions"
+                    ? "key"
+                    : "wordId";
+                result = domain.value.find(
+                  (item) => item?.[keyField] === requestedKey,
+                ) ?? null;
+              }
+              transaction.oncomplete = () => {
+                database.close();
+                resolve(result);
+              };
+            };
+            return;
+          }
           if (!database.objectStoreNames.contains(requestedStore)) {
             database.close();
             resolve(null);
@@ -106,6 +140,30 @@ export async function readStoreCount(page, storeName) {
         openRequest.onerror = () => reject(openRequest.error);
         openRequest.onsuccess = () => {
           const database = openRequest.result;
+          if (
+            requestedStore !== "backups"
+            && database.objectStoreNames.contains("state-domains")
+          ) {
+            const transaction = database.transaction("state-domains", "readonly");
+            const request = transaction.objectStore("state-domains").get(requestedStore);
+            request.onerror = () => {
+              database.close();
+              reject(request.error);
+            };
+            request.onsuccess = () => {
+              const domain = request.result;
+              const result = requestedStore === "settings"
+                ? Number(Boolean(domain))
+                : Array.isArray(domain?.value)
+                  ? domain.value.length
+                  : 0;
+              transaction.oncomplete = () => {
+                database.close();
+                resolve(result);
+              };
+            };
+            return;
+          }
           if (!database.objectStoreNames.contains(requestedStore)) {
             database.close();
             resolve(0);
@@ -133,19 +191,21 @@ export async function readStoreCount(page, storeName) {
   );
 }
 
-export async function waitForApp(page) {
+export async function waitForApp(page, { expectIndexedDb = true } = {}) {
   await expect(
     page.getByRole("button", { name: "显示单词释义" }),
   ).toBeEnabled({ timeout: 25_000 });
-  await expect.poll(
-    async () => Boolean(await readStoreRecord(page, "settings", "current")),
-    { timeout: 10_000 },
-  ).toBe(true);
+  if (expectIndexedDb) {
+    await expect.poll(
+      async () => Boolean(await readStoreRecord(page, "settings", "current")),
+      { timeout: 10_000 },
+    ).toBe(true);
+  }
 }
 
-export async function openApp(page) {
+export async function openApp(page, options) {
   await page.goto("/");
-  await waitForApp(page);
+  await waitForApp(page, options);
 }
 
 export async function openSettings(page) {
@@ -201,5 +261,32 @@ export async function selectText(locator, query) {
       clientX: box.left + box.width / 2,
       clientY: box.top + box.height / 2,
     }));
+  }, query);
+}
+
+export async function selectTextWithTouch(locator, query) {
+  await locator.evaluate((element, selectedQuery) => {
+    const walker = globalThis.document.createTreeWalker(
+      element,
+      globalThis.NodeFilter.SHOW_TEXT,
+    );
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      const text = textNode.textContent ?? "";
+      const start = text.indexOf(selectedQuery);
+      if (start < 0) continue;
+      const range = globalThis.document.createRange();
+      range.setStart(textNode, start);
+      range.setEnd(textNode, start + selectedQuery.length);
+      const selection = globalThis.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      element.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true,
+        pointerType: "touch",
+      }));
+      return;
+    }
+    throw new Error(`找不到待划选文本：${selectedQuery}`);
   }, query);
 }

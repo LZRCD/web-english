@@ -212,7 +212,7 @@ export default function WordbookView({
               </div>
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>
-                当前 R {item.progress ? wordRetrievability(item.progress, now) : 0}%
+                当前牢固度 {item.progress ? wordRetrievability(item.progress, now) : 0}%
                 {" · "}连续 3 次“认识/熟练”后自动退出
               </small>
             </div>

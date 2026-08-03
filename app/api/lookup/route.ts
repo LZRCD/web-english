@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  ApiRequestError,
+  beginApiRequest,
+  boundedText,
+  readJsonBody,
+} from "../../../lib/api-guard";
 
 type LookupRequest = {
   text?: string;
@@ -36,28 +42,23 @@ function normalizeLookup(payload: LookupPayload, query: string) {
     ? payload.kind
     : "word";
   return {
-    query: typeof payload.query === "string" && payload.query.trim()
-      ? payload.query.trim()
+    query: boundedText(payload.query, 160)
+      ? boundedText(payload.query, 160)
       : query,
     kind,
     phonetic: "",
-    part: payload.part.trim(),
-    meaning: payload.meaning.trim(),
-    note: typeof payload.note === "string" ? payload.note.trim() : "",
+    part: boundedText(payload.part, 32),
+    meaning: boundedText(payload.meaning, 200),
+    note: boundedText(payload.note, 200),
     source: "ai" as const,
   };
 }
 
-export async function POST(request: NextRequest) {
-  let body: LookupRequest;
-  try {
-    body = await request.json() as LookupRequest;
-  } catch {
-    return NextResponse.json({ error: "请求内容不是有效 JSON" }, { status: 400 });
-  }
+async function handlePost(request: NextRequest) {
+  const body = await readJsonBody<LookupRequest>(request, 16 * 1024);
 
-  const text = body.text?.replace(/\s+/g, " ").trim().slice(0, 160);
-  const context = body.context?.replace(/\s+/g, " ").trim().slice(0, 500) ?? "";
+  const text = boundedText(body.text, 160);
+  const context = boundedText(body.context, 500);
   if (!text || !/[A-Za-z]/.test(text)) {
     return NextResponse.json({ error: "请选择英文单词、短语或句子" }, { status: 400 });
   }
@@ -98,9 +99,9 @@ export async function POST(request: NextRequest) {
         }),
       });
       if (!response.ok) throw new Error(`云端模型返回 ${response.status}`);
-      const data = await response.json() as {
+      const data = await readJsonBody<{
         choices?: Array<{ message?: { content?: string } }>;
-      };
+      }>(response, 1024 * 1024);
       const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error("模型没有返回内容");
       return NextResponse.json(normalizeLookup(parseJsonContent(content), text));
@@ -111,4 +112,23 @@ export async function POST(request: NextRequest) {
 
   console.error("[api/lookup] 划词查询失败", lastError);
   return NextResponse.json({ error: "划词查询失败，请重新选择" }, { status: 502 });
+}
+
+export async function POST(request: NextRequest) {
+  let lease: ReturnType<typeof beginApiRequest> | undefined;
+  try {
+    lease = beginApiRequest(request, {
+      name: "lookup",
+      requestsPerMinute: 40,
+      maxConcurrent: 4,
+    });
+    return await handlePost(request);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  } finally {
+    lease?.release();
+  }
 }

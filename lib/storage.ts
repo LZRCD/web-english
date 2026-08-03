@@ -1,12 +1,16 @@
 import {
-  parseStoredState,
+  normalizeStoredState,
   type StoredState,
   type WordEnrichment,
 } from "./study.ts";
 import type { SerializedFsrsCard } from "./learning.ts";
+import {
+  startPerformanceTimer,
+  type PerformanceTags,
+} from "./performance-diagnostics.ts";
 
 export const DATABASE_NAME = "wordloop-local";
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 const CHANNEL_NAME = "wordloop-state-changes";
 const CONCURRENT_WRITE_CODE = "CONCURRENT_WRITE";
 const STORAGE_SOURCE_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -46,10 +50,12 @@ export const STORES = {
   backups: "backups",
   fsrsCards: "fsrs-cards",
   stubbornWords: "stubborn-words",
+  quizAttempts: "quiz-attempts",
+  stateDomains: "state-domains",
 } as const;
 
 const CURRENT_STATE_ID = "current";
-const STATE_STORE_NAMES = [
+const LEGACY_STATE_STORE_NAMES = [
   STORES.settings,
   STORES.reviews,
   STORES.wordProgress,
@@ -60,6 +66,12 @@ const STATE_STORE_NAMES = [
   STORES.fsrsCards,
   STORES.stubbornWords,
 ] as const;
+
+type StateDomainRecord = {
+  key: string;
+  revision?: number;
+  value: unknown;
+};
 
 type StateSettings = Pick<
   StoredState,
@@ -78,6 +90,8 @@ type StateSettings = Pick<
   | "shuffleSeed"
   | "selectedSection"
   | "selectedUnit"
+  | "ratingUndoStack"
+  | "activeQuiz"
 > & {
   id: typeof CURRENT_STATE_ID;
   /** 单调递增计数器，跨标签页冲突检测 */
@@ -112,6 +126,7 @@ export type IndexedStateSnapshot = {
   enrichments: EnrichmentRecord[];
   fsrsCards: FsrsCardRecord[];
   stubbornWords: StoredState["stubbornWords"][number][];
+  quizAttempts: StoredState["quizAttempts"];
 };
 
 function createStore(
@@ -150,6 +165,7 @@ export function openWordLoopDatabase() {
       createStore(database, STORES.backups, "id");
       createStore(database, STORES.fsrsCards, "wordId");
       createStore(database, STORES.stubbornWords, "wordId");
+      createStore(database, STORES.stateDomains, "key");
     };
     request.onsuccess = () => {
       if (settled) {
@@ -157,6 +173,7 @@ export function openWordLoopDatabase() {
         return;
       }
       settled = true;
+      request.result.onversionchange = () => request.result.close();
       resolve(request.result);
     };
   });
@@ -197,6 +214,8 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       shuffleSeed: state.shuffleSeed,
       selectedSection: state.selectedSection,
       selectedUnit: state.selectedUnit,
+      activeQuiz: state.activeQuiz,
+      ratingUndoStack: state.ratingUndoStack,
     },
     reviews: state.reviews.map((review) => ({ ...review })),
     wordProgress: Object.values(state.wordProgress).map(({ fsrsCard: _fsrsCard, ...progress }) => {
@@ -216,6 +235,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
     })),
     stubbornWords: Object.values(state.stubbornWords)
       .map((record) => ({ ...record })),
+    quizAttempts: state.quizAttempts.map((attempt) => ({ ...attempt })),
   };
 }
 
@@ -228,7 +248,7 @@ export function combineStoredState(snapshot: IndexedStateSnapshot) {
   const fsrsCards = new Map(
     snapshot.fsrsCards.map(({ wordId, ...card }) => [wordId, card]),
   );
-  return parseStoredState(JSON.stringify({
+  return normalizeStoredState({
     ...settings,
     reviews: snapshot.reviews,
     wordProgress: Object.fromEntries(
@@ -251,71 +271,148 @@ export function combineStoredState(snapshot: IndexedStateSnapshot) {
     stubbornWords: Object.fromEntries(
       snapshot.stubbornWords.map((record) => [record.wordId, record]),
     ),
-  }));
+    quizAttempts: snapshot.quizAttempts,
+  });
 }
 
-/** 增量写入：逐条 upsert 后删除快照中不存在的旧记录 */
-async function putStore<T>(
-  store: IDBObjectStore,
-  values: T[],
-  keyPath: string,
-) {
-  // 逐条 upsert（利用主键），不再 clear 全量重写
-  for (const value of values) store.put(value);
+function buildStateDomainRecords(
+  state: StoredState,
+  revision: number,
+): StateDomainRecord[] {
+  const snapshot = splitStoredState(state);
+  const { id: _id, revision: _revision, ...settings } = snapshot.settings;
+  void _id;
+  void _revision;
+  return [
+    { key: STORES.settings, revision, value: settings },
+    { key: STORES.reviews, value: snapshot.reviews },
+    { key: STORES.wordProgress, value: snapshot.wordProgress },
+    { key: STORES.favorites, value: snapshot.favorites },
+    { key: STORES.mistakes, value: snapshot.mistakes },
+    { key: STORES.positions, value: snapshot.positions },
+    { key: STORES.enrichments, value: snapshot.enrichments },
+    { key: STORES.fsrsCards, value: snapshot.fsrsCards },
+    { key: STORES.stubbornWords, value: snapshot.stubbornWords },
+    { key: STORES.quizAttempts, value: snapshot.quizAttempts },
+  ];
+}
 
-  // 删除快照中不存在的旧记录（如移出收藏的词）。
-  // 用 getAllKeys 一次性取出现有主键并求差，避免游标逐条扫描大表。
-  const snapshotKeys = new Set(
-    values.map((value) => {
-      const key = (value as Record<string, unknown>)[keyPath];
-      return String(key);
+function combineStateDomainRecords(records: StateDomainRecord[]) {
+  const domains = new Map(records.map((record) => [record.key, record]));
+  const settingsRecord = domains.get(STORES.settings);
+  if (!settingsRecord) return null;
+  const revision = Number.isSafeInteger(settingsRecord.revision)
+    && Number(settingsRecord.revision) >= 0
+    ? Number(settingsRecord.revision)
+    : 0;
+  const settings = settingsRecord.value;
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    throw new Error("本地设置数据格式无效");
+  }
+  const domainValue = <T,>(key: string, fallback: T): T =>
+    (domains.get(key)?.value as T | undefined) ?? fallback;
+  return {
+    revision,
+    state: combineStoredState({
+      settings: {
+        id: CURRENT_STATE_ID,
+        revision,
+        ...(settings as Omit<StateSettings, "id" | "revision">),
+      },
+      reviews: domainValue(STORES.reviews, []),
+      wordProgress: domainValue(STORES.wordProgress, []),
+      favorites: domainValue(STORES.favorites, []),
+      mistakes: domainValue(STORES.mistakes, []),
+      positions: domainValue(STORES.positions, []),
+      enrichments: domainValue(STORES.enrichments, []),
+      fsrsCards: domainValue(STORES.fsrsCards, []),
+      stubbornWords: domainValue(STORES.stubbornWords, []),
+      quizAttempts: domainValue(STORES.quizAttempts, []),
     }),
-  );
-  const existingKeys = await requestResult(store.getAllKeys());
-  for (const key of existingKeys) {
-    if (!snapshotKeys.has(String(key))) store.delete(key);
+  };
+}
+
+async function readStateDomains(
+  database: IDBDatabase,
+  diagnosticTags?: PerformanceTags,
+) {
+  const readTimer = diagnosticTags
+    ? startPerformanceTimer("state.restore.indexeddb_domains", diagnosticTags)
+    : undefined;
+  const transaction = database.transaction(STORES.stateDomains, "readonly");
+  const completed = transactionCompleted(transaction);
+  try {
+    const records = await requestResult(
+      transaction.objectStore(STORES.stateDomains).getAll(),
+    ) as StateDomainRecord[];
+    await completed;
+    readTimer?.end({ recordCount: records.length });
+    const normalizeTimer = diagnosticTags
+      ? startPerformanceTimer("state.restore.normalize", diagnosticTags)
+      : undefined;
+    try {
+      const state = combineStateDomainRecords(records);
+      normalizeTimer?.end({ recordCount: records.length });
+      return state;
+    } catch (error) {
+      normalizeTimer?.end({}, "error");
+      throw error;
+    }
+  } catch (error) {
+    readTimer?.end({}, "error");
+    throw error;
   }
 }
 
-async function writeSnapshot(snapshot: IndexedStateSnapshot) {
+/** 首次读取 v2 旧分表后写入新的分域块，后续启动无需逐条扫描。 */
+async function cacheLegacyState(
+  database: IDBDatabase,
+  state: StoredState,
+  revision: number,
+  diagnosticTags?: PerformanceTags,
+) {
+  const timer = diagnosticTags
+    ? startPerformanceTimer("state.restore.migration_write", diagnosticTags)
+    : undefined;
+  const transaction = database.transaction(STORES.stateDomains, "readwrite");
+  const completed = transactionCompleted(transaction);
+  const store = transaction.objectStore(STORES.stateDomains);
+  try {
+    const current = await requestResult(
+      store.get(STORES.settings),
+    ) as StateDomainRecord | undefined;
+    if (!current) {
+      for (const record of buildStateDomainRecords(state, revision)) {
+        store.put(record);
+      }
+    }
+    await completed;
+    timer?.end({ migrated: !current });
+  } catch (error) {
+    timer?.end({}, "error");
+    throw error;
+  }
+}
+
+async function writeSnapshot(state: StoredState) {
   const database = await openWordLoopDatabase();
   try {
-    // 读取当前 revision，并与本标签页最后一次加载/保存的版本比较。
     const baseRevision = knownRevision;
-    const readTx = database.transaction(STORES.settings, "readonly");
-    const currentSettings = await requestResult(
-      readTx.objectStore(STORES.settings).get(CURRENT_STATE_ID),
-    ) as StateSettings | undefined;
-    // 未成功读取过数据库时，只允许创建真正的空数据库，不能覆盖缺 revision 的旧记录。
-    if (!matchesKnownStorageRevision(currentSettings, baseRevision)) {
-      throw new Error(`${CONCURRENT_WRITE_CODE}: 另一标签页已修改数据`);
-    }
-
-    const expectedRevision = baseRevision ?? 0;
-    const newRevision = expectedRevision + 1;
-    snapshot.settings.revision = newRevision;
-
-    const transaction = database.transaction([...STATE_STORE_NAMES], "readwrite");
+    const transaction = database.transaction(STORES.stateDomains, "readwrite");
     const completed = transactionCompleted(transaction);
-
-    // 写事务获得锁后再次检查，覆盖“读取后、写入前”发生的竞争。
-    const settingsStore = transaction.objectStore(STORES.settings);
-    const recheck = await requestResult(settingsStore.get(CURRENT_STATE_ID)) as StateSettings | undefined;
-    if (!matchesKnownStorageRevision(recheck, baseRevision)) {
+    const store = transaction.objectStore(STORES.stateDomains);
+    const currentSettings = await requestResult(
+      store.get(STORES.settings),
+    ) as StateDomainRecord | undefined;
+    if (!matchesKnownStorageRevision(currentSettings, baseRevision)) {
       transaction.abort();
       await completed.catch(() => undefined);
       throw new Error(`${CONCURRENT_WRITE_CODE}: 另一标签页已修改数据`);
     }
-
-    await putStore(settingsStore, [snapshot.settings], "id");
-    await putStore(transaction.objectStore(STORES.reviews), snapshot.reviews, "id");
-    await putStore(transaction.objectStore(STORES.wordProgress), snapshot.wordProgress, "wordId");
-    await putStore(transaction.objectStore(STORES.favorites), snapshot.favorites, "wordId");
-    await putStore(transaction.objectStore(STORES.mistakes), snapshot.mistakes, "wordId");
-    await putStore(transaction.objectStore(STORES.positions), snapshot.positions, "key");
-    await putStore(transaction.objectStore(STORES.enrichments), snapshot.enrichments, "wordId");
-    await putStore(transaction.objectStore(STORES.fsrsCards), snapshot.fsrsCards, "wordId");
-    await putStore(transaction.objectStore(STORES.stubbornWords), snapshot.stubbornWords, "wordId");
+    const newRevision = (baseRevision ?? 0) + 1;
+    for (const record of buildStateDomainRecords(state, newRevision)) {
+      store.put(record);
+    }
     await completed;
     knownRevision = newRevision;
 
@@ -363,10 +460,9 @@ export function onRemoteChange(callback: () => void) {
 let pendingWrite = Promise.resolve();
 
 function enqueueSnapshot(state: StoredState) {
-  const snapshot = splitStoredState(state);
   pendingWrite = pendingWrite
     .catch(() => undefined)
-    .then(() => writeSnapshot(snapshot))
+    .then(() => writeSnapshot(state))
     .then(() => {
       lastWriteError = null;
       lastSuccessfulWrite = Date.now();
@@ -397,10 +493,21 @@ export type StoredStateRead = {
 };
 
 /** 读取一致快照但不接管 revision；跨标签同步确认未发生本地编辑后再接管。 */
-export async function readStoredState(): Promise<StoredStateRead> {
+export async function readStoredState(
+  diagnosticTags?: PerformanceTags,
+): Promise<StoredStateRead> {
   const database = await openWordLoopDatabase();
   try {
-    const transaction = database.transaction([...STATE_STORE_NAMES], "readonly");
+    const current = await readStateDomains(database, diagnosticTags);
+    if (current) return current;
+
+    const legacyTimer = diagnosticTags
+      ? startPerformanceTimer("state.restore.legacy_read", diagnosticTags)
+      : undefined;
+    const transaction = database.transaction(
+      [...LEGACY_STATE_STORE_NAMES],
+      "readonly",
+    );
     const completed = transactionCompleted(transaction);
     const [
       settings,
@@ -424,6 +531,7 @@ export async function readStoredState(): Promise<StoredStateRead> {
       requestResult(transaction.objectStore(STORES.stubbornWords).getAll()),
     ]);
     await completed;
+    legacyTimer?.end({ empty: !settings });
     if (!settings) return { state: null, revision: 0 };
     const revision = Number.isSafeInteger((settings as StateSettings).revision)
       ? (settings as StateSettings).revision
@@ -438,8 +546,10 @@ export async function readStoredState(): Promise<StoredStateRead> {
       enrichments: enrichments as IndexedStateSnapshot["enrichments"],
       fsrsCards: fsrsCards as IndexedStateSnapshot["fsrsCards"],
       stubbornWords: stubbornWords as IndexedStateSnapshot["stubbornWords"],
+      quizAttempts: [],
     });
-    return { state, revision };
+    await cacheLegacyState(database, state, revision, diagnosticTags);
+    return (await readStateDomains(database, diagnosticTags)) ?? { state, revision };
   } finally {
     database.close();
   }
@@ -452,8 +562,23 @@ export function adoptStoredRevision(revision: number) {
   knownRevision = revision;
 }
 
-export async function loadStoredState() {
-  const result = await readStoredState();
-  adoptStoredRevision(result.revision);
-  return result.state;
+export async function loadStoredState(
+  diagnosticTags: PerformanceTags = { startup: true },
+) {
+  const timer = startPerformanceTimer("state.restore.indexeddb_read", {
+    ...diagnosticTags,
+    startup: true,
+  });
+  try {
+    const result = await readStoredState({
+      ...diagnosticTags,
+      startup: true,
+    });
+    adoptStoredRevision(result.revision);
+    timer.end({ found: result.state !== null });
+    return result.state;
+  } catch (error) {
+    timer.end({}, "error");
+    throw error;
+  }
 }

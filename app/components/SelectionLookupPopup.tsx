@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { SelectionLookupState } from "../../lib/selection-lookup";
 
 type SelectionLookupPopupProps = {
@@ -15,11 +17,16 @@ export default function SelectionLookupPopup({
   onSpeak,
   onClose,
 }: SelectionLookupPopupProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useFocusTrap(dialogRef, true, onClose);
+
   return (
     <section
+      ref={dialogRef}
       className="selection-lookup"
       style={{ left: lookup.x, top: lookup.y }}
       role="dialog"
+      aria-modal="true"
       aria-label={`划词查询：${lookup.query}`}
       aria-live="polite"
     >

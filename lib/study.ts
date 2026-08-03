@@ -16,6 +16,7 @@ import {
   type WordProgress,
   type WordProgressMap,
 } from "./learning.ts";
+import type { QuizAttempt, QuizSessionState } from "./quiz.ts";
 
 export type {
   Rating,
@@ -68,6 +69,23 @@ export type MistakeRecord = SavedWord & {
   lastMistakeAt: string;
 };
 
+export type RatingUndo = {
+  reviewId: string;
+  wordId: number;
+  word: string;
+  previousProgress?: WordProgress;
+  previousMistake?: MistakeRecord;
+  evictedReview?: Review;
+  previousPosition: number;
+  previousSession?: StudySession;
+  studyKey: string;
+  selectedSection: string;
+  selectedUnit: number | string | "all";
+  studyMode: StudyMode;
+  studyScope: StudyScope;
+  shuffleSeed: number;
+};
+
 export type LookupWord = {
   id: number;
   /** 命中红宝书词目时关联原始学习项，避免生成第二份学习进度。 */
@@ -98,6 +116,8 @@ export type StoredState = {
   stubbornWords: StubbornWordMap;
   positions: StudyPositions;
   activeSession?: StudySession;
+  quizAttempts: QuizAttempt[];
+  activeQuiz?: QuizSessionState;
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
   familiarMeanings: FamiliarMeaningMap;
@@ -112,11 +132,11 @@ export type StoredState = {
   shuffleSeed: number;
   selectedSection: string;
   selectedUnit: number | string | "all";
+  ratingUndoStack: RatingUndo[];
 };
 
 export const STORAGE_KEY = "wordloop-state";
 export const STORAGE_VERSION = 5;
-export const MAX_REVIEWS = 10000;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;
 export const CUSTOM_WORD_ID_START = 1_000_000;
 
@@ -572,13 +592,53 @@ function normalizeEnrichments(value: unknown) {
       translation: typeof item.translation === "string" ? item.translation : undefined,
       senseExamples: Array.isArray(item.senseExamples)
         ? item.senseExamples
-            .filter((entry): entry is { meaning?: unknown; sentence?: unknown; translation?: unknown } =>
+            .filter((entry): entry is Record<string, unknown> =>
               Boolean(entry) && typeof entry === "object")
-            .map((entry) => ({
-              meaning: typeof entry.meaning === "string" ? entry.meaning.trim() : "",
-              sentence: typeof entry.sentence === "string" ? entry.sentence.trim() : "",
-              translation: typeof entry.translation === "string" ? entry.translation.trim() : "",
-            }))
+            .map((entry) => {
+              const feedback = entry.feedback
+                && typeof entry.feedback === "object"
+                && !Array.isArray(entry.feedback)
+                ? entry.feedback as Record<string, unknown>
+                : undefined;
+              const review = entry.review
+                && typeof entry.review === "object"
+                && !Array.isArray(entry.review)
+                ? entry.review as Record<string, unknown>
+                : undefined;
+              const reviewStatus: "pending" | "passed" | "failed" | undefined =
+                review?.status === "pending"
+                || review?.status === "passed"
+                || review?.status === "failed"
+                ? review.status
+                : undefined;
+              return {
+                meaning: typeof entry.meaning === "string" ? entry.meaning.trim() : "",
+                sentence: typeof entry.sentence === "string" ? entry.sentence.trim() : "",
+                translation: typeof entry.translation === "string" ? entry.translation.trim() : "",
+                confidence: Number.isFinite(entry.confidence)
+                  ? Math.max(0, Math.min(1, Number(entry.confidence)))
+                  : undefined,
+                feedback: feedback?.reason === "meaning-mismatch"
+                  && typeof feedback.reportedAt === "string"
+                  ? {
+                      reason: "meaning-mismatch" as const,
+                      reportedAt: feedback.reportedAt,
+                    }
+                  : undefined,
+                review: reviewStatus ? {
+                  status: reviewStatus,
+                  confidence: Number.isFinite(review?.confidence)
+                    ? Math.max(0, Math.min(1, Number(review?.confidence)))
+                    : undefined,
+                  note: typeof review?.note === "string"
+                    ? review.note.slice(0, 200)
+                    : undefined,
+                  reviewedAt: typeof review?.reviewedAt === "string"
+                    ? review.reviewedAt
+                    : undefined,
+                } : undefined,
+              };
+            })
             .filter((entry) => entry.meaning && entry.sentence && entry.translation)
             .slice(0, 8)
         : undefined,
@@ -623,7 +683,160 @@ export function buildStudyKey(
 }
 
 export function parseStoredState(raw: string): StoredState {
-  const parsed = JSON.parse(raw);
+  return normalizeStoredState(JSON.parse(raw));
+}
+
+function normalizeRatingUndo(value: unknown): RatingUndo | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const rawWordId = Number(item.wordId);
+  if (
+    !isValidStudyWordId(rawWordId)
+    || typeof item.reviewId !== "string"
+    || !item.reviewId.trim()
+    || typeof item.word !== "string"
+    || !item.word.trim()
+    || typeof item.studyKey !== "string"
+    || !item.studyKey.trim()
+    || typeof item.selectedSection !== "string"
+    || !REDBOOK_SECTIONS.includes(item.selectedSection as (typeof REDBOOK_SECTIONS)[number])
+    || !(typeof item.selectedUnit === "string" || Number.isFinite(item.selectedUnit))
+    || !Number.isInteger(item.previousPosition)
+    || Number(item.previousPosition) < 0
+    || !Number.isFinite(item.shuffleSeed)
+  ) {
+    return null;
+  }
+  const wordId = canonicalWordId(rawWordId);
+  const previousProgress = item.previousProgress === undefined
+    ? undefined
+    : normalizeWordProgress(item.previousProgress, wordId);
+  const previousMistake = item.previousMistake === undefined
+    ? undefined
+    : normalizeMistake(item.previousMistake);
+  const evictedReview = item.evictedReview === undefined
+    ? undefined
+    : normalizeReview(item.evictedReview);
+  const previousSession = item.previousSession === undefined
+    ? undefined
+    : normalizeSession(item.previousSession);
+  if (
+    (item.previousProgress !== undefined && !previousProgress?.fsrsCard)
+    || (previousProgress && previousProgress.wordId !== wordId)
+    || (item.previousMistake !== undefined && previousMistake?.wordId !== wordId)
+    || (item.evictedReview !== undefined && !evictedReview)
+    || (item.previousSession !== undefined && !previousSession)
+  ) {
+    return null;
+  }
+  return {
+    reviewId: item.reviewId.trim(),
+    wordId,
+    word: item.word.trim(),
+    ...(previousProgress?.fsrsCard
+      ? { previousProgress: previousProgress as WordProgress }
+      : {}),
+    ...(previousMistake ? { previousMistake } : {}),
+    ...(evictedReview ? { evictedReview } : {}),
+    previousPosition: Number(item.previousPosition),
+    ...(previousSession ? { previousSession } : {}),
+    studyKey: item.studyKey.trim(),
+    selectedSection: item.selectedSection,
+    selectedUnit: item.selectedUnit as RatingUndo["selectedUnit"],
+    studyMode: item.studyMode === "shuffled" ? "shuffled" : "ordered",
+    studyScope: item.studyScope === "all" ? "all" : "selection",
+    shuffleSeed: Number(item.shuffleSeed),
+  };
+}
+
+function normalizeRatingUndoStack(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeRatingUndo)
+    .filter((item): item is RatingUndo => item !== null)
+    .slice(-30);
+}
+
+
+const QUIZ_MODES = new Set(["listening-spelling", "chinese-to-english", "meaning-choice"]);
+
+function normalizeQuizAttempt(value: unknown): QuizAttempt | null {
+  if (!value || typeof value !== "object") return null;
+  const attempt = value as Partial<QuizAttempt>;
+  const wordId = attempt.wordId;
+  if (
+    !Number.isSafeInteger(wordId)
+    || typeof attempt.answeredAt !== "string"
+    || !Number.isFinite(new Date(attempt.answeredAt).getTime())
+  ) {
+    return null;
+  }
+  const mode = typeof attempt.mode === "string" && QUIZ_MODES.has(attempt.mode)
+    ? attempt.mode
+    : "meaning-choice";
+  return {
+    id: typeof attempt.id === "string"
+      ? attempt.id
+      : `quiz:${wordId}:${attempt.answeredAt}:${Math.random().toString(36).slice(2, 7)}`,
+    wordId: wordId as number,
+    mode: mode as QuizAttempt["mode"],
+    correct: attempt.correct === true,
+    recallMs: Math.max(0, Number(attempt.recallMs) || 0),
+    answeredAt: attempt.answeredAt,
+    appliedToSchedule: attempt.appliedToSchedule === true,
+  };
+}
+
+function normalizeQuizAttempts(value: unknown): QuizAttempt[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeQuizAttempt)
+    .filter((item): item is QuizAttempt => item !== null)
+    .slice(-5000);
+}
+
+function normalizeQuizSession(value: unknown): QuizSessionState | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const session = value as Partial<QuizSessionState>;
+  if (
+    typeof session.mode !== "string"
+    || !QUIZ_MODES.has(session.mode)
+    || !Number.isFinite(Number(session.seed))
+    || !Number.isFinite(Number(session.index))
+  ) {
+    return undefined;
+  }
+  const answers: QuizSessionState["answers"] = {};
+  if (session.answers && typeof session.answers === "object") {
+    for (const [questionId, entry] of Object.entries(session.answers)) {
+      if (entry && typeof entry === "object" && "correct" in entry) {
+        const record = entry as { answer?: unknown; correct?: unknown };
+        answers[questionId] = {
+          answer: typeof record.answer === "string" ? record.answer : "",
+          correct: record.correct === true,
+        };
+      }
+    }
+  }
+  return {
+    id: typeof session.id === "string" ? session.id : "quiz:restored",
+    mode: session.mode as QuizSessionState["mode"],
+    seed: Number(session.seed),
+    index: Math.max(0, Math.trunc(Number(session.index))),
+    correctCount: Math.max(0, Math.trunc(Number(session.correctCount) || 0)),
+    answers,
+    complete: session.complete === true,
+    startedAt: typeof session.startedAt === "string"
+      ? session.startedAt
+      : new Date().toISOString(),
+  };
+}
+
+/**
+ * 归一化已解析的持久化状态。IndexedDB 返回的本来就是对象，
+ * 直接走该入口可避免一次完整的 JSON.stringify + JSON.parse。
+ */
+export function normalizeStoredState(parsed: unknown): StoredState {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("状态数据格式无效：期望对象");
   }
@@ -681,15 +894,15 @@ export function parseStoredState(raw: string): StoredState {
     const review = normalizedReviewInput[i];
     if (!seenIds.has(review.id)) {
       seenIds.add(review.id);
-      dedupedReviews.unshift(review);
+      dedupedReviews.push(review);
     }
   }
-  // IndexedDB getAll() 按主键返回；统一按事件时间排序后再保留最近记录。
+  dedupedReviews.reverse();
+  // IndexedDB getAll() 按主键返回；统一按事件时间排序（完整保留历史，不静默截断）。
   const normalizedReviews = dedupedReviews
     .sort((a, b) =>
-      new Date(a.reviewedAt).getTime() - new Date(b.reviewedAt).getTime()
+      a.reviewedAt.localeCompare(b.reviewedAt)
       || a.id.localeCompare(b.id))
-    .slice(-MAX_REVIEWS);
 
   if (sourceVersion < 4) {
     const seen = new Set<number>();
@@ -740,23 +953,20 @@ export function parseStoredState(raw: string): StoredState {
     }
   }
 
-  const latestReviewAtByWordId = new Map<number, number>();
+  const latestReviewAtByWordId = new Map<number, string>();
   for (const review of normalizedReviews) {
     if (review.wordId === undefined) continue;
-    latestReviewAtByWordId.set(
-      review.wordId,
-      Math.max(
-        latestReviewAtByWordId.get(review.wordId) ?? 0,
-        new Date(review.reviewedAt).getTime(),
-      ),
-    );
+    const latestReviewAt = latestReviewAtByWordId.get(review.wordId);
+    if (!latestReviewAt || review.reviewedAt > latestReviewAt) {
+      latestReviewAtByWordId.set(review.wordId, review.reviewedAt);
+    }
   }
   for (const [wordIdText, progress] of Object.entries(healthyProgress)) {
     const wordId = Number(wordIdText);
     const latestReviewAt = latestReviewAtByWordId.get(wordId);
     if (
       latestReviewAt !== undefined
-      && latestReviewAt > new Date(progress.lastReviewedAt).getTime()
+      && latestReviewAt > progress.lastReviewedAt
     ) {
       delete healthyProgress[wordId];
       damagedWordIds.add(wordId);
@@ -853,6 +1063,9 @@ export function parseStoredState(raw: string): StoredState {
     shuffleSeed,
     selectedSection,
     selectedUnit,
+    ratingUndoStack: normalizeRatingUndoStack(state.ratingUndoStack),
+    quizAttempts: normalizeQuizAttempts(state.quizAttempts),
+    activeQuiz: normalizeQuizSession(state.activeQuiz),
   };
 }
 
@@ -910,19 +1123,50 @@ export function learningStats(
   };
 }
 
+export type DailyAggregate = {
+  /** 当天新学次数 */
+  newCount: number;
+  /** 当天复习次数 */
+  reviewCount: number;
+  /** 当天覆盖的不同单词数 */
+  coveredCount: number;
+};
+
+/**
+ * 每日聚合：把完整评分日志折叠为按自然日的轻量汇总，
+ * 供年度日历与趋势展示使用，避免长期使用后每次都要扫描全量日志。
+ */
+export function buildDailyAggregates(
+  reviews: Review[],
+): Record<string, DailyAggregate> {
+  const aggregates: Record<string, DailyAggregate> = {};
+  const coveredPerDay = new Map<string, Set<string>>();
+  for (const review of reviews) {
+    const day = dateKey(review.reviewedAt);
+    const aggregate = aggregates[day] ?? { newCount: 0, reviewCount: 0, coveredCount: 0 };
+    aggregate.newCount += review.kind === "new" ? 1 : 0;
+    aggregate.reviewCount += review.kind === "review" ? 1 : 0;
+    aggregates[day] = aggregate;
+    const words = coveredPerDay.get(day) ?? new Set<string>();
+    words.add(review.wordId !== undefined
+      ? `id:${canonicalWordId(review.wordId)}`
+      : `${review.section ?? ""}:${review.unit ?? ""}:${review.word.toLowerCase()}`);
+    coveredPerDay.set(day, words);
+  }
+  for (const [day, words] of coveredPerDay) {
+    const aggregate = aggregates[day];
+    if (aggregate) aggregate.coveredCount = words.size;
+  }
+  return aggregates;
+}
+
 export function buildActivityCalendar(
   reviews: Review[],
   days = 140,
   now = new Date(),
 ) {
-  const counts = new Map<string, Set<string>>();
-  for (const review of reviews) {
-    const day = dateKey(review.reviewedAt);
-    const words = counts.get(day) ?? new Set<string>();
-    words.add(reviewKey(review));
-    counts.set(day, words);
-  }
-
+  // 基于每日聚合计算，避免长期使用后每次都扫描全量日志
+  const aggregates = buildDailyAggregates(reviews);
   const end = new Date(now);
   end.setHours(12, 0, 0, 0);
   const start = new Date(end);
@@ -932,7 +1176,7 @@ export function buildActivityCalendar(
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     const key = dateKey(date);
-    const count = counts.get(key)?.size ?? 0;
+    const count = aggregates[key]?.coveredCount ?? 0;
     const level = count === 0 ? 0 : count < 5 ? 1 : count < 10 ? 2 : count < 20 ? 3 : 4;
     return { date: key, count, level };
   });

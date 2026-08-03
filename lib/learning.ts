@@ -96,6 +96,17 @@ export type SenseExample = {
   meaning: string;
   sentence: string;
   translation: string;
+  confidence?: number;
+  feedback?: {
+    reason: "meaning-mismatch";
+    reportedAt: string;
+  };
+  review?: {
+    status: "pending" | "passed" | "failed";
+    confidence?: number;
+    note?: string;
+    reviewedAt?: string;
+  };
 };
 
 export type WordEnrichment = {
@@ -635,4 +646,51 @@ export function averageRetrievability(
     0,
   );
   return Math.round(total / items.length);
+}
+
+export type ExamProgressTiers = {
+  /** 已覆盖：至少评分过一次 */
+  covered: number;
+  /** 已掌握：达到稳定性/连续成功门槛（status === "mastered"） */
+  mastered: number;
+  /** 考试日就绪：预测考试当天可提取率 ≥ threshold */
+  examReady: number;
+  /** 就绪判定使用的可提取率门槛（百分比） */
+  thresholdPercent: number;
+  examDate: string;
+};
+
+/** 考研就绪判定：预测考试当天仍可提取的最低可提取率 */
+export const EXAM_READY_RETENTION = 0.9;
+
+/**
+ * 考研进度三层口径：已覆盖（至少学过）/ 已掌握（达到稳定门槛）/
+ * 考试日就绪（FSRS 预测考试当天仍可提取）。
+ * 考试日期无效时返回 null。
+ */
+export function examProgressTiers(
+  progress: WordProgressMap,
+  examDate: string,
+  threshold = EXAM_READY_RETENTION,
+): ExamProgressTiers | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(examDate)) return null;
+  const examTime = new Date(`${examDate}T23:59:59`).getTime();
+  if (!Number.isFinite(examTime)) return null;
+  const examDateObj = new Date(examTime);
+  let covered = 0;
+  let mastered = 0;
+  let examReady = 0;
+  for (const item of Object.values(progress)) {
+    covered += 1;
+    if (item.status === "mastered") mastered += 1;
+    const retrievability = wordRetrievability(item, examDateObj);
+    if (retrievability >= threshold * 100) examReady += 1;
+  }
+  return {
+    covered,
+    mastered,
+    examReady,
+    thresholdPercent: Math.round(threshold * 100),
+    examDate,
+  };
 }

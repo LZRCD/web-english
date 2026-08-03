@@ -15,7 +15,11 @@ export default function RatingBar({
   onRate,
 }: RatingBarProps) {
   return (
-    <div className={visible ? "rating-bar visible" : "rating-bar"}>
+    <div
+      className={visible ? "rating-bar visible" : "rating-bar"}
+      inert={!visible}
+      aria-hidden={!visible}
+    >
       {ratingLabels.map((label, index) => (
         <button key={label} onClick={() => onRate(index)}>
           <span>{index + 1}</span>

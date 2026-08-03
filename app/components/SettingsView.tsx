@@ -1,9 +1,10 @@
 "use client";
 
 import type { ChangeEvent, RefObject } from "react";
-import type { ExamPlan } from "../../lib/learning";
+import type { ExamPlan, ExamProgressTiers } from "../../lib/learning";
 import type { AutomaticBackup } from "../../lib/backup";
 import type { StudyMode, StudyScope } from "../../lib/study";
+import PerformanceDiagnostics from "./PerformanceDiagnostics";
 
 type SettingsViewProps = {
   dailyGoal: number;
@@ -11,6 +12,7 @@ type SettingsViewProps = {
   minimumNewWords: number;
   examDate: string;
   examPlan: ExamPlan | null;
+  examProgress: ExamProgressTiers | null;
   soundOn: boolean;
   studyMode: StudyMode;
   studyScope: StudyScope;
@@ -29,6 +31,7 @@ type SettingsViewProps = {
     createdAt: string;
     restorable: boolean;
   }>;
+  undoCount: number;
   onDailyGoalChange: (value: number) => void;
   onAdaptiveChange: (value: boolean) => void;
   onMinWordsChange: (value: number) => void;
@@ -44,6 +47,7 @@ type SettingsViewProps = {
   onRestoreRecovery: (id: string) => void;
   onDiscardRecovery: (id: string) => void;
   onResetRecords: () => void;
+  onClearUndoHistory: () => void;
   importInputRef: RefObject<HTMLInputElement | null>;
 };
 
@@ -53,6 +57,7 @@ export default function SettingsView({
   minimumNewWords,
   examDate,
   examPlan,
+  examProgress,
   soundOn,
   studyMode,
   studyScope,
@@ -67,6 +72,7 @@ export default function SettingsView({
   dataReplacementDisabled,
   dataActionsLoading,
   recoveryCopies,
+  undoCount,
   onDailyGoalChange,
   onAdaptiveChange,
   onMinWordsChange,
@@ -82,6 +88,7 @@ export default function SettingsView({
   onRestoreRecovery,
   onDiscardRecovery,
   onResetRecords,
+  onClearUndoHistory,
   importInputRef,
 }: SettingsViewProps) {
   const dataActionsLocked = dataActionsDisabled || dataActionsLoading !== null;
@@ -164,6 +171,11 @@ export default function SettingsView({
                 {examPlan.onTrack ? `可预留 ${examPlan.reviewReserveDays} 天集中复习` : "按当前速度无法在复习预留期前完成"}
               </small>
             )}
+            {examProgress && (
+              <small>
+                备考就绪 {examProgress.examReady} 词：已覆盖 {examProgress.covered} · 已掌握 {examProgress.mastered} · 预测考试日可提取率 ≥ {examProgress.thresholdPercent}%
+              </small>
+            )}
           </span>
           <input
             type="date"
@@ -214,6 +226,11 @@ export default function SettingsView({
                 {saveStatus === "saved" && `已保存 ${new Date(lastSaveTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`}
                 {saveStatus === "fallback" && "已保存到本机兼容存储"}
                 {saveStatus === "error" && "保存失败，请先导出备份或重试"}
+              </small>
+            )}
+            {examProgress && (
+              <small>
+                备考就绪 {examProgress.examReady} 词：已覆盖 {examProgress.covered} · 已掌握 {examProgress.mastered} · 预测考试日可提取率 ≥ {examProgress.thresholdPercent}%
               </small>
             )}
           </span>
@@ -289,6 +306,26 @@ export default function SettingsView({
             </div>
           </div>
         )}
+        <div className="backup-settings">
+          <span>
+            <strong>评分撤销历史</strong>
+            <small>当前可撤销 {undoCount} 步，运行中最多保留 30 步</small>
+          </span>
+          <div>
+            <button
+              type="button"
+              className="quiet"
+              disabled={dataReplacementLocked || undoCount === 0}
+              onClick={() => {
+                if (window.confirm("清空全部评分撤销历史？已提交的评分不会被删除。")) {
+                  onClearUndoHistory();
+                }
+              }}
+            >
+              清空撤销历史
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           className="reset-button"
@@ -298,6 +335,10 @@ export default function SettingsView({
           清空本机学习记录
         </button>
       </div>
+      <details className="advanced-settings">
+        <summary>高级设置</summary>
+        <PerformanceDiagnostics undoCount={undoCount} />
+      </details>
       <div className="shortcut-panel">
         <h2>快捷键</h2>
         <div>

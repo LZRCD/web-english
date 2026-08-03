@@ -4,7 +4,29 @@
     "method": "Whisper Tiny + Whisper Base + CMU 音素 + 全局一对一匹配",
     "acceptScore": 70,
     "sourceReport": "tmp/full-audio-asr-report.json",
-    "fileCount": 66
+    "fileCount": 66,
+    "validationReports": [
+      {
+        "path": "tmp/full-audio-asr-report.json",
+        "model": "openai/whisper-tiny.en",
+        "sha256": "6d7efeed4493a9bd5eaa23f938934bc39bf2446eca813235f27406361745e180"
+      },
+      {
+        "path": "tmp/scattered-base-report.json",
+        "model": "openai/whisper-base.en",
+        "sha256": "4c3affe643c23b18f97e2ff7123790626fa0439f40bd67c289611f8018a75043"
+      },
+      {
+        "path": "tmp/affected-audio-base-report.json",
+        "model": "openai/whisper-base.en",
+        "sha256": "1f95c534c0f351f6dd7652fe9f1fe5dbcf0b45af7c08aa471195b7a2417e7f1b"
+      },
+      {
+        "path": "tmp/unit15-asr-report.json",
+        "model": "openai/whisper-tiny.en",
+        "sha256": "f638adde6e5fd1e164da32670610d09e71f1c306d749dfe5a2f5525b39525a73"
+      }
+    ]
   },
   "files": {
     "/audio/redbook/basic-unit-01.mp3": {

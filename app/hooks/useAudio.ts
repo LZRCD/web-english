@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import type { Word } from "../../lib/study";
 import {
+  clearNextWordAudioPreload,
+  nextAudioWordId,
   playWordAudio,
+  preloadNextWordAudio,
   preloadWordAudio,
   stopWordAudio,
+  type RuntimeAudioIndex,
 } from "../../lib/word-audio";
 import { useSyncedRefs } from "./useSyncedRefs";
-
-type AudioIndexData = { entries: Record<string, AudioClip> };
-type AudioClip = { file: string; start: number; end: number };
+import { fetchJsonWithDiagnostics } from "../../lib/performance-diagnostics";
+import { versionedDataUrl } from "../../lib/data-version";
+import { allowsBackgroundPrefetch } from "../../lib/background-prefetch";
 
 type UseAudioOptions = {
   current: Word;
@@ -18,7 +22,7 @@ type UseAudioOptions = {
   onNotify: (message: string, duration?: number) => void;
 };
 
-/** 音频播放：预录音频片段 + TTS 回退（共享全局音频元素） */
+/** 音频播放：当前播放元素 + 一个有界下一词预载元素 + TTS 回退。 */
 export function useAudio({
   current,
   studyWords,
@@ -26,7 +30,15 @@ export function useAudio({
   redbookReady,
   onNotify,
 }: UseAudioOptions) {
-  const [audioIndex, setAudioIndex] = useState<Record<string, AudioClip>>({});
+  const [audioIndex, setAudioIndex] = useState<RuntimeAudioIndex>({
+    files: [],
+    entries: {},
+  });
+  const upcomingWordId = nextAudioWordId(
+    studyWords,
+    wordIndex,
+    current.id,
+  );
 
   // 用 ref 保持 studyWords/wordIndex 最新，供 speakNext 闭包使用
   const { studyWords: swRef, wordIndex: wiRef } = useSyncedRefs({
@@ -36,26 +48,99 @@ export function useAudio({
 
   // 加载音频索引
   useEffect(() => {
+    if (!redbookReady) return;
     let active = true;
-    fetch("/data/audio-index.json")
-      .then((response) => {
-        if (!response.ok) throw new Error("audio index missing");
-        return response.json() as Promise<AudioIndexData>;
-      })
-      .then((audio) => {
-        if (active) setAudioIndex(audio.entries);
+    const controller = new AbortController();
+    fetchJsonWithDiagnostics<RuntimeAudioIndex>(
+      versionedDataUrl("/data/audio-runtime-index.json"),
+      "audio.index",
+      { signal: controller.signal },
+    )
+      .then(({ data: audio }) => {
+        if (active) setAudioIndex(audio);
       })
       .catch(() => {});
     return () => {
       active = false;
+      controller.abort();
     };
-  }, []);
+  }, [redbookReady]);
 
   // 当前词切换时预加载录音片段，让点击播放更即时
   useEffect(() => {
     if (!redbookReady) return;
     preloadWordAudio(current.id, audioIndex);
   }, [audioIndex, current.id, redbookReady]);
+
+  // 首屏空闲后用独立音频元素预载下一词；不改写当前词的播放源。
+  useEffect(() => {
+    if (!redbookReady || upcomingWordId === undefined) {
+      clearNextWordAudioPreload();
+      return;
+    }
+    const connection = (
+      navigator as Navigator & {
+        connection?: EventTarget & {
+          saveData?: boolean;
+          effectiveType?: string;
+        };
+      }
+    ).connection;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const allowed = () => allowsBackgroundPrefetch({
+      online: navigator.onLine,
+      visibilityState: document.visibilityState,
+      connection,
+    });
+    const cancelSchedule = () => {
+      if (idleId !== undefined) idleWindow.cancelIdleCallback?.(idleId);
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+      idleId = undefined;
+      timeoutId = undefined;
+    };
+    const run = () => {
+      idleId = undefined;
+      timeoutId = undefined;
+      if (!allowed()) {
+        clearNextWordAudioPreload();
+        return;
+      }
+      preloadNextWordAudio(upcomingWordId, audioIndex);
+    };
+    const schedule = () => {
+      cancelSchedule();
+      if (!allowed()) {
+        clearNextWordAudioPreload();
+        return;
+      }
+      if (idleWindow.requestIdleCallback) {
+        idleId = idleWindow.requestIdleCallback(run, { timeout: 2_000 });
+      } else {
+        timeoutId = globalThis.setTimeout(run, 750);
+      }
+    };
+    schedule();
+    document.addEventListener("visibilitychange", schedule);
+    window.addEventListener("online", schedule);
+    window.addEventListener("offline", schedule);
+    connection?.addEventListener("change", schedule);
+    return () => {
+      cancelSchedule();
+      document.removeEventListener("visibilitychange", schedule);
+      window.removeEventListener("online", schedule);
+      window.removeEventListener("offline", schedule);
+      connection?.removeEventListener("change", schedule);
+    };
+  }, [audioIndex, redbookReady, upcomingWordId]);
 
   // 组件卸载时清理音频资源
   useEffect(() => () => {
@@ -88,5 +173,8 @@ export function useAudio({
     }
   }
 
-  return { audioIndex, speak, speakNext, speakWord } as const;
+  const hasRecordedAudio = current.id !== undefined
+    && Boolean(audioIndex.entries[String(current.id)]);
+
+  return { hasRecordedAudio, speak, speakNext, speakWord } as const;
 }

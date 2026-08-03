@@ -5,6 +5,7 @@ import {
   createState,
   RADIATE_ENRICHMENT,
   RECOVERY_COPY_PREFIX,
+  STORAGE_KEY,
 } from "./fixtures.mjs";
 import {
   dailyGoalSelect,
@@ -212,4 +213,79 @@ test("清空学习记录时保留收藏与内容缓存，并创建恢复快照",
   await expect(
     page.getByRole("tabpanel").getByRole("heading", { name: "radiate" }),
   ).toBeVisible();
+});
+
+test("IndexedDB 被禁用时使用 localStorage 兼容存储", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  await context.addInitScript(() => {
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+  await openApp(page, { expectIndexedDb: false });
+  await openSettings(page);
+  await dailyGoalSelect(page).selectOption("30");
+
+  await expect(page.getByText("已保存到本机兼容存储")).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem("wordloop-state") ?? "{}").dailyGoal,
+  )).toBe(30);
+});
+
+test("IndexedDB 损坏异常时载入兼容副本且不覆盖原记录", async ({ context, page }) => {
+  await installStateSeed(context, createState({ dailyGoal: 30 }));
+  await context.addInitScript(() => {
+    const original = globalThis.indexedDB;
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      value: {
+        ...original,
+        open() {
+          throw new DOMException("database corrupted", "UnknownError");
+        },
+      },
+    });
+  });
+  await openApp(page, { expectIndexedDb: false });
+  await openSettings(page);
+
+  await expect(dailyGoalSelect(page)).toHaveValue("30");
+  await expect(page.getByText("本地数据库暂不可用，已载入兼容存储副本"))
+    .toBeVisible();
+});
+
+test("IndexedDB 不可用且 localStorage 配额耗尽时暂停写入", async ({ context, page }) => {
+  const state = createState();
+  await installStateSeed(context, state);
+  await context.addInitScript(({ seedState, storageKey }) => {
+    // 不依赖多个 init script 的执行顺序：先保证兼容副本存在，再模拟配额耗尽。
+    globalThis.localStorage.setItem(storageKey, JSON.stringify(seedState));
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      value: undefined,
+    });
+    Storage.prototype.setItem = function setItem() {
+      throw new DOMException("quota exhausted", "QuotaExceededError");
+    };
+  }, { seedState: state, storageKey: STORAGE_KEY });
+  await openApp(page, { expectIndexedDb: false });
+  await openSettings(page);
+  await dailyGoalSelect(page).selectOption("30");
+
+  await expect(page.getByText("保存失败，请先导出备份或重试")).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem("wordloop-state") ?? "{}").dailyGoal,
+  )).toBe(20);
+});
+
+test("启动时清理旧数据版本的查词缓存", async ({ context, page }) => {
+  const staleKey = "wordloop-selection-lookups-v1:stale-version";
+  await installStateSeed(context, createState(), {
+    [staleKey]: JSON.stringify({ stale: true }),
+  });
+  await openApp(page);
+
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), staleKey))
+    .toBeNull();
 });

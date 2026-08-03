@@ -27,12 +27,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
     || target instanceof HTMLSelectElement
+    || target instanceof HTMLButtonElement
     || target.isContentEditable
     || target.closest('[contenteditable="true"]') !== null
     || target.closest('[role="textbox"]') !== null
     || target.closest('[role="searchbox"]') !== null
     || target.closest('[role="combobox"]') !== null
-    || target.closest('a, summary, [role="button"], [role="link"]') !== null
+    || target.closest('button, a, summary, [role="button"], [role="link"]') !== null
   );
 }
 

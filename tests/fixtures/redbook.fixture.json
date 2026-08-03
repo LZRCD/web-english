@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "title": "2027考研英语红宝书",
+    "total": 3,
+    "sectionCounts": {
+      "必考词": 3,
+      "基础词": 0,
+      "超纲词": 0
+    },
+    "inferredLocations": 0,
+    "normalizedSourceGlyphs": 0,
+    "auditVersion": 1,
+    "learningItemCount": 3
+  },
+  "words": [
+    {
+      "id": 1,
+      "word": "radiate",
+      "meaning": "vt. vi. 散发,流露;发出 (光、辐射等) vi. 呈辐射状发散 (或伸展)",
+      "section": "必考词",
+      "unit": 1,
+      "sourcePage": 1
+    },
+    {
+      "id": 2,
+      "word": "radiant",
+      "meaning": "adj. 容光焕发的;灿烂的;辐射的",
+      "section": "必考词",
+      "unit": 1,
+      "sourcePage": 1
+    },
+    {
+      "id": 3,
+      "word": "radical",
+      "meaning": "adj. 根本的,彻底的;激进的 n. 激进分子;游离基",
+      "section": "必考词",
+      "unit": 1,
+      "sourcePage": 1
+    }
+  ]
+}

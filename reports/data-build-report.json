@@ -1,0 +1,835 @@
+{
+  "format": "wordloop-data-build-report-v2",
+  "generatedAt": "2026-08-01T12:06:04.349Z",
+  "sourceDateEpoch": null,
+  "contentVersion": "a9b0000495913c32",
+  "provenance": {
+    "path": "scripts/data-provenance.json",
+    "available": true,
+    "sha256": "96479a060ba103dd46417bb627d0d51f06e7087b01e96730abe77fff6c2fa8b8",
+    "version": 1,
+    "verifiedAt": "2026-08-01",
+    "liveVerification": {
+      "ecdictSource": true,
+      "ffmpegBinary": true,
+      "whisperModels": true,
+      "complete": true
+    }
+  },
+  "reproducibility": {
+    "contentFilesContainRealtimeBuildTimestamp": false,
+    "manifestTimestampExcludedFromContentVersion": true,
+    "sourceDateEpochSupported": true
+  },
+  "upstream": {
+    "ecdict": {
+      "repository": "https://github.com/skywind3000/ECDICT",
+      "commit": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
+      "source": {
+        "path": "tmp/ecdict-upstream/ecdict.csv",
+        "available": true,
+        "sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf",
+        "recordedSha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf",
+        "matchesRecorded": true
+      },
+      "verification": {
+        "method": "使用当前 build-ecdict-shards.mjs 重建并逐分片比较 SHA-256",
+        "matchedShards": 26,
+        "totalShards": 26,
+        "mismatches": []
+      }
+    },
+    "redbook": {
+      "edition": "2027考研英语红宝书",
+      "sources": [
+        {
+          "path": "资源/红宝书/27红宝书词汇表（正序+乱序+默写）/2027考研英语红宝书（正序版）英文词表.pdf",
+          "available": true,
+          "sha256": "26b5f2f2bffb0db8deefba5acd0be772d72bff7a5cb037f82d67d785e5262659"
+        },
+        {
+          "path": "资源/红宝书/27红宝书词汇表（正序+乱序+默写）/2027考研英语红宝书（正序版）中文词表.pdf",
+          "available": true,
+          "sha256": "5d12e06b3fac2b2c96f8c9c35efd8bc5f9cab1beb885f4475a8f04fc6e6ce079"
+        },
+        {
+          "path": "资源/27红宝书单词正序版.pdf",
+          "available": true,
+          "sha256": "af400abf758cc7064644bbb42321721886ae959ae582e5b3e9f2032bc331f2b8"
+        }
+      ]
+    },
+    "audio": {
+      "scope": "2027 红宝书全套配套音频",
+      "sourceFileCount": 66,
+      "sources": [
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 1.mp3",
+          "available": true,
+          "sha256": "1d5bb0aece2a68c0265059e8d0d7aa6de3aa6afb2285722b0cb33d7fa0a2d75e"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 2.mp3",
+          "available": true,
+          "sha256": "746f047a1e5276e0af1bf089d6b0a7cb95754291238f472071d856d62e612658"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 3.mp3",
+          "available": true,
+          "sha256": "d2e2e367d3ed5ac88b615721de11a2948bb05ad9a9b83b7eb3457d3068539ed1"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 4.mp3",
+          "available": true,
+          "sha256": "2266f4c597dea3f4294713e00a6688050e4e628f565ff4b0ced951945ad6977b"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 5.mp4",
+          "available": true,
+          "sha256": "9c2fa5d2baaddb8fa385e1f5ee3345efcbf54ac2c1a05d4f934564bd1d2ee53a"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 6.mp3",
+          "available": true,
+          "sha256": "56a995366bfbe17d1ac0a0cdfa8216f8297e03a8722d1bb0abe3a621cea63a29"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 7.mp3",
+          "available": true,
+          "sha256": "4c77609a52b5cc72614228b4541f3eb6c6bfbee0ed1f8352cedffeac8dc4f416"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 8.mp3",
+          "available": true,
+          "sha256": "f5ab50a173041a83ae2c54d157b93dbf7dbbd48c8348a5023fee8aba378a06b7"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 9.mp3",
+          "available": true,
+          "sha256": "74084ffb757d07e1472ef2001f15d08ac46fe8e200618accd5699ea43be0d48a"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 10.mp3",
+          "available": true,
+          "sha256": "876947d9b1a73abe065f002caea272fa4a1c0dde3d365783356a7c676d43cd45"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 11.mp3",
+          "available": true,
+          "sha256": "631550aa972ac7d55519b2e723076af8da4f6ce93a3fb0def38ef70b44e8781f"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 12.mp3",
+          "available": true,
+          "sha256": "21cc2a0547da63b86fb3961e81d5af1eeab7e562c7a1c95821ca05b93ddcf80b"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 13.mp3",
+          "available": true,
+          "sha256": "6c47e6fdb6b7d992f512ddbf338d1bebb01b247b6828382d80a6bff4f4c38ccc"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 14.mp3",
+          "available": true,
+          "sha256": "ca1acd8b5833c157962c036bb8b6aa8e078fe713a60d7df34e569b2c57ecdb10"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 15.mp3",
+          "available": true,
+          "sha256": "5acc029621d79ab6bfddc0eda5d26bcb1d3436ffdd8843343bef8266e32b858c"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 16.mp3",
+          "available": true,
+          "sha256": "30cb4e81e594eebe7e9138d40b8ffebf133d9f69eef4c57f0d57cb4d4db6deac"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 17.mp3",
+          "available": true,
+          "sha256": "226c9abd0afb0d4c2c5a11cfc46f6340814e9415e93e0d1e6f8bc65691159066"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 18.mp3",
+          "available": true,
+          "sha256": "5f47a854e7cf6b856daff5581271a09f1ca3dcdbdf40adf7f688d3ca04acdc3c"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 19.mp3",
+          "available": true,
+          "sha256": "3592518c459ceffa4d303ebe94e28c29485ecdab8065e4fe0bd3f500b1c8f3e0"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 20.mp3",
+          "available": true,
+          "sha256": "3af42d32b23236e1dba758619f0fe8bea2e5ea993d55e93342f0441f246b8104"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 21.mp3",
+          "available": true,
+          "sha256": "49b6b422d7dcc98e252e92a2c46867850e0113eec887d3313e3e54b982b8e967"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 22.mp3",
+          "available": true,
+          "sha256": "10ede467dc77c7469b91ef07d947550bf14408b932280f91b35968497509b901"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 23.mp3",
+          "available": true,
+          "sha256": "b5a8a25ed7a9447fe3e6116cf023ec5c21f36bb60e4b0176f1d4e13ad8d4b60b"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 24.mp3",
+          "available": true,
+          "sha256": "e1bc2505ca3bd954e4dc591800238b8058b4ea3d38e5ae2b911fd6a7b56b5935"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 25.mp3",
+          "available": true,
+          "sha256": "1e7a9a5adbaf981d49754cebf186885d96cd1d9175807280307e24890930bd1a"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【01】必考词/【红宝书】 必考词Unit 26.mp3",
+          "available": true,
+          "sha256": "5fbc71832d9add2f72731e0b4c155954158ce49857063f2a51cc11c364404600"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 1.mp3",
+          "available": true,
+          "sha256": "0765990cccd1ee2b76768b792260b4692e87e280797ff28b87772635938242ca"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 2.mp3",
+          "available": true,
+          "sha256": "2e3cefc6896525bbec5edf8bee4c70d5008b348184398313d76c57d30cb46b4c"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 3.mp3",
+          "available": true,
+          "sha256": "8cf21444a0b48a3bf908d2f67bff3daca8c6d65deb5128f53beba2800845a170"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 4.mp3",
+          "available": true,
+          "sha256": "7ebaccda4243443fe39f32a067a60fc60f991ad0182d8f8a3bb77652b962cdfc"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 5.mp3",
+          "available": true,
+          "sha256": "c9859a06f71c3123188de60d0ed4f8b999da07b7e40f412d4fb46deccc334fde"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 6.mp3",
+          "available": true,
+          "sha256": "70c2d676bb44164da01a51f8c41335847b9c7e8047b5448102227b78dedb5c8b"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 7.mp3",
+          "available": true,
+          "sha256": "87dd22961966649298161c50c1acdfa352b2a3614e99ac3c8fb23877e11eb431"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 8.mp3",
+          "available": true,
+          "sha256": "a507f8eab0715d89a24a3584d6273d834af961d23cd6c329818afaef3ac4930d"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 9.mp4",
+          "available": true,
+          "sha256": "a2cc1e32c36c589ac09a99dcf86ee6e8b53dcc448e4965b71f98e0d1f9d46956"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 10.mp3",
+          "available": true,
+          "sha256": "1dcf6a5ace9246caa295a92112fe4d8335d800063bc89c8cae11549e9595f87e"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 11.mp3",
+          "available": true,
+          "sha256": "ae3cad45a3c6b90be7330292d4f29a0c526e8c4ddab0059fd93c4d101d83a619"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 12.mp3",
+          "available": true,
+          "sha256": "65e5db0df7264182f4e01f41df9d91f3d3e26d34cf0297d3f815130d7367265d"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 13.mp3",
+          "available": true,
+          "sha256": "314dd23457b541b6f699719ae9606867bf1cb89ec37764ab8fecb2f8148ab6a7"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 14.mp3",
+          "available": true,
+          "sha256": "4d04629775bda6c836ef055acb86e7724b28a57ae2adc4e0dee631d09fe07ebb"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 15.mp3",
+          "available": true,
+          "sha256": "20ae82b42b52e084d5f7528a408cb5bdb64e69a89de1a746f73552a062b25a0f"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 16.mp3",
+          "available": true,
+          "sha256": "7178408da20de80103967c937a931192359bac3a7f7b433b966c4b99f8fcc952"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 17.mp3",
+          "available": true,
+          "sha256": "5f2b89e36fff1f23335fcecd9de177ad4a970ff440b030f0393f1c13e2e0df95"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 18.mp3",
+          "available": true,
+          "sha256": "8de3d233bccbb37e7bc8f81975fe1dc6afce534b80456567cad699e44dbd121a"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 19.mp3",
+          "available": true,
+          "sha256": "ea6dabb38f8a07943bd5639f3bf23e7ccd97a0a5218884cde050b9311c2edd84"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 20.mp3",
+          "available": true,
+          "sha256": "52f6512625ed027ffbea49119a7c02b2a4117e2d7984b2fd2a5ce9b7b0c963ed"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 21.mp3",
+          "available": true,
+          "sha256": "648b950647791c8c9664f55847cdde586965ed72e22f12c2a83fee5b66e844cf"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 22.mp3",
+          "available": true,
+          "sha256": "e98516364e5899472a5899700186a711ff81d12c8c95ea85c5629ab87f70d7e6"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 23.mp3",
+          "available": true,
+          "sha256": "f4fbc4073680f3f84dac42edb021fa1b23c7355f1e67525de060ce4932a155b6"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 24.mp3",
+          "available": true,
+          "sha256": "19bab3f400ab73b92fef25be1b3a2f7b21f1b463677248c194f64ad8e886bf24"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 25.mp3",
+          "available": true,
+          "sha256": "feee5d0c3386c711398483d416bbe5469f2588aca0077cd2b2d537caa9500805"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 26.mp3",
+          "available": true,
+          "sha256": "4f945ec2cb4c6d06b27bf8f3f42b19fad362c431dc878fb0c1027120d0822f70"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 27.mp3",
+          "available": true,
+          "sha256": "bfdf95ecf0294f19bc36d5259ecafe2fa8fd21d9ec7be97e110ee68c818c09ec"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 28.mp3",
+          "available": true,
+          "sha256": "794389ae792e023433b454a733652546c2fa99f18fe396bc05ebc8856e219fb8"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 29.mp3",
+          "available": true,
+          "sha256": "6dd3b7b7dbea88d8a9d632f5d3e1f888f596c6186597b4efbb7edb29291a94b1"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 30.mp3",
+          "available": true,
+          "sha256": "23948c847ae4d979f3b2379fdb5bbe18e80c77d012aa5ef4aab0dba057cc510b"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【02】基础词/【红宝书】 基础词Unit 31.mp3",
+          "available": true,
+          "sha256": "a09cf5d0df422bb314625f5f6bdf1c7000b1cff57beb93ad4acf3cf7881ce730"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词A-B.mp3",
+          "available": true,
+          "sha256": "077fabd428df6140b635c81a1748d578a0026c9b2bac8124bf1394207ae94710"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词C-D.mp3",
+          "available": true,
+          "sha256": "c09f09800890c5e63b89a371a95f4a7a41ce960ebd58979450ec766058047c6c"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词E-H.mp3",
+          "available": true,
+          "sha256": "96c8868171b5c2c5181666f2c8dffe7409942cd2a1b09ae6d6ec3ba399011532"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词I.mp3",
+          "available": true,
+          "sha256": "1ff002466fda51b4c0961afb7eae51eca4a7c0ee6efe3a0df3ddd1f66743fa44"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词J-M.mp3",
+          "available": true,
+          "sha256": "0cae9ef65415b2a659bb3ccef969e7acbfab670c5987ae7beaaa627256c3a3a9"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词N-O.mp3",
+          "available": true,
+          "sha256": "0d3e33b0d9bc9b00b67c871b0622bdc7ac6c0fdc80ed4e7a2a766085d1f31b3d"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词P-Q.mp3",
+          "available": true,
+          "sha256": "ca5ce64fc2bacec6e3533bbfca221b556122ade3e29479d071b57e382ac80bae"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词R-S.mp3",
+          "available": true,
+          "sha256": "19e633f9062624ca0685b888505e8599b47e5a38fde94baa03ff0db7dd2b0638"
+        },
+        {
+          "path": "资源/红宝书/27红宝书PDF（全套）/27《红宝书》配套音频/【03】超纲词/【红宝书】超纲词T-Y.mp3",
+          "available": true,
+          "sha256": "430c15554fbd4ffe8ff4dad6f189f363ac5ba3f07cb83e4aeb5842a112eb7695"
+        }
+      ]
+    }
+  },
+  "tools": {
+    "node": "v24.16.0",
+    "ffmpeg": "ffmpeg version 8.1.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffmpegEvidence": {
+      "binarySha256": "ad8f211bc894755e0061c55ab280ae00e8d3d4f15a8cc4372b24cfa247b5942e",
+      "recordedSha256": "ad8f211bc894755e0061c55ab280ae00e8d3d4f15a8cc4372b24cfa247b5942e",
+      "matchesRecorded": true,
+      "bytes": 242496512,
+      "verification": "WinGet Gyan.FFmpeg 中唯一可发现的 ffmpeg.exe；安装时间早于 2026-07-28 的 ASR 报告"
+    },
+    "pdftotext": "pdftotext version 4.00",
+    "whisper": {
+      "alignments": [
+        "whisper-tiny-base-global-bipartite"
+      ],
+      "declaredModels": [
+        {
+          "name": "openai/whisper-tiny.en",
+          "evidence": [
+            "tmp/full-audio-asr-report.json",
+            "tmp/unit15-asr-report.json",
+            "scripts/validate-audio-index.py",
+            "scripts/validate-unit15-audio.py",
+            "public/data/audio-index.json"
+          ]
+        },
+        {
+          "name": "openai/whisper-base.en",
+          "evidence": [
+            "tmp/scattered-base-report.json",
+            "tmp/affected-audio-base-report.json",
+            "public/data/audio-index.json"
+          ]
+        }
+      ],
+      "modelRevision": null,
+      "modelSnapshots": [
+        {
+          "name": "openai/whisper-tiny.en",
+          "revision": "87c7102498dcde7456f24cfd30239ca606ed9063",
+          "file": "model.safetensors",
+          "sha256": "db59695928ded6043adaef491a53ef4e12da9611184d77c53baa691a60b958ad",
+          "bytes": 151060136,
+          "cachedAt": "2026-07-28T18:50:50.8902557+08:00",
+          "reports": [
+            "tmp/unit15-asr-report.json",
+            "tmp/full-audio-asr-report.json"
+          ]
+        },
+        {
+          "name": "openai/whisper-base.en",
+          "revision": "911407f4214e0e1d82085af863093ec0b66f9cd6",
+          "file": "model.safetensors",
+          "sha256": "d4dd5542fd6a1d35639e21384238f3bfe6c557c849d392b5905d33ee29e71db5",
+          "bytes": 290401888,
+          "cachedAt": "2026-07-28T19:15:38.2390861+08:00",
+          "reports": [
+            "tmp/affected-audio-base-report.json",
+            "tmp/scattered-base-report.json"
+          ]
+        }
+      ],
+      "verification": "from_pretrained 使用 main；每个模型缓存中仅有一个 snapshot，权重缓存时间早于对应 ASR 报告",
+      "validationReports": [
+        {
+          "path": "tmp/full-audio-asr-report.json",
+          "available": true,
+          "sha256": "6d7efeed4493a9bd5eaa23f938934bc39bf2446eca813235f27406361745e180",
+          "recordedSha256": "6d7efeed4493a9bd5eaa23f938934bc39bf2446eca813235f27406361745e180",
+          "model": "openai/whisper-tiny.en"
+        },
+        {
+          "path": "tmp/scattered-base-report.json",
+          "available": true,
+          "sha256": "4c3affe643c23b18f97e2ff7123790626fa0439f40bd67c289611f8018a75043",
+          "recordedSha256": "4c3affe643c23b18f97e2ff7123790626fa0439f40bd67c289611f8018a75043",
+          "model": "openai/whisper-base.en"
+        },
+        {
+          "path": "tmp/affected-audio-base-report.json",
+          "available": true,
+          "sha256": "1f95c534c0f351f6dd7652fe9f1fe5dbcf0b45af7c08aa471195b7a2417e7f1b",
+          "recordedSha256": "1f95c534c0f351f6dd7652fe9f1fe5dbcf0b45af7c08aa471195b7a2417e7f1b",
+          "model": "openai/whisper-base.en"
+        },
+        {
+          "path": "tmp/unit15-asr-report.json",
+          "available": true,
+          "sha256": "f638adde6e5fd1e164da32670610d09e71f1c306d749dfe5a2f5525b39525a73",
+          "recordedSha256": "f638adde6e5fd1e164da32670610d09e71f1c306d749dfe5a2f5525b39525a73",
+          "model": "openai/whisper-tiny.en"
+        }
+      ],
+      "modelFiles": [
+        {
+          "path": "external/model.safetensors",
+          "available": true,
+          "sha256": "db59695928ded6043adaef491a53ef4e12da9611184d77c53baa691a60b958ad",
+          "model": "openai/whisper-tiny.en",
+          "revision": "87c7102498dcde7456f24cfd30239ca606ed9063",
+          "recordedSha256": "db59695928ded6043adaef491a53ef4e12da9611184d77c53baa691a60b958ad",
+          "matchesRecorded": true
+        },
+        {
+          "path": "external/model.safetensors",
+          "available": true,
+          "sha256": "d4dd5542fd6a1d35639e21384238f3bfe6c557c849d392b5905d33ee29e71db5",
+          "model": "openai/whisper-base.en",
+          "revision": "911407f4214e0e1d82085af863093ec0b66f9cd6",
+          "recordedSha256": "d4dd5542fd6a1d35639e21384238f3bfe6c557c849d392b5905d33ee29e71db5",
+          "matchesRecorded": true
+        }
+      ],
+      "modelHashesComplete": true
+    }
+  },
+  "coverage": {
+    "redbookEntries": 6550,
+    "audioIndexedWords": 6326,
+    "audioFallbackWords": 224,
+    "phonetics": {
+      "total": 6550,
+      "covered": 6550,
+      "uniqueEntries": 6548,
+      "missing": 0,
+      "dictionary": 6477,
+      "overrides": 73,
+      "strictIpaVerified": 73,
+      "notationUnverified": 6477
+    }
+  },
+  "rangeIndex": {
+    "version": 4,
+    "prefixLength": 3,
+    "rootBytes": 5096,
+    "letterIndexCount": 26,
+    "averageLetterIndexBytes": 12924,
+    "maximumLetterIndexBytes": 20730,
+    "rangeCount": 11831,
+    "averageFragmentBytes": 4850,
+    "maximumFragmentBytes": 616445,
+    "shardHashes": {
+      "a": "042c995d9778f1e522bd24cb69f487801253a058ab9b91211713e668af6f39b0",
+      "b": "4b8100afa59095e01ee98c178a87d29dc274c3e94893ab31941b71b0f4e7b595",
+      "c": "e42920339db327ba03fce968704aeb95a1bacab5ca83b5985b0881146623c7cb",
+      "d": "21cb55f2af2f2ec01af6fdab4684ec919b281a47fb86cbd17f26629408f7680c",
+      "e": "16e65b40b67695bbff507362f7c27dafd79632b7763491e7b6ac35e71ec17950",
+      "f": "e2791a57d725707b76bde4ad35c1a9b780822096e05302db2f9d7ffbc1ca61bb",
+      "g": "d2e21dcfa52a0c34ae207d2ff02ce1b6548dea797f90eb95b0dab477d4c38f54",
+      "h": "4f55e02fca074ff55d386733fc470dc7e391aee292011c689a3c27a51365eb20",
+      "i": "113483bb007d805939b3fc686ac503d9b85cd578e878ffdad6008c007c603688",
+      "j": "f9a7a0bfec58a817efb69871f32d1596407973df5f1da906f6d54290f806ca13",
+      "k": "3eb7e1127069d6cf486b93aac11e665d9132503c0c060b4ccb9e46dace6a5986",
+      "l": "501d99606029278c8300b9e61c49a6b1f86fdc7aefe71ae65c0edf4e05034015",
+      "m": "37b009c1964c478ea36a31b1148b519e6a6feed9f5ed725c6dc1fc2c4547efb1",
+      "n": "1f87fc809fc95a701b13bd9387d1dd9e41cff1b0893097aeb1705d93e018d317",
+      "o": "f049cb5d74e07c8d7a8949bbad705b4903c0c8ec09b29631db882059bf291840",
+      "p": "1283b21cacac68cbc30bc50864855f67986b95da2bedb18292657c2568043b2f",
+      "q": "e680f17c572f64fb0f6def7a2fcc3e2bda0456e90d1da65e1c779a33141bad4a",
+      "r": "eb3f4235a38f32e5a7133e93ee9e3c2babe4cc3d79bd2c2cea4332e485911cc1",
+      "s": "22649c4f8f632a18663d4dae30762f9feb829e3c09e0c9051501ba37b41100ca",
+      "t": "f609c5a4c03bb6df80f428a3885f53194c697b1d035dcb70365fcad6040348ff",
+      "u": "ef040ebbb3855d49b1acbca2bee463910091ff7d520e167a8b1e80187ebc1407",
+      "v": "a45d74e222593fe9fbf3549da8bb95ce88890d2f5be6f4cda8572c9f9316aef6",
+      "w": "ec193e4ffbc40acf7c202d433645f5f3fc7916fdaab4254d6e68e359476414dd",
+      "x": "f02a03f221054eb958a0e16f9fe27c7274c89f8b38b913f69e838bfa36254e8f",
+      "y": "c5a61a6f402bdb6b0f40fffd9559ff5a3209787504411753eb9eda4cf95e268a",
+      "z": "239e1f54fe2d9aef4b85d459c6c74892a62ba937a230c16b7d9d253bd1ce50e6"
+    },
+    "rangeIndexHashes": {
+      "a": "de76399cf7541fcf02ed1f84bc7211454f240aacdbec064f4f400b59419368b6",
+      "b": "27a0320a8c6ca04abe2fcb71709db830b1e9cd13f14aadeeb7ad995f32e72911",
+      "c": "0993c13082b4ba1d66e0fa6fd0f80a93359fa8ef0a880ce9a2bbd275c4c0e229",
+      "d": "af1394d4fae8a34183c43e695f71c64d19bdfd62fd5f79f668ebf6206ee0964c",
+      "e": "6fd1e7d3a0675264260a5f202fcac7f3b0209be0e3fabaa3cb5eb396a8f9b837",
+      "f": "ad9bd2c98801f2712d49d5ba284ff0dfc7c6c4f40b7d31f6dec5e5926f961ca6",
+      "g": "875c1c80561c701d3c1656749677e6b6d739e7214c56c9c0842b9e1cf420900b",
+      "h": "3b2ab6ab4976f22ed2ace15621c1a1a60327d456996df3de27ad9c2b256fcd96",
+      "i": "6a323ef12b2ac33ef2969403028af4e85cff0d555a7395e81a9f2c9ed87b595f",
+      "j": "d254777a05873d167d18585c786fcf5d4d5940fdcccdd7c3aa832387235debc2",
+      "k": "f0f70ff2440a05619629dcc7676297e6fda6f627e4b6539d13689bc0e975992d",
+      "l": "cbd04f19d294cf01103d249a1135387883ed977234a848f5c24fc455a8b88353",
+      "m": "8341e77c06b34e26598a65d6343a0d9161404b954815ae0889866267dedee1df",
+      "n": "2561d0f35092758a56e04c459845a5ba574415bafdd0485fbed18d389c68478e",
+      "o": "3b8692be34b8c50e82fd1141a35a6234aff2a493abe8d898f0e2b4b4825893f2",
+      "p": "a1f4f5d611eac49873c1fd24083908aa5a7204be84c94c99b2af864ce0639ba5",
+      "q": "c8520ecd8838a9093352c979ceb0f37763e5cc4c6aadb1901c82af3324b78e0c",
+      "r": "8aba7471a64cf4ed152e0b95a2d5e9e1c416707c6ed6f271d455b0b494ad187c",
+      "s": "43b9fe165ff15f7d477294246ddee773ddaa714b5b47a496a662f57a9c376099",
+      "t": "bdd0db04801323de47632fd3e7f7ed7abefa73fb9119bda1e70ab7bb9da8a418",
+      "u": "c50c493d86d666a0e52205a19e0fb41b2f2c52a5d40205924c59828200cb572b",
+      "v": "e9af4b2a5dac394e4285d973b173b2a9c8ddf9ecf5fd7db2bd458ffebfa2839a",
+      "w": "f4ef9843715677fe0beba33c007b6a82e5adeda034e1c83e035e49c8827035a2",
+      "x": "285b37f45af42c99150e5f0f03d6cfc9d2d12c413927c50a2d4a978b12b8bec0",
+      "y": "3225eadb486382f0be33f2e6be966b613a72fec2482dc9d6f77da3694ecabc73",
+      "z": "8ea6ba2602b43c0eb6f57dd8caff645c4f50bc26719ebb6b9bddbcc5606cd995"
+    }
+  },
+  "assets": {
+    "/data/redbook.json": {
+      "sha256": "636304627ca1f08e246516c7e66f50202e38dbe47099b44b79d51151f99903fc",
+      "bytes": 1262237
+    },
+    "/data/redbook-analysis.json": {
+      "sha256": "d62a21937b110fe2bccd93b723b92f3b27a56dc64c560a1b49ad1d47761e59c4",
+      "bytes": 120123
+    },
+    "/data/phonetic-index.json": {
+      "sha256": "0506b111f3e68e6e08a72aeb7c728d5c3808b45e1007abda2a1db46b6f1097d1",
+      "bytes": 154779
+    },
+    "/data/phonetic-metadata.json": {
+      "sha256": "52b4e785b789337440c96b5659be66374a37df7447cec152fb1d1115d2f74bd6",
+      "bytes": 1508465
+    },
+    "/data/audio-runtime-index.json": {
+      "sha256": "8f36a6ef06014482a5cdf77b4374b8565a7983c2e14c250d5deee313cdd7f22c",
+      "bytes": 173246
+    },
+    "/data/dictionary/metadata.json": {
+      "sha256": "bec0e7a66ff1a22b542af42b90a4c588850ce68eda83cb7a05da1642888aa9cc",
+      "bytes": 791
+    },
+    "/data/dictionary/ranges.json": {
+      "sha256": "b671c20075b72f0c34e24b7e165df43f3c1482a8fe24c5e802b9b75a2ecd5d1e",
+      "bytes": 5096
+    },
+    "/data/dictionary/ranges/a.json": {
+      "sha256": "de76399cf7541fcf02ed1f84bc7211454f240aacdbec064f4f400b59419368b6",
+      "bytes": 20730
+    },
+    "/data/dictionary/ranges/b.json": {
+      "sha256": "27a0320a8c6ca04abe2fcb71709db830b1e9cd13f14aadeeb7ad995f32e72911",
+      "bytes": 14735
+    },
+    "/data/dictionary/ranges/c.json": {
+      "sha256": "0993c13082b4ba1d66e0fa6fd0f80a93359fa8ef0a880ce9a2bbd275c4c0e229",
+      "bytes": 18049
+    },
+    "/data/dictionary/ranges/d.json": {
+      "sha256": "af1394d4fae8a34183c43e695f71c64d19bdfd62fd5f79f668ebf6206ee0964c",
+      "bytes": 15888
+    },
+    "/data/dictionary/ranges/e.json": {
+      "sha256": "6fd1e7d3a0675264260a5f202fcac7f3b0209be0e3fabaa3cb5eb396a8f9b837",
+      "bytes": 16431
+    },
+    "/data/dictionary/ranges/f.json": {
+      "sha256": "ad9bd2c98801f2712d49d5ba284ff0dfc7c6c4f40b7d31f6dec5e5926f961ca6",
+      "bytes": 12651
+    },
+    "/data/dictionary/ranges/g.json": {
+      "sha256": "875c1c80561c701d3c1656749677e6b6d739e7214c56c9c0842b9e1cf420900b",
+      "bytes": 13131
+    },
+    "/data/dictionary/ranges/h.json": {
+      "sha256": "3b2ab6ab4976f22ed2ace15621c1a1a60327d456996df3de27ad9c2b256fcd96",
+      "bytes": 13545
+    },
+    "/data/dictionary/ranges/i.json": {
+      "sha256": "6a323ef12b2ac33ef2969403028af4e85cff0d555a7395e81a9f2c9ed87b595f",
+      "bytes": 15471
+    },
+    "/data/dictionary/ranges/j.json": {
+      "sha256": "d254777a05873d167d18585c786fcf5d4d5940fdcccdd7c3aa832387235debc2",
+      "bytes": 8215
+    },
+    "/data/dictionary/ranges/k.json": {
+      "sha256": "f0f70ff2440a05619629dcc7676297e6fda6f627e4b6539d13689bc0e975992d",
+      "bytes": 10022
+    },
+    "/data/dictionary/ranges/l.json": {
+      "sha256": "cbd04f19d294cf01103d249a1135387883ed977234a848f5c24fc455a8b88353",
+      "bytes": 13849
+    },
+    "/data/dictionary/ranges/m.json": {
+      "sha256": "8341e77c06b34e26598a65d6343a0d9161404b954815ae0889866267dedee1df",
+      "bytes": 16301
+    },
+    "/data/dictionary/ranges/n.json": {
+      "sha256": "2561d0f35092758a56e04c459845a5ba574415bafdd0485fbed18d389c68478e",
+      "bytes": 14918
+    },
+    "/data/dictionary/ranges/o.json": {
+      "sha256": "3b8692be34b8c50e82fd1141a35a6234aff2a493abe8d898f0e2b4b4825893f2",
+      "bytes": 14894
+    },
+    "/data/dictionary/ranges/p.json": {
+      "sha256": "a1f4f5d611eac49873c1fd24083908aa5a7204be84c94c99b2af864ce0639ba5",
+      "bytes": 17193
+    },
+    "/data/dictionary/ranges/q.json": {
+      "sha256": "c8520ecd8838a9093352c979ceb0f37763e5cc4c6aadb1901c82af3324b78e0c",
+      "bytes": 4579
+    },
+    "/data/dictionary/ranges/r.json": {
+      "sha256": "8aba7471a64cf4ed152e0b95a2d5e9e1c416707c6ed6f271d455b0b494ad187c",
+      "bytes": 13658
+    },
+    "/data/dictionary/ranges/s.json": {
+      "sha256": "43b9fe165ff15f7d477294246ddee773ddaa714b5b47a496a662f57a9c376099",
+      "bytes": 18014
+    },
+    "/data/dictionary/ranges/t.json": {
+      "sha256": "bdd0db04801323de47632fd3e7f7ed7abefa73fb9119bda1e70ab7bb9da8a418",
+      "bytes": 16346
+    },
+    "/data/dictionary/ranges/u.json": {
+      "sha256": "c50c493d86d666a0e52205a19e0fb41b2f2c52a5d40205924c59828200cb572b",
+      "bytes": 10818
+    },
+    "/data/dictionary/ranges/v.json": {
+      "sha256": "e9af4b2a5dac394e4285d973b173b2a9c8ddf9ecf5fd7db2bd458ffebfa2839a",
+      "bytes": 9216
+    },
+    "/data/dictionary/ranges/w.json": {
+      "sha256": "f4ef9843715677fe0beba33c007b6a82e5adeda034e1c83e035e49c8827035a2",
+      "bytes": 10609
+    },
+    "/data/dictionary/ranges/x.json": {
+      "sha256": "285b37f45af42c99150e5f0f03d6cfc9d2d12c413927c50a2d4a978b12b8bec0",
+      "bytes": 4995
+    },
+    "/data/dictionary/ranges/y.json": {
+      "sha256": "3225eadb486382f0be33f2e6be966b613a72fec2482dc9d6f77da3694ecabc73",
+      "bytes": 6268
+    },
+    "/data/dictionary/ranges/z.json": {
+      "sha256": "8ea6ba2602b43c0eb6f57dd8caff645c4f50bc26719ebb6b9bddbcc5606cd995",
+      "bytes": 5504
+    },
+    "/data/dictionary/a.json": {
+      "sha256": "042c995d9778f1e522bd24cb69f487801253a058ab9b91211713e668af6f39b0",
+      "bytes": 4494843
+    },
+    "/data/dictionary/b.json": {
+      "sha256": "4b8100afa59095e01ee98c178a87d29dc274c3e94893ab31941b71b0f4e7b595",
+      "bytes": 3341763
+    },
+    "/data/dictionary/c.json": {
+      "sha256": "e42920339db327ba03fce968704aeb95a1bacab5ca83b5985b0881146623c7cb",
+      "bytes": 5507663
+    },
+    "/data/dictionary/d.json": {
+      "sha256": "21cb55f2af2f2ec01af6fdab4684ec919b281a47fb86cbd17f26629408f7680c",
+      "bytes": 2952023
+    },
+    "/data/dictionary/e.json": {
+      "sha256": "16e65b40b67695bbff507362f7c27dafd79632b7763491e7b6ac35e71ec17950",
+      "bytes": 2253672
+    },
+    "/data/dictionary/f.json": {
+      "sha256": "e2791a57d725707b76bde4ad35c1a9b780822096e05302db2f9d7ffbc1ca61bb",
+      "bytes": 2348585
+    },
+    "/data/dictionary/g.json": {
+      "sha256": "d2e21dcfa52a0c34ae207d2ff02ce1b6548dea797f90eb95b0dab477d4c38f54",
+      "bytes": 2042340
+    },
+    "/data/dictionary/h.json": {
+      "sha256": "4f55e02fca074ff55d386733fc470dc7e391aee292011c689a3c27a51365eb20",
+      "bytes": 2306493
+    },
+    "/data/dictionary/i.json": {
+      "sha256": "113483bb007d805939b3fc686ac503d9b85cd578e878ffdad6008c007c603688",
+      "bytes": 2186511
+    },
+    "/data/dictionary/j.json": {
+      "sha256": "f9a7a0bfec58a817efb69871f32d1596407973df5f1da906f6d54290f806ca13",
+      "bytes": 462548
+    },
+    "/data/dictionary/k.json": {
+      "sha256": "3eb7e1127069d6cf486b93aac11e665d9132503c0c060b4ccb9e46dace6a5986",
+      "bytes": 657138
+    },
+    "/data/dictionary/l.json": {
+      "sha256": "501d99606029278c8300b9e61c49a6b1f86fdc7aefe71ae65c0edf4e05034015",
+      "bytes": 2133595
+    },
+    "/data/dictionary/m.json": {
+      "sha256": "37b009c1964c478ea36a31b1148b519e6a6feed9f5ed725c6dc1fc2c4547efb1",
+      "bytes": 3575001
+    },
+    "/data/dictionary/n.json": {
+      "sha256": "1f87fc809fc95a701b13bd9387d1dd9e41cff1b0893097aeb1705d93e018d317",
+      "bytes": 1578766
+    },
+    "/data/dictionary/o.json": {
+      "sha256": "f049cb5d74e07c8d7a8949bbad705b4903c0c8ec09b29631db882059bf291840",
+      "bytes": 1588769
+    },
+    "/data/dictionary/p.json": {
+      "sha256": "1283b21cacac68cbc30bc50864855f67986b95da2bedb18292657c2568043b2f",
+      "bytes": 4892380
+    },
+    "/data/dictionary/q.json": {
+      "sha256": "e680f17c572f64fb0f6def7a2fcc3e2bda0456e90d1da65e1c779a33141bad4a",
+      "bytes": 252957
+    },
+    "/data/dictionary/r.json": {
+      "sha256": "eb3f4235a38f32e5a7133e93ee9e3c2babe4cc3d79bd2c2cea4332e485911cc1",
+      "bytes": 2584975
+    },
+    "/data/dictionary/s.json": {
+      "sha256": "22649c4f8f632a18663d4dae30762f9feb829e3c09e0c9051501ba37b41100ca",
+      "bytes": 5745325
+    },
+    "/data/dictionary/t.json": {
+      "sha256": "f609c5a4c03bb6df80f428a3885f53194c697b1d035dcb70365fcad6040348ff",
+      "bytes": 3018815
+    },
+    "/data/dictionary/u.json": {
+      "sha256": "ef040ebbb3855d49b1acbca2bee463910091ff7d520e167a8b1e80187ebc1407",
+      "bytes": 1006625
+    },
+    "/data/dictionary/v.json": {
+      "sha256": "a45d74e222593fe9fbf3549da8bb95ce88890d2f5be6f4cda8572c9f9316aef6",
+      "bytes": 888679
+    },
+    "/data/dictionary/w.json": {
+      "sha256": "ec193e4ffbc40acf7c202d433645f5f3fc7916fdaab4254d6e68e359476414dd",
+      "bytes": 1149866
+    },
+    "/data/dictionary/x.json": {
+      "sha256": "f02a03f221054eb958a0e16f9fe27c7274c89f8b38b913f69e838bfa36254e8f",
+      "bytes": 79323
+    },
+    "/data/dictionary/y.json": {
+      "sha256": "c5a61a6f402bdb6b0f40fffd9559ff5a3209787504411753eb9eda4cf95e268a",
+      "bytes": 151857
+    },
+    "/data/dictionary/z.json": {
+      "sha256": "239e1f54fe2d9aef4b85d459c6c74892a62ba937a230c16b7d9d253bd1ce50e6",
+      "bytes": 187621
+    }
+  }
+}

@@ -44,7 +44,7 @@ test("核心学习页与完成页在桌面和移动布局保持可用", async ({
     page.getByRole("button", { name: "继续搜索" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "返回自由学习" }),
+    page.getByRole("button", { name: "返回额外练习" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "撤销最后评分" }),

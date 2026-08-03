@@ -1,6 +1,11 @@
 "use client";
 
-import type { FormEventHandler, MouseEvent, RefObject } from "react";
+import type {
+  FormEventHandler,
+  MouseEvent,
+  PointerEvent,
+  RefObject,
+} from "react";
 import type { WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
 import { wordRetrievability } from "../../lib/learning";
 import type { Word } from "../../lib/study";
@@ -8,7 +13,6 @@ import { formatDueTime } from "../../lib/study";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
 
 type RedbookStatus = "loading" | "ready" | "error";
-type AudioClip = { file: string; start: number; end: number };
 type ReinforcementRating = 0 | 1;
 
 type WordCardProps = {
@@ -29,7 +33,7 @@ type WordCardProps = {
   currentEnrichment?: WordEnrichment;
   currentProgress?: WordProgress;
   isFavorite: boolean;
-  audioIndex: Record<string, AudioClip>;
+  hasRecordedAudio: boolean;
 
   // 上下文
   activeSession?: StudySession;
@@ -44,6 +48,8 @@ type WordCardProps = {
 
   // 富化
   enrichmentLoading: boolean;
+  reviewingSense: number | null;
+  rewritingSense: number | null;
   unfamiliarMeanings: string[];
 
   // 回调
@@ -52,7 +58,11 @@ type WordCardProps = {
   onSpeak: () => void;
   onToggleMeaningFamiliar: (meaning: string) => void;
   onEnrichWord: () => void;
-  onTextSelection: (event: MouseEvent<HTMLElement>) => void;
+  onReportSenseMismatch: (index: number) => void;
+  onRewriteSenseExample: (index: number) => void;
+  onTextSelection: (
+    event: MouseEvent<HTMLElement> | PointerEvent<HTMLElement>,
+  ) => void;
   onSetReinforcementInput: (value: string) => void;
   onClearReinforcementFeedback: () => void;
   onSubmitReinforcement: FormEventHandler<HTMLFormElement>;
@@ -73,7 +83,7 @@ export default function WordCard({
   currentEnrichment,
   currentProgress,
   isFavorite,
-  audioIndex,
+  hasRecordedAudio,
   activeSession,
   newCount,
   clock,
@@ -82,12 +92,16 @@ export default function WordCard({
   reinforcementSentence,
   reinforcementMeaning,
   enrichmentLoading,
+  reviewingSense,
+  rewritingSense,
   unfamiliarMeanings,
   onReveal,
   onToggleFavorite,
   onSpeak,
   onToggleMeaningFamiliar,
   onEnrichWord,
+  onReportSenseMismatch,
+  onRewriteSenseExample,
   onTextSelection,
   onSetReinforcementInput,
   onClearReinforcementFeedback,
@@ -110,6 +124,9 @@ export default function WordCard({
       aria-busy={redbookStatus === "loading"}
       tabIndex={-1}
       onMouseUp={onTextSelection}
+      onPointerUp={(event) => {
+        if (event.pointerType !== "mouse") onTextSelection(event);
+      }}
     >
       {/* 词头：计数 + 收藏/发音 */}
       <div className="word-heading">
@@ -141,7 +158,7 @@ export default function WordCard({
             disabled={!redbookReady}
             aria-label={`播放 ${current.word} 的发音`}
             title={
-              current.id !== undefined && audioIndex[String(current.id)]
+              hasRecordedAudio
                 ? "2027 红宝书原声"
                 : "浏览器 TTS 回退"
             }
@@ -248,6 +265,46 @@ export default function WordCard({
                         <p className="context-translation">
                           {example.translation}
                         </p>
+                        {currentEnrichment.source === "ai" && (
+                          <div className="sense-example-quality">
+                            <small>
+                              {example.review?.status === "pending"
+                                ? "正在语义二审…"
+                                : example.review?.status === "passed"
+                                  ? "语义二审通过"
+                                  : example.review?.status === "failed"
+                                    ? `二审未通过${example.review.note ? `：${example.review.note}` : ""}`
+                                    : typeof example.confidence === "number"
+                                      ? `生成置信度 ${Math.round(example.confidence * 100)}%`
+                                      : "尚未反馈"}
+                            </small>
+                            <span>
+                              <button
+                                type="button"
+                                className="quiet"
+                                disabled={
+                                  reviewingSense !== null
+                                  || rewritingSense !== null
+                                }
+                                onClick={() => onReportSenseMismatch(index)}
+                              >
+                                {reviewingSense === index
+                                  ? "二审中…"
+                                  : "例句与义项不符"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  reviewingSense !== null
+                                  || rewritingSense !== null
+                                }
+                                onClick={() => onRewriteSenseExample(index)}
+                              >
+                                {rewritingSense === index ? "重写中…" : "只重写此条"}
+                              </button>
+                            </span>
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ol>
@@ -334,7 +391,7 @@ export default function WordCard({
             </div>
             {currentProgress && (
               <div>
-                <span>FSRS 可提取率</span>
+                <span>记忆牢固度</span>
                 <strong>
                   {wordRetrievability(currentProgress, new Date(clock))}%
                 </strong>
