@@ -207,7 +207,7 @@ export default function SettingsView({
         <label>
           <span>
             <strong>隐藏释义中文</strong>
-            <small>揭示后只显示英文，先回忆再点“显示释义”核对</small>
+            <small>释义、生成例句与翻译的中文全部隐藏，先回忆再点“显示释义”核对</small>
           </span>
           <input
             type="checkbox"

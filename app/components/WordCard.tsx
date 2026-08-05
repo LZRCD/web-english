@@ -262,7 +262,8 @@ export default function WordCard({
                     读英文句子，猜猜 {current.word} 在这个语境里的意思
                   </p>
                   <p className="context-sentence">{guessSentence}</p>
-                  {guessTranslation && (
+                  {/* 开启「隐藏释义中文」时不显示翻译提示，避免泄漏答案 */}
+                  {guessTranslation && !hideChineseMeaning && (
                     <small className="guess-context-hint">
                       {guessTranslation}
                     </small>
@@ -406,11 +407,13 @@ export default function WordCard({
                         className="sense-example"
                         key={`${example.meaning}-${index}`}
                       >
-                        <strong>{index + 1}. {example.meaning}</strong>
+                        <strong>{index + 1}. {(!hideSenses || sensesExpanded) ? example.meaning : ""}</strong>
                         <p className="context-sentence">{example.sentence}</p>
-                        <p className="context-translation">
-                          {example.translation}
-                        </p>
+                        {(!hideSenses || sensesExpanded) && (
+                          <p className="context-translation">
+                            {example.translation}
+                          </p>
+                        )}
                         {currentEnrichment.source === "ai" && (
                           <div className="sense-example-quality">
                             <small>
@@ -458,7 +461,9 @@ export default function WordCard({
               ) : (
                 <>
                   <p className="context-sentence">{current.sentence}</p>
-                  <p className="context-translation">{current.translation}</p>
+                  {(!hideSenses || sensesExpanded) && (
+                    <p className="context-translation">{current.translation}</p>
+                  )}
                 </>
               )}
               {currentEnrichment && (
