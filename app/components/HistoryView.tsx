@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { dateKey, formatDueTime, buildActivityCalendar, type Review } from "../../lib/study";
+import { dateKey, formatDueTime, buildActivityCalendar, type LookupStats, type LookupWord, type Review } from "../../lib/study";
 import type {
   LearningInsights,
   ReviewForecastDay,
@@ -24,6 +24,8 @@ type HistoryViewProps = {
   effectiveNewGoal: number;
   dailyGoal: number;
   reviews: Review[];
+  lookupStats: LookupStats;
+  lookupWords: LookupWord[];
   clock: number;
   activityRange: ActivityRange;
   activityOffset: number;
@@ -46,6 +48,8 @@ export default function HistoryView({
   effectiveNewGoal,
   dailyGoal,
   reviews,
+  lookupStats,
+  lookupWords,
   clock,
   activityRange,
   activityOffset,
@@ -64,6 +68,18 @@ export default function HistoryView({
 }: HistoryViewProps) {
   const now = new Date(clock);
   const todayKey = dateKey(now);
+  const totalLookupCount = Object.values(lookupStats)
+    .reduce((sum, stat) => sum + stat.count, 0);
+  const recentLookupAt = Object.values(lookupStats)
+    .map((stat) => stat.lastAt)
+    .sort()
+    .at(-1);
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+  weekStart.setHours(0, 0, 0, 0);
+  const weekNewLookups = lookupWords.filter(
+    (item) => new Date(item.addedAt).getTime() >= weekStart.getTime(),
+  ).length;
   const activityEndTime = (() => {
     const end = new Date(clock);
     end.setDate(end.getDate() - activityOffset);
@@ -139,6 +155,27 @@ export default function HistoryView({
           <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
         </button>
       </div>
+      {lookupWords.length > 0 && (
+        <section className="lookup-trace" aria-labelledby="lookup-trace-title">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">LOOKUP TRACE</p>
+              <h2 id="lookup-trace-title">划词集</h2>
+            </div>
+            {recentLookupAt && (
+              <small>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
+            )}
+          </div>
+          <div className="exam-progress-grid">
+            <div><span>累计查询</span><strong>{totalLookupCount}</strong><small>划词查义次数</small></div>
+            <div><span>划词收录</span><strong>{lookupWords.length}</strong><small>累计加入划词集</small></div>
+            <div><span>本周新增</span><strong>{weekNewLookups}</strong><small>新查询并收录的词</small></div>
+          </div>
+          <p className="lookup-trace-note">
+            在词本「划词集」标签可直接复习；查询过的释义会缓存复用，同一语境再次划选会秒出结果。
+          </p>
+        </section>
+      )}
       {examProgress && (
         <section className="exam-progress" aria-labelledby="exam-progress-title">
           <div className="panel-title">

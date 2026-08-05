@@ -14,6 +14,10 @@ type SettingsViewProps = {
   examPlan: ExamPlan | null;
   examProgress: ExamProgressTiers | null;
   soundOn: boolean;
+  /** 隐藏学习卡下方释义的中文 */
+  hideChineseMeaning: boolean;
+  /** 多释义单词先显示英文语境句 */
+  guessContextFirst: boolean;
   studyMode: StudyMode;
   studyScope: StudyScope;
   learningItemCount: number;
@@ -37,6 +41,8 @@ type SettingsViewProps = {
   onMinWordsChange: (value: number) => void;
   onExamDateChange: (value: string) => void;
   onSoundChange: (value: boolean) => void;
+  onHideChineseMeaningChange: (value: boolean) => void;
+  onGuessContextFirstChange: (value: boolean) => void;
   onModeChange: (mode: StudyMode | "all") => void;
   onExportBackup: () => void;
   onImportClick: () => void;
@@ -59,6 +65,8 @@ export default function SettingsView({
   examPlan,
   examProgress,
   soundOn,
+  hideChineseMeaning,
+  guessContextFirst,
   studyMode,
   studyScope,
   learningItemCount,
@@ -78,6 +86,8 @@ export default function SettingsView({
   onMinWordsChange,
   onExamDateChange,
   onSoundChange,
+  onHideChineseMeaningChange,
+  onGuessContextFirstChange,
   onModeChange,
   onExportBackup,
   onImportClick,
@@ -192,6 +202,30 @@ export default function SettingsView({
             checked={soundOn}
             disabled={dataReplacementLocked}
             onChange={(event) => onSoundChange(event.target.checked)}
+          />
+        </label>
+        <label>
+          <span>
+            <strong>隐藏释义中文</strong>
+            <small>揭示后只显示英文，先回忆再点“显示释义”核对</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={hideChineseMeaning}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onHideChineseMeaningChange(event.target.checked)}
+          />
+        </label>
+        <label>
+          <span>
+            <strong>多释义先猜语境</strong>
+            <small>有两个以上义项的单词，先给英文句子猜意思，再展开中文</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={guessContextFirst}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onGuessContextFirstChange(event.target.checked)}
           />
         </label>
         <label>

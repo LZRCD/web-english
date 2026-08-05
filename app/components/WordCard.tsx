@@ -1,12 +1,15 @@
 "use client";
 
-import type {
-  FormEventHandler,
-  MouseEvent,
-  PointerEvent,
-  RefObject,
+import {
+  useMemo,
+  useState,
+  type FormEventHandler,
+  type MouseEvent,
+  type PointerEvent,
+  type RefObject,
 } from "react";
-import type { WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
+import type { SenseFrequencyEntry, WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
+import type { ReusedSentence } from "../../lib/sentence-index";
 import { wordRetrievability } from "../../lib/learning";
 import type { Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
@@ -34,6 +37,16 @@ type WordCardProps = {
   currentProgress?: WordProgress;
   isFavorite: boolean;
   hasRecordedAudio: boolean;
+  /** 隐藏下方释义的中文 */
+  hideChineseMeaning: boolean;
+  /** 多释义单词先显示英文语境句，让人猜测后再展开中文释义 */
+  guessContextFirst: boolean;
+  /** 当前词的义项考频（AI 生成缓存） */
+  currentSenseFrequency?: SenseFrequencyEntry[];
+  /** 义项考频生成中 */
+  frequencyLoading: boolean;
+  /** 该词出现在这些已见例句中（跨词复用） */
+  reusedSentences: ReusedSentence[];
 
   // 上下文
   activeSession?: StudySession;
@@ -58,6 +71,7 @@ type WordCardProps = {
   onSpeak: () => void;
   onToggleMeaningFamiliar: (meaning: string) => void;
   onEnrichWord: () => void;
+  onGenerateSenseFrequency: () => void;
   onReportSenseMismatch: (index: number) => void;
   onRewriteSenseExample: (index: number) => void;
   onTextSelection: (
@@ -84,6 +98,11 @@ export default function WordCard({
   currentProgress,
   isFavorite,
   hasRecordedAudio,
+  hideChineseMeaning,
+  guessContextFirst,
+  currentSenseFrequency,
+  frequencyLoading,
+  reusedSentences,
   activeSession,
   newCount,
   clock,
@@ -100,6 +119,7 @@ export default function WordCard({
   onSpeak,
   onToggleMeaningFamiliar,
   onEnrichWord,
+  onGenerateSenseFrequency,
   onReportSenseMismatch,
   onRewriteSenseExample,
   onTextSelection,
@@ -108,6 +128,35 @@ export default function WordCard({
   onSubmitReinforcement,
   onSkipReinforcement,
 }: WordCardProps) {
+  // 释义隐藏逻辑：隐藏全部中文，或对多释义单词先猜语境
+  const [sensesExpanded, setSensesExpanded] = useState(false);
+  const currentSenseItems = useMemo(
+    () => [...new Set(
+      currentSenses.flatMap((sense) => splitSenseItems(sense.meaning)),
+    )],
+    [currentSenses],
+  );
+  const hideSenses = hideChineseMeaning
+    || (guessContextFirst && currentSenseItems.length >= 2);
+  // 切换单词时收起释义（渲染期间调整状态，避免沿用上一词的展开状态）
+  const [lastSenseWordId, setLastSenseWordId] = useState(current.id);
+  if (lastSenseWordId !== current.id) {
+    setLastSenseWordId(current.id);
+    setSensesExpanded(false);
+  }
+  const guessSentence =
+    currentEnrichment?.senseExamples?.[0]?.sentence
+    ?? current.sentence;
+  const guessTranslation =
+    currentEnrichment?.senseExamples?.[0]?.translation;
+  // 义项考频等级文案
+  const frequencyLabel = (level: SenseFrequencyEntry["level"]) =>
+    level === "high"
+      ? "★ 高频常考"
+      : level === "medium"
+        ? "◐ 中频"
+        : "· 低频";
+
   const cardClass = [
     "word-card",
     revealed && "revealed",
@@ -205,13 +254,48 @@ export default function WordCard({
       {/* 揭示后：释义面板 */}
       {revealed && redbookReady && reinforcementRating === null && (
         <div className="meaning-panel">
-          <div className="meaning-main">
+          {hideSenses && !sensesExpanded && (
+            <div className="meaning-hidden">
+              {guessSentence ? (
+                <>
+                  <p className="guess-context-label">
+                    读英文句子，猜猜 {current.word} 在这个语境里的意思
+                  </p>
+                  <p className="context-sentence">{guessSentence}</p>
+                  {guessTranslation && (
+                    <small className="guess-context-hint">
+                      {guessTranslation}
+                    </small>
+                  )}
+                </>
+              ) : (
+                <p className="guess-context-label">
+                  释义已隐藏，先在心里回忆 {current.word} 的含义
+                </p>
+              )}
+              <button
+                type="button"
+                className="meaning-reveal"
+                onClick={() => setSensesExpanded(true)}
+              >
+                显示释义
+              </button>
+            </div>
+          )}
+          {(!hideSenses || sensesExpanded) && (
+            <>
+              <div className="meaning-main">
             {currentSenses.map((sense) => (
               <div className="meaning-row" key={sense.part}>
                 <span>{sense.part}</span>
                 <div className="meaning-sense-list">
-                  {splitSenseItems(sense.meaning).map((meaning) => {
+                  {splitSenseItems(sense.meaning).map((meaning, senseIndex) => {
                     const familiar = currentFamiliarMeanings.has(meaning);
+                    const frequency = currentSenseFrequency?.find(
+                      (entry) => entry.meaning === meaning,
+                    );
+                    // 全局第一个义项视为红宝书核心义
+                    const isCore = currentSenseItems[0] === meaning;
                     return (
                       <button
                         type="button"
@@ -225,15 +309,77 @@ export default function WordCard({
                           familiar ? "取消熟练标记" : "标记为熟练义项"
                         }
                       >
+                        <span className="sense-index">{senseIndex + 1}</span>
                         {meaning}
+                        {frequency && (
+                          <small className={`sense-frequency ${frequency.level}`}>
+                            {frequencyLabel(frequency.level)}
+                          </small>
+                        )}
+                        {!frequency && isCore && (
+                          <small className="sense-core">核心义</small>
+                        )}
                         {familiar && <small>✓ 熟练</small>}
+                        {frequency?.note && (
+                          <em className="sense-frequency-note">{frequency.note}</em>
+                        )}
                       </button>
                     );
                   })}
                 </div>
               </div>
             ))}
-          </div>
+              </div>
+              {hideSenses && sensesExpanded && (
+                <button
+                  type="button"
+                  className="meaning-collapse"
+                  onClick={() => setSensesExpanded(false)}
+                >
+                  收起释义
+                </button>
+              )}
+            </>
+          )}
+
+          {/* 义项考频生成（多义词、释义可见、未缓存时） */}
+          {currentSenseItems.length >= 2
+            && !currentSenseFrequency
+            && (!hideSenses || sensesExpanded) && (
+            <button
+              type="button"
+              className="sense-frequency-generate"
+              onClick={onGenerateSenseFrequency}
+              disabled={frequencyLoading}
+            >
+              {frequencyLoading
+                ? "正在分析各义项考频…"
+                : `生成义项考频提示（${currentSenseItems.length} 个义项）`}
+            </button>
+          )}
+
+          {/* 跨词例句复用：该词出现在已生成/已见的例句里 */}
+          {reusedSentences.length > 0 && (!hideSenses || sensesExpanded) && (
+            <div className="reused-sentences">
+              <span>该词出现在这些已见例句</span>
+              <ol>
+                {reusedSentences.slice(0, 3).map((item, index) => (
+                  <li key={`${item.sourceWord}-${index}`}>
+                    <p className="context-sentence">{item.sentence}</p>
+                    {!hideChineseMeaning && item.translation && (
+                      <p className="context-translation">{item.translation}</p>
+                    )}
+                    <small>来自 {item.sourceWord} 的例句</small>
+                  </li>
+                ))}
+              </ol>
+              {reusedSentences.length > 3 && (
+                <small className="reused-more">
+                  还有 {reusedSentences.length - 3} 条例句，复习时划词即可查看
+                </small>
+              )}
+            </div>
+          )}
 
           {/* 词族 */}
           {current.relation && (
@@ -356,7 +502,9 @@ export default function WordCard({
                   ? "全部中文义项已标记熟练"
                   : enrichmentLoading
                     ? "正在按未熟练义项生成并校验格式…"
-                    : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
+                    : reusedSentences.length
+                      ? `已有 ${reusedSentences.length} 条例句含该词可复用，仍可生成专属例句`
+                      : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
               </p>
             </button>
           )}

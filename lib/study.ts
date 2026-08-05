@@ -8,6 +8,8 @@ import {
   rebuildWordProgress,
   type Rating,
   type ReviewEvent,
+  type SenseFrequencyEntry,
+  type SenseFrequencyMap,
   type SerializedFsrsCard,
   type StubbornWordMap,
   type StubbornWordRecord,
@@ -103,6 +105,18 @@ export type LookupWord = {
 
 export type FamiliarMeaningMap = Record<number, string[]>;
 
+export type LookupStat = {
+  /** 累计查询次数 */
+  count: number;
+  /** 首次查询时间 */
+  firstAt: string;
+  /** 最近查询时间 */
+  lastAt: string;
+};
+
+/** 划词查询次数统计：key 为小写查询词 */
+export type LookupStats = Record<string, LookupStat>;
+
 export type StudyMode = "ordered" | "shuffled";
 export type StudyScope = "selection" | "all";
 export type StudyPositions = Record<string, number>;
@@ -120,6 +134,9 @@ export type StoredState = {
   activeQuiz?: QuizSessionState;
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
+  lookupStats: LookupStats;
+  /** 多义词义项考频（AI 生成，按需缓存） */
+  senseFrequency: SenseFrequencyMap;
   familiarMeanings: FamiliarMeaningMap;
   started: boolean;
   dailyGoal: number;
@@ -127,6 +144,10 @@ export type StoredState = {
   minimumNewWords: number;
   examDate: string;
   soundOn: boolean;
+  /** 隐藏学习卡下方释义的中文 */
+  hideChineseMeaning: boolean;
+  /** 多释义单词先显示英文语境句，让人猜测后再展开中文释义 */
+  guessContextFirst: boolean;
   studyMode: StudyMode;
   studyScope: StudyScope;
   shuffleSeed: number;
@@ -270,6 +291,58 @@ function normalizeLookupWords(value: unknown) {
       seen.add(key);
       return true;
     });
+}
+
+function normalizeLookupStats(value: unknown): LookupStats {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: LookupStats = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    const firstAt = validDate(item.firstAt);
+    const lastAt = validDate(item.lastAt);
+    const count = Number(item.count);
+    if (!firstAt || !lastAt || !Number.isInteger(count) || count < 1) continue;
+    const query = key.trim().toLowerCase().slice(0, 160);
+    if (!query) continue;
+    result[query] = {
+      count: Math.min(Number.MAX_SAFE_INTEGER, count),
+      firstAt: firstAt.toISOString(),
+      lastAt: lastAt.toISOString(),
+    };
+  }
+  return result;
+}
+
+function normalizeSenseFrequency(value: unknown): SenseFrequencyMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: SenseFrequencyMap = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const wordId = canonicalWordId(Number(key));
+    if (!isValidStudyWordId(wordId) || !Array.isArray(raw)) continue;
+    const entries = raw
+      .filter((entry): entry is Record<string, unknown> =>
+        Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+      .map((entry) => {
+        const meaning = typeof entry.meaning === "string" ? entry.meaning.trim() : "";
+        const rawLevel = entry.level;
+        const level: SenseFrequencyEntry["level"] | undefined =
+          rawLevel === "high" || rawLevel === "medium" || rawLevel === "low"
+            ? rawLevel
+            : undefined;
+        const note = typeof entry.note === "string" ? entry.note.trim().slice(0, 80) : "";
+        if (!meaning || !level) return null;
+        return {
+          meaning,
+          level,
+          ...(note ? { note } : {}),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .slice(0, 12);
+    if (entries.length) result[wordId] = entries;
+  }
+  return result;
 }
 
 function normalizeFamiliarMeanings(value: unknown): FamiliarMeaningMap {
@@ -1044,6 +1117,8 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     activeSession: normalizeSession(state.activeSession),
     enrichments: normalizeEnrichments(state.enrichments),
     lookupWords: normalizeLookupWords(state.lookupWords),
+    lookupStats: normalizeLookupStats(state.lookupStats),
+    senseFrequency: normalizeSenseFrequency(state.senseFrequency),
     familiarMeanings: normalizeFamiliarMeanings(state.familiarMeanings),
     started: state.started === true,
     dailyGoal: [10, 20, 30, 50].includes(Number(state.dailyGoal))
@@ -1058,6 +1133,8 @@ export function normalizeStoredState(parsed: unknown): StoredState {
       ? state.examDate
       : "",
     soundOn: state.soundOn !== false,
+    hideChineseMeaning: state.hideChineseMeaning === true,
+    guessContextFirst: state.guessContextFirst === true,
     studyMode,
     studyScope,
     shuffleSeed,

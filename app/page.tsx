@@ -19,6 +19,7 @@ import {
   splitMeaning,
   STORAGE_VERSION,
   type FamiliarMeaningMap,
+  type LookupStats,
   type LookupWord,
   type MistakeRecord,
   type RatingUndo,
@@ -45,6 +46,7 @@ import {
   resolveWeakProgress,
   stubbornWordIds,
   weakWordIds,
+  type SenseFrequencyMap,
   type StudySession,
   type StubbornWordMap,
   type WordEnrichment,
@@ -82,6 +84,11 @@ import {
   shuffleWithSeed,
   splitSenseItems,
 } from "../lib/word-utils";
+import {
+  buildSentenceIndex,
+  reusedSentencesFor,
+  type ReusedSentence,
+} from "../lib/sentence-index";
 import {
   learningWordId,
   lookupIdentity,
@@ -149,6 +156,10 @@ export default function Home() {
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const [hideChineseMeaning, setHideChineseMeaning] = useState(false);
+  const [guessContextFirst, setGuessContextFirst] = useState(false);
+  const [lookupStats, setLookupStats] = useState<LookupStats>({});
+  const [senseFrequency, setSenseFrequency] = useState<SenseFrequencyMap>({});
   const [dailyGoal, setDailyGoal] = useState(20);
   const [adaptiveNewWords, setAdaptiveNewWords] = useState(true);
   const [minimumNewWords, setMinimumNewWords] = useState(5);
@@ -282,6 +293,7 @@ export default function Home() {
     wordByText,
     lookupWords,
     setLookupWords,
+    setLookupStats,
     setDictionaryPhonetics,
   });
   const redbookReady = redbookStatus === "ready";
@@ -417,6 +429,16 @@ export default function Home() {
       return a.localeCompare(b);
     });
   }, [redbookWords, selectedSection]);
+  // 跨词例句复用索引：从已缓存释义例句反向匹配包含当前词的句子
+  const sentenceIndex = useMemo(
+    () => buildSentenceIndex({ redbookWords, enrichments }),
+    [enrichments, redbookWords],
+  );
+  const currentReusedSentences: ReusedSentence[] = useMemo(
+    () => reusedSentencesFor(sentenceIndex, current.word),
+    [current.word, sentenceIndex],
+  );
+
   const currentMeaning = splitMeaning(current.meaning);
   const currentSenses = current.part
     ? [{ part: current.part, meaning: currentMeaning.meaning }]
@@ -430,8 +452,16 @@ export default function Home() {
   const unfamiliarMeanings = currentMeaningItems.filter(
     (meaning) => !currentFamiliarMeanings.has(meaning),
   );
-  const reinforcementSentence = current.sentence
-    ? clozeSentence(current.sentence, current.word)
+  // 强化填空例句优先级：含当前词的已见例句 → 当前词释义例句 → 红宝书原句
+  const reinforcementBaseSentence =
+    currentReusedSentences[0]?.sentence
+    ?? currentEnrichment?.senseExamples?.find(
+      (example) => unfamiliarMeanings.includes(example.meaning),
+    )?.sentence
+    ?? currentEnrichment?.senseExamples?.[0]?.sentence
+    ?? current.sentence;
+  const reinforcementSentence = reinforcementBaseSentence
+    ? clozeSentence(reinforcementBaseSentence, current.word)
     : "";
   const reinforcementMeaning = unfamiliarMeanings[0]
     ?? currentMeaningItems[0]
@@ -441,6 +471,7 @@ export default function Home() {
     aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
     enrichmentLoading,
     reviewingSense, rewritingSense,
+    frequencyLoading, generateSenseFrequency,
     setAiOpen, setAiInput, setAiAnswer, setAiMode,
     submitCoach, askCoach, enrichCurrentWord,
     reportSenseMismatch, rewriteSenseExample,
@@ -448,6 +479,7 @@ export default function Home() {
     current,
     enrichments,
     setEnrichments,
+    setSenseFrequency,
     unfamiliarMeanings,
     currentFamiliarMeanings,
     onNotify: showToast,
@@ -539,6 +571,10 @@ export default function Home() {
     minimumNewWords,
     examDate,
     soundOn,
+    hideChineseMeaning,
+    guessContextFirst,
+    lookupStats,
+    senseFrequency,
     studyMode,
     studyScope,
     shuffleSeed,
@@ -564,6 +600,10 @@ export default function Home() {
     selectedUnit,
     shuffleSeed,
     soundOn,
+    hideChineseMeaning,
+    guessContextFirst,
+    lookupStats,
+    senseFrequency,
     started,
     stubbornHistory,
     studyMode,
@@ -888,6 +928,10 @@ export default function Home() {
     setMinimumNewWords(state.minimumNewWords);
     setExamDate(state.examDate);
     setSoundOn(state.soundOn);
+    setHideChineseMeaning(state.hideChineseMeaning);
+    setGuessContextFirst(state.guessContextFirst);
+    setLookupStats(state.lookupStats);
+    setSenseFrequency(state.senseFrequency);
     setFavorites(state.favorites);
     setMistakes(state.mistakes);
     setStubbornHistory(state.stubbornWords);
@@ -1565,6 +1609,13 @@ export default function Home() {
                 currentProgress={currentProgress}
                 isFavorite={isFavorite}
                 hasRecordedAudio={hasRecordedAudio}
+                hideChineseMeaning={hideChineseMeaning}
+                guessContextFirst={guessContextFirst}
+                currentSenseFrequency={
+                  current.id === undefined ? undefined : senseFrequency[current.id]
+                }
+                frequencyLoading={frequencyLoading}
+                reusedSentences={currentReusedSentences}
                 activeSession={activeSession}
                 newCount={stats.newCount}
                 clock={clock}
@@ -1581,6 +1632,7 @@ export default function Home() {
                 onSpeak={speak}
                 onToggleMeaningFamiliar={toggleMeaningFamiliar}
                 onEnrichWord={enrichCurrentWord}
+                onGenerateSenseFrequency={generateSenseFrequency}
                 onReportSenseMismatch={reportSenseMismatch}
                 onRewriteSenseExample={rewriteSenseExample}
                 onTextSelection={handleTextSelection}
@@ -1637,6 +1689,7 @@ export default function Home() {
             mistakeWords={mistakeWords}
             stubbornWordList={stubbornWordList}
             lookupWords={lookupWords}
+            lookupStats={lookupStats}
             ratingLabels={ratingLabels}
             clock={clock}
             favorites={favorites}
@@ -1676,6 +1729,8 @@ export default function Home() {
             effectiveNewGoal={effectiveNewGoal}
             dailyGoal={dailyGoal}
             reviews={reviews}
+            lookupStats={lookupStats}
+            lookupWords={lookupWords}
             clock={clock}
             activityRange={activityRange}
             activityOffset={activityOffset}
@@ -1729,6 +1784,8 @@ export default function Home() {
             examPlan={examPlan}
             examProgress={examProgress}
             soundOn={soundOn}
+            hideChineseMeaning={hideChineseMeaning}
+            guessContextFirst={guessContextFirst}
             studyMode={studyMode}
             studyScope={studyScope}
             learningItemCount={learningItemCount}
@@ -1749,6 +1806,8 @@ export default function Home() {
             onMinWordsChange={setMinimumNewWords}
             onExamDateChange={setExamDate}
             onSoundChange={setSoundOn}
+            onHideChineseMeaningChange={setHideChineseMeaning}
+            onGuessContextFirstChange={setGuessContextFirst}
             onModeChange={(mode) => {
               if (mode === "all") startAllBookShuffle(false);
               else changeStudyMode(mode);

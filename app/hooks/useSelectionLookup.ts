@@ -20,6 +20,7 @@ import {
 } from "../../lib/selection-lookup";
 import {
   splitMeaning,
+  type LookupStats,
   type LookupWord,
   type Word,
 } from "../../lib/study";
@@ -59,6 +60,7 @@ type CommonOptions = {
   currentDictionaryPhonetic?: string;
   lookupWords: LookupWord[];
   setLookupWords: Dispatch<SetStateAction<LookupWord[]>>;
+  setLookupStats: Dispatch<SetStateAction<LookupStats>>;
   setDictionaryPhonetics: Dispatch<
     SetStateAction<Record<number, string>>
   >;
@@ -142,6 +144,7 @@ export function useSelectionLookup(
     currentDictionaryPhonetic = "",
     lookupWords,
     setLookupWords,
+    setLookupStats,
     setDictionaryPhonetics,
   } = options;
   const suppliedWordByText = options.wordByText;
@@ -198,6 +201,24 @@ export function useSelectionLookup(
     dictionaryLetterRangeIndexPromiseRef.current[letter] = request;
     return request;
   }, []);
+
+  /** 记录一次划词查询：累计次数并更新最近查询时间 */
+  const recordLookup = useCallback((query: string) => {
+    const key = query.trim().toLowerCase();
+    if (!key) return;
+    const now = new Date().toISOString();
+    setLookupStats((items) => {
+      const previous = items[key];
+      return {
+        ...items,
+        [key]: {
+          count: (previous?.count ?? 0) + 1,
+          firstAt: previous?.firstAt ?? now,
+          lastAt: now,
+        },
+      };
+    });
+  }, [setLookupStats]);
 
   const closeSelectionLookup = useCallback(() => {
     lookupAbortRef.current?.abort();
@@ -453,6 +474,7 @@ export function useSelectionLookup(
         lookupMode,
       });
       saveLookupWord(resolved.result);
+      recordLookup(query);
       setSelectionLookup({
         query,
         context,
@@ -500,6 +522,7 @@ export function useSelectionLookup(
     findInLocalDictionary,
     resolveKnownLocal,
     saveLookupWord,
+    recordLookup,
   ]);
 
   const translateSelection = useCallback(async (
@@ -579,6 +602,7 @@ export function useSelectionLookup(
         }
         if (dictionaryResult) {
           saveLookupWord(dictionaryResult);
+          recordLookup(query);
           setSelectionLookup({
             query,
             context,
@@ -625,6 +649,7 @@ export function useSelectionLookup(
       lookupCacheRef.current = Object.fromEntries(entries);
       writeLookupCache(lookupCacheRef.current);
       saveLookupWord(trustedResult);
+      recordLookup(query);
       setSelectionLookup({
         query,
         context,
@@ -656,6 +681,7 @@ export function useSelectionLookup(
     lookupLocalPhonetic,
     resolveKnownLocal,
     saveLookupWord,
+    recordLookup,
     selectionLookup,
     setSelectionLookup,
   ]);

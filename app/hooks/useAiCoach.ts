@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { SenseExample, WordEnrichment } from "../../lib/learning";
+import type { SenseExample, SenseFrequencyEntry, SenseFrequencyMap, WordEnrichment } from "../../lib/learning";
 import type { Word } from "../../lib/study";
 import { buildLocalCoach } from "../../lib/word-utils";
 
@@ -15,6 +15,7 @@ type UseAiCoachOptions = {
   current: Word;
   enrichments: Record<number, WordEnrichment>;
   setEnrichments: Dispatch<SetStateAction<Record<number, WordEnrichment>>>;
+  setSenseFrequency: Dispatch<SetStateAction<SenseFrequencyMap>>;
   unfamiliarMeanings: string[];
   currentFamiliarMeanings: Set<string>;
   onNotify: (message: string, duration?: number) => void;
@@ -27,6 +28,7 @@ export function useAiCoach({
   current,
   enrichments,
   setEnrichments,
+  setSenseFrequency,
   unfamiliarMeanings,
   currentFamiliarMeanings,
   onNotify,
@@ -41,6 +43,7 @@ export function useAiCoach({
   const [enrichmentLoading, setEnrichmentLoading] = useState(false);
   const [reviewingSense, setReviewingSense] = useState<number | null>(null);
   const [rewritingSense, setRewritingSense] = useState<number | null>(null);
+  const [frequencyLoading, setFrequencyLoading] = useState(false);
 
   // 保持 current 引用最新，避免闭包陷阱
   const currentRef = useRef(current);
@@ -168,6 +171,48 @@ export function useAiCoach({
     }
   }, [aiLoading]);
 
+  /** 生成当前多义词的义项考频标注并缓存；失败时保留编号兜底 */
+  async function generateSenseFrequency() {
+    const word = currentRef.current;
+    if (word.id === undefined || frequencyLoading) return;
+    const items = currentRef.current.meaning
+      ? currentRef.current.meaning
+          .split(/[;；]/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 8)
+      : [];
+    if (items.length < 2) {
+      onNotify("这个词只有一个义项，无需考频提示", 1800);
+      return;
+    }
+    setFrequencyLoading(true);
+    try {
+      const response = await fetch("/api/sense-frequency", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: word.word, senses: items }),
+        signal: AbortSignal.timeout(25000),
+      });
+      const data = await response.json() as {
+        senses?: SenseFrequencyEntry[];
+        error?: string;
+      };
+      if (!response.ok || !Array.isArray(data.senses) || data.senses.length === 0) {
+        throw new Error(data.error ?? "义项考频生成失败");
+      }
+      setSenseFrequency((items) => ({ ...items, [word.id!]: data.senses! }));
+      onNotify("已生成义项考频标注并缓存", 2200);
+    } catch (error) {
+      onNotify(
+        error instanceof Error ? error.message : "义项考频生成失败",
+        2400,
+      );
+    } finally {
+      setFrequencyLoading(false);
+    }
+  }
+
   async function enrichCurrentWord() {
     const word = currentRef.current;
     if (word.id === undefined || enrichmentLoading) return;
@@ -293,6 +338,7 @@ export function useAiCoach({
     enrichmentLoading,
     reviewingSense,
     rewritingSense,
+    frequencyLoading,
     setAiOpen,
     setAiInput,
     setAiAnswer,
@@ -300,6 +346,7 @@ export function useAiCoach({
     submitCoach,
     askCoach,
     enrichCurrentWord,
+    generateSenseFrequency,
     reportSenseMismatch,
     rewriteSenseExample,
   } as const;

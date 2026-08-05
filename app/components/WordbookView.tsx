@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { splitMeaning, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
+import { dateKey, splitMeaning, type LookupStats, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
 import { wordRetrievability, type StubbornWordRecord, type WordProgress } from "../../lib/learning";
 
 type FavoriteWordItem = SavedWord & { word: Word };
@@ -16,6 +16,7 @@ type WordbookViewProps = {
   mistakeWords: MistakeWordItem[];
   stubbornWordList: StubbornWordItem[];
   lookupWords: LookupWord[];
+  lookupStats: LookupStats;
   ratingLabels: string[];
   clock: number;
   favorites: SavedWord[];
@@ -37,6 +38,7 @@ export default function WordbookView({
   mistakeWords,
   stubbornWordList,
   lookupWords,
+  lookupStats,
   ratingLabels,
   clock,
   favorites,
@@ -52,6 +54,16 @@ export default function WordbookView({
   onNavigateLearn,
 }: WordbookViewProps) {
   const now = new Date(clock);
+  const todayKey = dateKey(now);
+  const totalLookupCount = Object.values(lookupStats)
+    .reduce((sum, stat) => sum + stat.count, 0);
+  const todayNewLookups = lookupWords.filter(
+    (item) => dateKey(item.addedAt) === todayKey,
+  ).length;
+  const recentLookupAt = Object.values(lookupStats)
+    .map((stat) => stat.lastAt)
+    .sort()
+    .at(-1);
   const batchAction = {
     favorites: {
       label: "复习全部收藏",
@@ -227,6 +239,16 @@ export default function WordbookView({
             </div>
           </article>
         ))}
+        {activeTab === "lookups" && lookupWords.length > 0 && (
+          <div className="lookup-stats-strip">
+            <span><strong>{totalLookupCount}</strong> 累计查询</span>
+            <span><strong>{todayNewLookups}</strong> 今日新增</span>
+            <span><strong>{lookupWords.length}</strong> 划词收录</span>
+            {recentLookupAt && (
+              <span>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
+            )}
+          </div>
+        )}
         {activeTab === "lookups" && lookupWords.map((item) => (
           <article
             className="saved-word-card lookup-word-card"
@@ -249,6 +271,12 @@ export default function WordbookView({
                   : item.source === "dictionary"
                     ? "ECDICT 本地辞典"
                     : "DS Flash"}
+                {(() => {
+                  const stat = lookupStats[item.query.toLowerCase()];
+                  if (!stat) return "";
+                  const time = new Date(stat.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+                  return ` · 查询 ${stat.count} 次 · 最近 ${time}`;
+                })()}
               </small>
             </div>
             <div className="saved-word-actions">

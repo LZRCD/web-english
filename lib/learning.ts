@@ -122,6 +122,19 @@ export type WordEnrichment = {
   verified?: boolean;
 };
 
+export type SenseFrequencyLevel = "high" | "medium" | "low";
+
+export type SenseFrequencyEntry = {
+  /** 与红宝书义项文本一致 */
+  meaning: string;
+  /** 考研语境下的考频等级：high 高频常考 / medium 中频 / low 低频 */
+  level: SenseFrequencyLevel;
+  /** 简短提示，如「真题常考熟词僻义」 */
+  note?: string;
+};
+
+/** 多义词义项考频：key 为学习项 wordId */
+export type SenseFrequencyMap = Record<number, SenseFrequencyEntry[]>;
 export type RatingResult = {
   review: ReviewEvent;
   progress: WordProgress;
