@@ -251,7 +251,7 @@ test("考前薄弱冲刺：只选已学且命中薄弱信号的词，按薄弱�
       makeReview(3, 2, "2026-07-28T00:00:00.000Z"), // 已学但无信号
     ],
     wordProgress: {
-      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-20T00:00:00.000Z" },
       2: { wordId: 2, lapseCount: 2, lastRating: 0, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
       3: { wordId: 3, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
     } as unknown as WordProgressMap,
@@ -350,7 +350,7 @@ test("薄弱阈值参数化：不同阈值产出不同薄弱画像", () => {
     lookupWords: [lookupWord("a", 1)],
     reviews: [makeReview(1, 2, "2026-07-28T00:00:00.000Z", 16_000)],
     wordProgress: {
-      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-20T00:00:00.000Z" },
     } as unknown as WordProgressMap,
   });
   // 默认阈值：查过 3 次 ≥2 命中；回忆 16s ≥15s 命中
@@ -850,7 +850,7 @@ test("冲刺复发：上周冲刺解决词中当前仍薄弱者计为复发", ()
     },
     lookupWords: [lookupWord("word-1", 1)],
     wordProgress: {
-      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-11T08:00:00.000Z" },
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-05T08:00:00.000Z" },
       2: { wordId: 2, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-06T08:00:00.000Z" },
       3: { wordId: 3, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-08-11T08:00:00.000Z" },
     } as unknown as WordProgressMap,
@@ -894,4 +894,46 @@ test("冲刺复发：全部解决词无复发则复发率 0", () => {
   assert.equal(result.relapsedCount, 0);
   assert.equal(result.relapseRate, 0);
   assert.deepEqual(result.relapsedIds, []);
+});
+
+test("薄弱降级贯通：答对且查询不再增长 → 查词标签消失，其他信号保留", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    guessMistakes: { 1: 2 },
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  // lastRating 3 且 lastReviewedAt(07-28) >= lastAt(07-25) → 降级：查词标签消失，猜错保留
+  assert.deepEqual(buildWordWeakSignals(1, input), ["猜错2次"]);
+});
+
+test("薄弱降级贯通：查询仍增长（最近查询晚于评分）不降级", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-30T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  // lastAt(07-30) 晚于 lastReviewedAt(07-28) → 查询还在增长，不降级
+  assert.deepEqual(buildWordWeakSignals(1, input), ["查过5次"]);
+});
+
+test("薄弱降级贯通：未答对（lastRating<2）不降级", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 1, lastRating: 1, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  assert.deepEqual(buildWordWeakSignals(1, input), ["查过3次", "FSRS lapse 1"]);
 });

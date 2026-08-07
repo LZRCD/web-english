@@ -164,8 +164,13 @@ export function buildWordWeakSignals(
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): string[] {
   const signals: string[] = [];
-  const lookupCount = lookupById.get(wordId)?.count ?? 0;
-  if (lookupCount >= thresholds.lookupWeak) {
+  const lookupStat = lookupById.get(wordId);
+  const lookupCount = lookupStat?.count ?? 0;
+  // 答对且查询不再增长（isLookupDemoted）→ 查词标签淡出，与插队队列降级口径贯通
+  if (
+    lookupCount >= thresholds.lookupWeak
+    && !(lookupStat && isLookupDemoted(wordId, lookupStat, input))
+  ) {
     signals.push(`查过${lookupCount}次`);
   }
   const guessCount = input.guessMistakes[wordId] ?? 0;
