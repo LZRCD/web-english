@@ -4691,6 +4691,64 @@ kbd {
   }
 }
 
+/* ---- 信号联动十二轮：冲刺成效 4 周 / 集中区冲刺按钮 / 占比 ---- */
+.sprint-effectiveness-series {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.sprint-effectiveness-week {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f8f5;
+}
+.sprint-effectiveness-week > span {
+  color: #6f7a72;
+  font-size: 9px;
+}
+.sprint-effectiveness-week > strong {
+  color: #27352e;
+  font: 400 16px/1.2 Georgia, serif;
+}
+.sprint-effectiveness-week > small {
+  color: #858d85;
+  font-size: 9px;
+}
+.sprint-effectiveness-week > small.positive { color: #34835f; }
+.sprint-effectiveness-week > small.negative { color: #c36f52; }
+.sprint-effectiveness-week > small.neutral { color: #858d85; }
+
+.weak-concentration-count small {
+  margin-left: 2px;
+  color: #858d85;
+  font-size: 9px;
+}
+.concentration-sprint {
+  border: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #2f7d58;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.concentration-sprint:hover {
+  background: #27694b;
+}
+.concentration-sprint:disabled {
+  background: #cfd8d2;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .sprint-effectiveness-series {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---- 信号联动十一轮：薄弱集中区 / 冲刺成效 ---- */
 .weak-concentration {
   margin-top: 13px;
@@ -4701,7 +4759,7 @@ kbd {
 }
 .weak-concentration-row {
   display: grid;
-  grid-template-columns: auto minmax(60px, 1fr) auto auto;
+  grid-template-columns: auto minmax(60px, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding: 7px 0;

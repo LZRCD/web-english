@@ -56,6 +56,8 @@ type WordCardProps = {
   currentRecallStats?: WordRecallStats;
   /** 冲刺会话中展示：该词因哪些薄弱信号进入冲刺 */
   sprintWeakSignals?: string[];
+  /** 该词的薄弱信号时间线文本（多行，供标签悬停查看） */
+  signalTimelineText?: string;
   /** 点击例句来源词跳转到该词学习卡；sourceId 缺失时降级为纯文本 */
   onFocusSourceWord?: (sourceId: number | undefined, sourceWord: string) => void;
 
@@ -120,6 +122,7 @@ export default function WordCard({
   currentLookupStat,
   currentRecallStats,
   sprintWeakSignals,
+  signalTimelineText,
   onFocusSourceWord,
   activeSession,
   newCount,
@@ -315,7 +318,7 @@ export default function WordCard({
             </p>
           )}
           {sprintWeakSignals && sprintWeakSignals.length > 0 && (
-            <div className="sprint-weak-reasons">
+            <div className="sprint-weak-reasons" title={signalTimelineText}>
               <span>本词因以下信号进入冲刺：</span>
               <div className="weak-signal-tags">
                 {sprintWeakSignals.map((signal) => (

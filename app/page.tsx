@@ -60,12 +60,15 @@ import {
 } from "../lib/insights";
 import {
   buildSprintCsv,
+  buildSprintEffectivenessSeries,
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
+  buildScopedSprintWordIds,
   buildWeakConcentration,
   buildWeakDimensionTrendSeries,
+  buildWordSignalTimeline,
   buildWeakProfiles,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
@@ -464,6 +467,21 @@ export default function Home() {
     () => buildWeakConcentration(weakSignalInput, wordById, weakThresholds),
     [weakSignalInput, wordById, weakThresholds],
   );
+  const sprintEffectivenessSeries = useMemo(
+    () => buildSprintEffectivenessSeries(reviews, new Date(clock)),
+    [reviews, clock],
+  );
+  const sectionUnitTotals = useMemo(() => {
+    const totals = new Map<string, Map<string, number>>();
+    for (const [id, word] of wordById) {
+      if (id === undefined || !word.section) continue;
+      const unitKey = word.unit === undefined ? "未分单元" : String(word.unit);
+      const sectionUnits = totals.get(word.section) ?? new Map<string, number>();
+      sectionUnits.set(unitKey, (sectionUnits.get(unitKey) ?? 0) + 1);
+      totals.set(word.section, sectionUnits);
+    }
+    return totals;
+  }, [wordById]);
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
     minimumNewWords,
@@ -1452,6 +1470,25 @@ export default function Home() {
     startSession("sprint", "考前薄弱冲刺", sprintWordIds);
   }
 
+  // 集中区按分册/单元发起冲刺：只带该区域命中薄弱信号的词
+  function startScopedSprint(section: string, unit?: string) {
+    const scope = unit === undefined ? { section } : { section, unit };
+    const wordIds = buildScopedSprintWordIds(
+      weakSignalInput,
+      wordById,
+      scope,
+      weakThresholds,
+    );
+    if (!wordIds.length) {
+      showToast("该区域暂无薄弱词可冲刺", 1800);
+      return;
+    }
+    startSession(
+      "sprint",
+      `薄弱冲刺 · ${section}${unit ? ` ${unit}` : ""}`,
+      wordIds,
+    );
+  }
   // 从完成页一键再冲刺：只带「仍需关注」的词
   function startResprintSession() {
     const stillWeakIds = sprintCompletionSummary?.stillWeakWords.map(
@@ -1821,7 +1858,7 @@ export default function Home() {
               <SessionCompleteView
                 summary={sessionCompletionSummary}
                 sprintSummary={sprintCompletionSummary}
-                sprintDimensionTrend={sprintDimensionTrend}
+                sprintDimensionTrend={sprintDimensionTrend ?? []}
                 onResprint={startResprintSession}
                 onReinforce={(wordIds) => {
                   const originKind = activeSession?.kind === "reinforcement"
@@ -1875,6 +1912,13 @@ export default function Home() {
                   activeSession?.kind === "sprint" && current.id !== undefined
                     ? buildWordWeakSignals(current.id, weakSignalInput, undefined, weakThresholds)
                     : undefined
+                }
+                signalTimelineText={
+                  current.id === undefined
+                    ? undefined
+                    : buildWordSignalTimeline(current.id, weakSignalInput, weakThresholds)
+                        .map((event) => `${new Date(event.at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} ${event.detail}`)
+                        .join("\n") || undefined
                 }
                 onFocusSourceWord={focusSourceWord}
                 activeSession={activeSession}
@@ -2018,6 +2062,10 @@ export default function Home() {
             onCopySprint={copySprintSummary}
             onExportSprint={exportSprintCsv}
             weakConcentration={weakConcentration}
+            sprintEffectivenessSeries={sprintEffectivenessSeries}
+            sprintDimensionTrend={sprintDimensionTrend ?? []}
+            sectionUnitTotals={sectionUnitTotals}
+            onScopedSprint={startScopedSprint}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {
               setActivityRange(range);

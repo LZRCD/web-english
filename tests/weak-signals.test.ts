@@ -9,14 +9,17 @@ import type { LookupWord, Word } from "../lib/study.ts";
 import {
   buildSprintCsv,
   buildSprintEffectiveness,
+  buildSprintEffectivenessSeries,
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
+  buildScopedSprintWordIds,
   buildWeakConcentration,
   buildWeakDimensionTrend,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
+  buildWordSignalTimeline,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
   emphasizedWeakDimensions,
@@ -569,6 +572,10 @@ test("薄弱集中度：阈值参数生效（提高查词阈值后集中度下�
       "word-2": { count: 1, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
     },
     lookupWords: [lookupWord("word-1", 1), lookupWord("word-2", 2)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
   });
   const wordById = new Map<number, Word>([
     [1, makeWord(1, "必考词", 1)],
@@ -599,4 +606,172 @@ test("冲刺清单 CSV：含 BOM 表头，逗号/双引号/换行转义", () => 
 
 test("冲刺清单 CSV：空清单返回空串", () => {
   assert.equal(buildSprintCsv([]), "");
+});
+
+test("冲刺成效 4 周：多周聚合、空周返回 null、与单周口径一致", () => {
+  const reviews = [
+    // 本周（2026-08-10 周一）冲刺
+    { ...makeReview(1, 2, "2026-08-10T08:05:00.000Z", 8_000), sessionId: "sprint:2026-08-10" },
+    { ...makeReview(1, 1, "2026-08-08T08:00:00.000Z", 10_000) },
+    // 上周（2026-08-03 周一）冲刺
+    { ...makeReview(2, 2, "2026-08-05T08:00:00.000Z", 6_000), sessionId: "sprint:2026-08-05" },
+    { ...makeReview(2, 1, "2026-08-01T08:00:00.000Z", 12_000) },
+  ];
+  const series = buildSprintEffectivenessSeries(
+    reviews,
+    new Date("2026-08-14T12:00:00.000Z"),
+    3,
+  );
+  assert.equal(series.length, 3);
+  assert.deepEqual(
+    series.map((week) => week.weekStart),
+    ["2026-07-27", "2026-08-03", "2026-08-10"],
+  );
+  // 本周
+  assert.equal(series[2].effectiveness?.sprintCount, 1);
+  assert.equal(series[2].effectiveness?.resolvedCount, 1);
+  assert.equal(series[2].effectiveness?.beforeAverageRecallMs, 10_000);
+  assert.equal(series[2].effectiveness?.sprintAverageRecallMs, 8_000);
+  // 上周
+  assert.equal(series[1].effectiveness?.sprintCount, 1);
+  assert.equal(series[1].effectiveness?.beforeAverageRecallMs, 12_000);
+  // 前周无冲刺
+  assert.equal(series[0].effectiveness, null);
+  // 与单周口径一致
+  const single = buildSprintEffectiveness(
+    reviews,
+    new Date("2026-08-14T12:00:00.000Z"),
+  );
+  assert.deepEqual(series[2].effectiveness, single);
+});
+
+test("限定范围冲刺：按 section 精确过滤、unit 字符串归一、空 scope 全量", () => {
+  const input = baseInput({
+    guessMistakes: { 1: 2, 2: 3, 3: 1 },
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+      3: { wordId: 3, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2, "必考词", 2)],
+    [3, makeWord(3, "基础词", 5)],
+  ]);
+  // 全量：三个词均薄弱（猜错 > 0）
+  assert.deepEqual(
+    [...buildScopedSprintWordIds(input, wordById)].sort(),
+    [1, 2, 3],
+  );
+  // 按 section 过滤
+  assert.deepEqual(
+    [...buildScopedSprintWordIds(input, wordById, { section: "必考词" })].sort(),
+    [1, 2],
+  );
+  // section + unit（unit 传字符串，数字 unit 归一匹配）
+  assert.deepEqual(
+    buildScopedSprintWordIds(input, wordById, { section: "必考词", unit: "1" }),
+    [1],
+  );
+  // 无匹配
+  assert.deepEqual(buildScopedSprintWordIds(input, wordById, { section: "超纲词" }), []);
+});
+
+test("限定范围冲刺：无薄弱词返回空，阈值参数生效", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+      "word-2": { count: 1, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1), lookupWord("word-2", 2)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-27T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2, "必考词", 2)],
+  ]);
+  assert.deepEqual(buildScopedSprintWordIds(baseInput(), wordById), []);
+  // 默认 lookupWeak=2：词 1 命中
+  assert.deepEqual(
+    buildScopedSprintWordIds(input, wordById, { section: "必考词" }),
+    [1],
+  );
+  // 阈值提高到 4：都不命中
+  assert.deepEqual(
+    buildScopedSprintWordIds(
+      input,
+      wordById,
+      { section: "必考词" },
+      { ...DEFAULT_WEAK_THRESHOLDS, lookupWeak: 4 },
+    ),
+    [],
+  );
+});
+
+test("词级信号时间线：评分/测验/查词/顽固词各源提取并按时间升序", () => {
+  const input = baseInput({
+    reviews: [
+      makeReview(10, 0, "2026-07-27T01:00:00.000Z", 18_000), // 慢 + lapse
+      makeReview(10, 3, "2026-07-28T01:00:00.000Z", 5_000), // 正常，不入时间线
+    ],
+    quizAttempts: [
+      {
+        id: "q1",
+        wordId: 10,
+        mode: "listening-spelling",
+        correct: false,
+        recallMs: 3_000,
+        answeredAt: "2026-07-26T00:00:00.000Z",
+        appliedToSchedule: false,
+      },
+    ],
+    lookupStats: {
+      "word-10": { count: 3, firstAt: "2026-07-20T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-10", 10)],
+    stubbornWords: {
+      10: {
+        wordId: 10,
+        active: true,
+        reason: "again-3",
+        triggeredAt: "2026-07-29T00:00:00.000Z",
+        lastChangedAt: "2026-07-29T00:00:00.000Z",
+        triggerCount: 1,
+      },
+    },
+  });
+  const events = buildWordSignalTimeline(10, input);
+  assert.ok(events.length >= 5);
+  // 时间升序
+  for (let index = 1; index < events.length; index += 1) {
+    assert.ok(events[index - 1].at <= events[index].at);
+  }
+  // 慢样本标记
+  assert.ok(events.some((event) =>
+    event.type === "slow-recall" && event.detail.includes("18.0")));
+  // lapse
+  assert.ok(events.some((event) => event.type === "lapse"));
+  // 测验答错
+  assert.ok(events.some((event) =>
+    event.type === "quiz" && event.detail.includes("拼写测验")));
+  // 查词首次/最近
+  assert.ok(events.some((event) =>
+    event.type === "lookup" && event.detail.includes("首次")));
+  assert.ok(events.some((event) =>
+    event.type === "lookup" && event.detail.includes("最近")));
+  // 顽固词
+  assert.ok(events.some((event) => event.type === "stubborn"));
+});
+
+test("词级信号时间线：无记录返回空，非目标词不混入", () => {
+  const input = baseInput({
+    reviews: [makeReview(1, 0, "2026-07-27T01:00:00.000Z", 18_000)],
+    guessMistakes: { 2: 3 },
+  });
+  assert.deepEqual(buildWordSignalTimeline(99, input), []);
+  assert.deepEqual(buildWordSignalTimeline(1, baseInput()), []);
 });

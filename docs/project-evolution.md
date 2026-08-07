@@ -682,3 +682,24 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 138/138 通过，新增 8 用例覆盖：冲刺成效周聚合/去重/无记录返回 null/回忆降幅/baseline 排除冲刺会话、薄弱集中度分组排序/空与 section 缺失/阈值参数生效、CSV 逗号引号换行转义/空清单/BOM。
 - 未启动本地开发服务器：三项均为新增展示区块与导出按钮，不触碰既有 4 条 E2E 链路，signal-flow.spec.mjs 无需改动。
+
+## 第三十一次迭代：信号联动十二轮（冲刺成效 4 周、集中区一键冲刺、词级信号时间线）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 冲刺成效跨周趋势：`lib/weak-signals.ts` 新增 `buildSprintEffectivenessSeries(reviews, now, weeks=4)`——复用 `buildSprintEffectiveness` 的单周口径，对每周围一个该周内的 now 派生（`localWeekStart` + 周中点），无冲刺周的周为 null（不虚报 0），返回 `{ weekStart, effectiveness }[]` 按时间升序；轨迹页「本周冲刺成效」栏下方新增「冲刺成效 4 周」迷你趋势（每周冲刺次数 / 解决词数 / 平均回忆降幅，空周显示 —）。
+- 冲刺维度归因：周报区新增「冲刺维度归因」栏——复用 page.tsx 已有 `sprintDimensionTrend`（`mergeSprintWithTrend` 合并完成页维度分布与周报 weakTrend），已清零维度标绿、周报仍薄弱标红，零新派生。
+- 薄弱集中区一键冲刺：`lib/weak-signals.ts` 新增 `buildScopedSprintWordIds(input, wordById, scope, thresholds)`——先 `buildSprintWordIds` 全量派生再按 section/unit 过滤（unit 字符串归一、无 section 词在按 section 过滤时不入选、空 scope 返回全量）；page.tsx 新增 `startScopedSprint(section, unit?)` 用 `startSession("sprint", ...)` 起限定范围冲刺；集中区每行新增「冲刺」按钮（无薄弱词禁用），并补占比（section 薄弱占比显示行尾、unit 占比显示悬停明细，`sectionUnitTotals` 由 wordById 派生）。
+- 词级信号时间线：`lib/weak-signals.ts` 新增 `buildWordSignalTimeline(wordId, input, thresholds)`——从评分（回忆偏慢/lapse）、测验答错、查词（首次/最近）、顽固词触发提取该词信号时间点，按时间升序；学习卡冲刺信号标签区新增悬停 title 展示多行时间线（无记录不显示）。
+
+### 修正
+
+- 无。本轮为增量联动，未改动评分、排程、备份等既有数据链路；三个派生函数均不新增 schema。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 143/143 通过，新增 5 用例覆盖：冲刺成效 4 周多周聚合/空周 null/与单周口径一致、限定范围冲刺 section 过滤/unit 归一/空 scope 全量/空结果/阈值参数、词级时间线各源提取/时间排序/空与异词不混入。
+- 未启动本地开发服务器：均为新增展示区块与按钮/tooltip，不触碰既有 4 条 E2E 链路，signal-flow.spec.mjs 无需改动。

@@ -479,6 +479,37 @@ export function buildSprintEffectiveness(
   };
 }
 
+/** 某周冲刺成效（无该周冲刺记录时为 null） */
+export type SprintEffectivenessWeek = {
+  weekStart: string;
+  effectiveness: SprintEffectiveness | null;
+};
+
+/**
+ * 冲刺成效近 N 周序列（含本周，按时间升序）。
+ * 复用 buildSprintEffectiveness 的单周口径：对每周围一个该周内的 now 派生，
+ * 无冲刺周的周为 null（不虚报 0），与 buildWeakDimensionTrendSeries 同构。
+ */
+export function buildSprintEffectivenessSeries(
+  reviews: readonly ReviewEvent[],
+  now = new Date(),
+  weeks = 4,
+): SprintEffectivenessWeek[] {
+  const thisWeekStart = localWeekStart(now);
+  const count = Math.max(1, Math.trunc(weeks));
+  const series: SprintEffectivenessWeek[] = [];
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const start = addLocalDays(thisWeekStart, -offset * 7);
+    const weekNow = addLocalDays(start, 3);
+    weekNow.setHours(12, 0, 0, 0);
+    series.push({
+      weekStart: localDateKey(start),
+      effectiveness: buildSprintEffectiveness(reviews, weekNow),
+    });
+  }
+  return series;
+}
+
 /** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,
@@ -518,6 +549,35 @@ export function buildSprintWordIds(
     .map((item) => item.wordId);
 }
 
+/** 冲刺范围：按词本分册/单元过滤（unit 统一按字符串匹配） */
+export type SprintScope = {
+  section?: string;
+  unit?: string;
+};
+
+/**
+ * 限定范围的冲刺候选：先 buildSprintWordIds 全量派生，再按 section/unit 过滤；
+ * 空 scope 返回全量；无 section 的词在按 section 过滤时不入选。
+ */
+export function buildScopedSprintWordIds(
+  input: WeakSignalInput,
+  wordById: ReadonlyMap<number | undefined, import("./study.ts").Word>,
+  scope: SprintScope = {},
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): number[] {
+  const sprintIds = buildSprintWordIds(input, thresholds);
+  if (!scope.section && scope.unit === undefined) return sprintIds;
+  return sprintIds.filter((wordId) => {
+    const word = wordById.get(wordId);
+    if (!word) return false;
+    if (scope.section && word.section !== scope.section) return false;
+    if (scope.unit !== undefined && String(word.unit) !== String(scope.unit)) {
+      return false;
+    }
+    return true;
+  });
+}
+
 /** 薄弱冲刺清单：只含冲刺词，复用词级薄弱标签 */
 export function buildSprintSummary(
   input: WeakSignalInput,
@@ -549,6 +609,83 @@ export function buildSprintCsv(
   const lines = summary.map((item) =>
     [item.word, item.signals.join("、")].map(csvField).join(","));
   return `\uFEFF词,信号列表\n${lines.join("\n")}\n`;
+}
+
+const QUIZ_MODE_LABELS: Partial<Record<QuizMode, string>> = {
+  "listening-spelling": "拼写测验",
+  "chinese-to-english": "中译英",
+  "meaning-choice": "辨析",
+};
+
+/** 词级信号时间线中的单个事件 */
+export type WordSignalEvent = {
+  at: string;
+  type: "slow-recall" | "lapse" | "quiz" | "lookup" | "stubborn";
+  detail: string;
+};
+
+/**
+ * 该词的薄弱信号时间线：评分（回忆偏慢/lapse）、测验答错、查词、顽固词触发，
+ * 全部由现有状态派生，按时间升序；无记录返回空数组。
+ */
+export function buildWordSignalTimeline(
+  wordId: number,
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): WordSignalEvent[] {
+  const events: WordSignalEvent[] = [];
+  for (const review of input.reviews) {
+    if (review.wordId !== wordId) continue;
+    if (
+      typeof review.recallMs === "number"
+      && review.recallMs >= thresholds.slowRecallMs
+    ) {
+      events.push({
+        at: review.reviewedAt,
+        type: "slow-recall",
+        detail: `回忆偏慢 ${(review.recallMs / 1000).toFixed(1)}s`,
+      });
+    }
+    if (review.rating === 0) {
+      events.push({
+        at: review.reviewedAt,
+        type: "lapse",
+        detail: "遗忘（评分 0）",
+      });
+    }
+  }
+  for (const attempt of input.quizAttempts) {
+    if (attempt.wordId !== wordId || attempt.correct) continue;
+    events.push({
+      at: attempt.answeredAt,
+      type: "quiz",
+      detail: `${QUIZ_MODE_LABELS[attempt.mode] ?? attempt.mode} 答错`,
+    });
+  }
+  const lookupStat = lookupStatByWordId(input).get(wordId);
+  if (lookupStat) {
+    events.push({
+      at: lookupStat.firstAt,
+      type: "lookup",
+      detail: `首次查词（累计 ${lookupStat.count} 次）`,
+    });
+    if (lookupStat.lastAt !== lookupStat.firstAt) {
+      events.push({
+        at: lookupStat.lastAt,
+        type: "lookup",
+        detail: `最近查词（累计 ${lookupStat.count} 次）`,
+      });
+    }
+  }
+  const stubborn = input.stubbornWords[wordId];
+  if (stubborn?.active) {
+    events.push({
+      at: stubborn.triggeredAt,
+      type: "stubborn",
+      detail: "进入顽固词",
+    });
+  }
+  return events.sort((first, second) => first.at.localeCompare(second.at));
 }
 
 /** 划词达到阈值且未被近期答对覆盖的词 id（今日任务插队，按查询次数倒序） */

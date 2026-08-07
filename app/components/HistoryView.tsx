@@ -8,8 +8,10 @@ import type {
   WeeklyLearningReport,
 } from "../../lib/insights";
 import type { ExamPhase, ExamProgressTiers } from "../../lib/learning";
+import type { SprintDimensionWithTrend } from "../../lib/session-summary";
 import {
   emphasizedWeakDimensions,
+  type SprintEffectivenessWeek,
   type SprintHistory,
   type WeakDimensionTrendWeek,
   type WeakSectionConcentration,
@@ -52,11 +54,19 @@ type HistoryViewProps = {
   sprintCount: number;
   /** 薄弱集中区（按词本分册/单元派生） */
   weakConcentration: WeakSectionConcentration[];
+  /** 冲刺成效近 N 周序列（含本周，无冲刺周为 null） */
+  sprintEffectivenessSeries: SprintEffectivenessWeek[];
+  /** 冲刺后维度清零与周报对照（冲刺完成页派生） */
+  sprintDimensionTrend: SprintDimensionWithTrend[];
+  /** 各分册/单元词本总词数（section → unit → 总数，供集中度占比） */
+  sectionUnitTotals: ReadonlyMap<string, ReadonlyMap<string, number>>;
   /** 用历史冲刺的词集再跑一次 */
   onResprintHistory?: (sessionId: string) => void;
   onStartSprint: () => void;
   onCopySprint: () => void;
   onExportSprint: () => void;
+  /** 集中区按分册/单元发起冲刺 */
+  onScopedSprint?: (section: string, unit?: string) => void;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
@@ -86,10 +96,14 @@ export default function HistoryView({
   sprintHistory,
   sprintCount,
   weakConcentration,
+  sprintEffectivenessSeries,
+  sprintDimensionTrend,
+  sectionUnitTotals,
   onResprintHistory,
   onStartSprint,
   onCopySprint,
   onExportSprint,
+  onScopedSprint,
   onStartTodaySession,
   onActivityRangeChange,
   onActivityNavigate,
@@ -445,36 +459,121 @@ export default function HistoryView({
             </div>
           </div>
         )}
+        {sprintEffectivenessSeries.length > 0 && (
+          <div className="weak-trend" aria-label="冲刺成效 4 周">
+            <div className="weak-trend-head">
+              <strong>冲刺成效 4 周</strong>
+              <small>每周冲刺次数 · 解决词数 · 平均回忆变化</small>
+            </div>
+            <div className="sprint-effectiveness-series">
+              {sprintEffectivenessSeries.map((week) => (
+                <div className="sprint-effectiveness-week" key={week.weekStart}>
+                  <span>{week.weekStart === weeklyReport.weekStart ? "本周" : week.weekStart.slice(5)}</span>
+                  {week.effectiveness ? (
+                    <>
+                      <strong>{week.effectiveness.sprintCount} 次</strong>
+                      <small>解决 {week.effectiveness.resolvedCount} 词</small>
+                      <small className={
+                        week.effectiveness.recallImprovementMs === null
+                          ? "neutral"
+                          : week.effectiveness.recallImprovementMs > 0
+                            ? "positive"
+                            : "negative"
+                      }>
+                        {week.effectiveness.recallImprovementMs === null
+                          ? "无样本"
+                          : week.effectiveness.recallImprovementMs > 0
+                            ? `↑ ${(week.effectiveness.recallImprovementMs / 1000).toFixed(1)}s`
+                            : `↓ ${(-week.effectiveness.recallImprovementMs / 1000).toFixed(1)}s`}
+                      </small>
+                    </>
+                  ) : (
+                    <small className="neutral">—</small>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {sprintDimensionTrend.length > 0 && (
+          <div className="weak-trend" aria-label="冲刺维度归因">
+            <div className="weak-trend-head">
+              <strong>冲刺维度归因</strong>
+              <small>冲刺后已清零的维度标绿 · 周报仍薄弱标红</small>
+            </div>
+            <div className="weak-trend-grid">
+              {sprintDimensionTrend.map((row) => (
+                <div className="weak-trend-item" key={row.key}>
+                  <span>{row.label}</span>
+                  <strong>{row.sprintCount}</strong>
+                  <small className={row.cleared ? "positive" : "negative"}>
+                    {row.cleared
+                      ? "已清零"
+                      : row.weeklyCount !== null && row.weeklyCount > 0
+                        ? `本周仍 ${row.weeklyCount} 词`
+                        : "仍需关注"}
+                  </small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {weakConcentration.length > 0 && (
           <div className="weak-concentration" aria-label="薄弱集中区">
             <div className="weak-trend-head">
               <strong>薄弱集中区</strong>
               <small>按词本分册统计薄弱词分布 · 悬停查看单元明细</small>
             </div>
-            {weakConcentration.map((section) => (
-              <div className="weak-concentration-row" key={section.section}>
-                <span className="weak-concentration-label">{section.section}</span>
-                <div className="weak-concentration-track">
-                  <div
-                    className="weak-concentration-fill"
-                    style={{ width: `${Math.round((section.total / maxConcentrationTotal) * 100)}%` }}
-                  />
+            {weakConcentration.map((section) => {
+              const sectionTotal = [...(sectionUnitTotals.get(section.section)?.values() ?? [])]
+                .reduce((sum, count) => sum + count, 0);
+              const sectionPct = sectionTotal > 0
+                ? Math.round((section.total / sectionTotal) * 100)
+                : 0;
+              return (
+                <div className="weak-concentration-row" key={section.section}>
+                  <span className="weak-concentration-label">{section.section}</span>
+                  <div className="weak-concentration-track">
+                    <div
+                      className="weak-concentration-fill"
+                      style={{ width: `${Math.round((section.total / maxConcentrationTotal) * 100)}%` }}
+                    />
+                  </div>
+                  <strong className="weak-concentration-count">
+                    {section.total}
+                    {sectionTotal > 0 && <small>{sectionPct}%</small>}
+                  </strong>
+                  <small
+                    className="weak-concentration-units"
+                    title={section.units
+                      .map((unit) => {
+                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
+                        const unitPct = unitTotal > 0
+                          ? Math.round((unit.count / unitTotal) * 100)
+                          : 0;
+                        return `${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`;
+                      })
+                      .join("；")}
+                  >
+                    {section.units
+                      .slice(0, 3)
+                      .map((unit) => `${unit.unit} ${unit.count}词`)
+                      .join("、")}
+                    {section.units.length > 3 ? ` 等 ${section.units.length} 个单元` : ""}
+                  </small>
+                  {onScopedSprint && (
+                    <button
+                      type="button"
+                      className="concentration-sprint"
+                      onClick={() => onScopedSprint(section.section)}
+                      disabled={section.total === 0}
+                    >
+                      冲刺
+                    </button>
+                  )}
                 </div>
-                <strong className="weak-concentration-count">{section.total}</strong>
-                <small
-                  className="weak-concentration-units"
-                  title={section.units
-                    .map((unit) => `${unit.unit}：${unit.count} 词`)
-                    .join("；")}
-                >
-                  {section.units
-                    .slice(0, 3)
-                    .map((unit) => `${unit.unit} ${unit.count}词`)
-                    .join("、")}
-                  {section.units.length > 3 ? ` 等 ${section.units.length} 个单元` : ""}
-                </small>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 <div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
