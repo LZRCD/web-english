@@ -11,6 +11,7 @@ import {
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   buildWordWeakSignals,
+  emphasizedWeakDimensions,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
@@ -222,6 +223,13 @@ test("周报薄弱维度趋势：按本地周一统计本周数量与变化", ()
   assert.equal(byKey.get("stubborn")!.change, 0);
   assert.equal(byKey.get("guess")!.count, 1);
   assert.equal(byKey.get("guess")!.change, null);
+});
+
+test("临考期薄弱强调：冲刺/临考期突出关键维度，其他阶段不强调", () => {
+  assert.deepEqual(emphasizedWeakDimensions("临考期"), ["lookup", "lapse", "slow-recall"]);
+  assert.deepEqual(emphasizedWeakDimensions("冲刺期"), ["lookup", "lapse", "slow-recall"]);
+  assert.deepEqual(emphasizedWeakDimensions("强化期"), []);
+  assert.deepEqual(emphasizedWeakDimensions(undefined), []);
 });
 
 test("薄弱维度 4 周趋势：按连续周返回序列且每周口径与单周一致", () => {

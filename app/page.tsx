@@ -505,8 +505,9 @@ export default function Home() {
     () => reusedSentencesFor(sentenceIndex, current.word, {
       lookupStats,
       lookupWords,
+      wordProgress,
     }),
-    [current.word, lookupStats, lookupWords, sentenceIndex],
+    [current.word, lookupStats, lookupWords, sentenceIndex, wordProgress],
   );
 
   const currentMeaning = splitMeaning(current.meaning);
@@ -1849,6 +1850,7 @@ export default function Home() {
             reviewForecast={reviewForecast}
             weeklyReport={weeklyReport}
             weakTrendSeries={weakTrendSeries}
+            examPhase={examPlan?.phase}
             examProgress={examProgress}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {

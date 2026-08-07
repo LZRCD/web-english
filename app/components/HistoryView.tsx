@@ -7,8 +7,11 @@ import type {
   ReviewForecastDay,
   WeeklyLearningReport,
 } from "../../lib/insights";
-import type { ExamProgressTiers } from "../../lib/learning";
-import type { WeakDimensionTrendWeek } from "../../lib/weak-signals";
+import type { ExamPhase, ExamProgressTiers } from "../../lib/learning";
+import {
+  emphasizedWeakDimensions,
+  type WeakDimensionTrendWeek,
+} from "../../lib/weak-signals";
 
 type ActivityRange = 140 | 182 | 365;
 
@@ -38,6 +41,8 @@ type HistoryViewProps = {
   weeklyReport: WeeklyLearningReport;
   /** 薄弱维度近 N 周趋势（按时间升序，含本周） */
   weakTrendSeries: WeakDimensionTrendWeek[];
+  /** 考研阶段（可选）：冲刺/临考期强调关键薄弱维度 */
+  examPhase?: ExamPhase;
   examProgress: ExamProgressTiers | null;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
@@ -63,6 +68,7 @@ export default function HistoryView({
   reviewForecast,
   weeklyReport,
   weakTrendSeries,
+  examPhase,
   examProgress,
   onStartTodaySession,
   onActivityRangeChange,
@@ -286,8 +292,17 @@ export default function HistoryView({
               </small>
             </div>
             <div className="weak-trend-series-grid">
-              {weakTrendSeries[0].dimensions.map((dimension) => (
-                <div className="weak-trend-series-row" key={dimension.key}>
+              {(() => {
+                const emphasized = new Set(emphasizedWeakDimensions(examPhase));
+                return weakTrendSeries[0].dimensions.map((dimension) => (
+                <div
+                  className={
+                    emphasized.has(dimension.key)
+                      ? "weak-trend-series-row emphasized"
+                      : "weak-trend-series-row"
+                  }
+                  key={dimension.key}
+                >
                   <span>{dimension.label}</span>
                   <div className="weak-trend-series-bars">
                     {weakTrendSeries.map((week, weekIndex) => {
@@ -313,7 +328,8 @@ export default function HistoryView({
                     })}
                   </div>
                 </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         )}

@@ -71,6 +71,10 @@ export default function WordbookView({
   const visibleLookupWords = weakLookupOnly
     ? lookupWords.filter((item) => isLookupWeakCandidate(item.query))
     : lookupWords;
+  // 划词薄弱候选一键学习：查询 ≥2 次的词批量进入复习会话
+  const lookupWeakCandidateIds = lookupWords
+    .filter((item) => isLookupWeakCandidate(item.query))
+    .map((item) => item.linkedWordId ?? item.id);
   // 词级回忆耗时标签（中性色，与薄弱信号区分）
   const recallTag = (wordId: number) => {
     const recall = weakRecallByWordId[wordId];
@@ -301,14 +305,24 @@ export default function WordbookView({
             {recentLookupAt && (
               <span>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
             )}
-            <label className="lookup-weak-filter">
-              <input
-                type="checkbox"
-                checked={weakLookupOnly}
-                onChange={(event) => setWeakLookupOnly(event.target.checked)}
-              />
-              只看薄弱候选（{lookupWeakCandidateCount} 词查过 2 次+）
-            </label>
+            <div className="lookup-weak-actions">
+              <label className="lookup-weak-filter">
+                <input
+                  type="checkbox"
+                  checked={weakLookupOnly}
+                  onChange={(event) => setWeakLookupOnly(event.target.checked)}
+                />
+                只看薄弱候选（{lookupWeakCandidateCount} 词查过 2 次+）
+              </label>
+              <button
+                type="button"
+                className="lookup-weak-study"
+                disabled={lookupWeakCandidateIds.length === 0}
+                onClick={() => onStartLookups(lookupWeakCandidateIds)}
+              >
+                学习全部薄弱候选（{lookupWeakCandidateIds.length}）
+              </button>
+            </div>
             <div className="lookup-dist-mini" aria-label="查询次数分布">
               {[
                 { key: "once", label: "1次", count: lookupBuckets.once },

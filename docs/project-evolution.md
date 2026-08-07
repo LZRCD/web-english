@@ -519,3 +519,24 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 112/112 通过，新增用例覆盖：索引原形↔变形双向命中、来源词查询加权排序、多义词冷启动代理分、4 周序列结构与单周口径一致。
 - 未启动或重启本地开发服务器；薄弱画像为实时派生，老用户无迁移负担。
+
+## 第二十三次迭代：信号联动四轮（双因子加权、不规则变形、临考强调、候选一键学）
+
+本次迭代：2026-08-10。
+
+### 新增
+
+- 例句复用双因子加权（`lib/sentence-index.ts`）：`reusedSentencesFor` 新增可选 `wordProgress`，来源词薄弱（isWeakProgress 或曾 lapse）的例句优先，其次按来源词划词查询次数；学习卡接线传入 wordProgress，与既有查询加权合并。
+- 不规则动词变形表（`lib/sentence-index.ts`）：新增 `LEMMA_OVERRIDES`（go/went、buy/bought、take/took、see/saw、make/made、come/came、give/gave、find/found、know/knew、speak/spoke、write/wrote、drive/drove、run/ran、eat/ate、feel/felt、lose/lost、build/built、think/thought 等 27 条），`inflections` 对命中表的变形追加原形候选，索引与查询两侧共用；例句含 went 时查 go、查 went 均可命中。
+- 临考期薄弱强调（`lib/weak-signals.ts` + `HistoryView`）：新增 `emphasizedWeakDimensions(examPhase)`，冲刺/临考期强调「反复查词 / 遗忘词 / 回忆偏慢」三维度；4 周趋势区被强调的维度行加 `emphasized` 红色系样式，page.tsx 传入 `examPlan.phase`。
+- 划词薄弱候选一键学习（`WordbookView`）：划词集顶部新增「学习全部薄弱候选（N）」按钮，只把查询 ≥2 次的候选 id 批量送入既有 `onStartLookups` 复习会话，与「只看薄弱候选」过滤并存。
+
+### 修正
+
+- 无。本轮为增量联动，未改动评分、排程、备份等既有数据链路。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 114/114 通过，新增用例覆盖：不规则动词双向命中、双因子加权（薄弱度优先于查询次数）、临考期强调维度映射。
+- 未启动或重启本地开发服务器；薄弱画像为实时派生，老用户无迁移负担。

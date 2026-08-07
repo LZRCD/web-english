@@ -1,4 +1,8 @@
-import type { WordEnrichment } from "./learning.ts";
+import {
+  isWeakProgress,
+  type WordEnrichment,
+  type WordProgressMap,
+} from "./learning.ts";
 import type { LookupStats, LookupWord, Word } from "./study.ts";
 
 /** 一条可复用的已见例句：句子、翻译与来源词 */
@@ -37,9 +41,42 @@ const STOP_WORDS = new Set([
   "right", "long", "high", "low", "also", "even",
 ]);
 
-/** 简单词形还原候选：原词 → 常见变形 */
+/** 考研常见不规则动词：变形 → 原形，与规则 inflections 合并 */
+const LEMMA_OVERRIDES: Record<string, string> = {
+  went: "go",
+  gone: "go",
+  bought: "buy",
+  thought: "think",
+  took: "take",
+  taken: "take",
+  saw: "see",
+  seen: "see",
+  made: "make",
+  came: "come",
+  gave: "give",
+  given: "give",
+  found: "find",
+  knew: "know",
+  known: "know",
+  spoke: "speak",
+  spoken: "speak",
+  wrote: "write",
+  written: "write",
+  drove: "drive",
+  driven: "drive",
+  ran: "run",
+  ate: "eat",
+  eaten: "eat",
+  felt: "feel",
+  lost: "lose",
+  built: "build",
+};
+
+/** 简单词形还原候选：原词 → 不规则原形 + 常见规则变形 */
 function inflections(token: string) {
   const candidates = [token];
+  const override = LEMMA_OVERRIDES[token];
+  if (override) candidates.push(override);
   if (token.endsWith("'s")) candidates.push(token.slice(0, -2));
   if (token.endsWith("ies")) candidates.push(token.slice(0, -3) + "y");
   if (token.endsWith("ied")) candidates.push(token.slice(0, -3) + "y");
@@ -148,13 +185,24 @@ function sourceLookupCount(
   return best;
 }
 
-/** 查询某词在已见例句中的复用列表（含简单变形匹配，来源词查得多的例句优先） */
+/** 例句来源词是否薄弱（isWeakProgress 或曾 lapse） */
+function sourceIsWeak(
+  sourceId: number | undefined,
+  wordProgress?: WordProgressMap,
+) {
+  if (sourceId === undefined || !wordProgress) return false;
+  const item = wordProgress[sourceId];
+  return Boolean(item && (isWeakProgress(item) || item.lapseCount > 0));
+}
+
+/** 查询某词在已见例句中的复用列表（含变形匹配，来源词薄弱度优先、查得多的次之） */
 export function reusedSentencesFor(
   index: SentenceIndex,
   word: string,
   options?: {
     lookupStats?: LookupStats;
     lookupWords?: LookupWord[];
+    wordProgress?: WordProgressMap;
   },
 ): ReusedSentence[] {
   const lower = word.trim().toLowerCase();
@@ -166,15 +214,19 @@ export function reusedSentencesFor(
       if (!seen.has(key)) seen.set(key, entry);
     }
   }
-  const countByEntry = new Map<ReusedSentence, number>();
+  const weightByEntry = new Map<ReusedSentence, number>();
   for (const entry of seen.values()) {
-    countByEntry.set(
-      entry,
-      sourceLookupCount(entry.sourceId, options?.lookupStats, options?.lookupWords),
+    // 双因子：薄弱度权重优先（大跨度），查询次数次级
+    const weakBoost = sourceIsWeak(entry.sourceId, options?.wordProgress) ? 100 : 0;
+    const lookupCount = sourceLookupCount(
+      entry.sourceId,
+      options?.lookupStats,
+      options?.lookupWords,
     );
+    weightByEntry.set(entry, weakBoost + lookupCount);
   }
   return [...seen.values()]
     .sort((first, second) =>
-      (countByEntry.get(second) ?? 0) - (countByEntry.get(first) ?? 0))
+      (weightByEntry.get(second) ?? 0) - (weightByEntry.get(first) ?? 0))
     .slice(0, 6);
 }

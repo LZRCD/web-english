@@ -1,6 +1,7 @@
 import type { QuizAttempt, QuizMode } from "./quiz.ts";
 import { learningWordId } from "./selection-lookup.ts";
 import type {
+  ExamPhase,
   ReviewEvent,
   StubbornWordMap,
   WordProgressMap,
@@ -341,6 +342,19 @@ function buildTrendForWeek(
     dimension("stubborn", "新顽固词", stubbornCount, stubbornPrevious),
     dimension("lapse", "遗忘词", lapseCount, lapsePrevious),
   ];
+}
+
+/**
+ * 考研冲刺/临考期应强调的薄弱维度 key。
+ * 这些维度直接决定临考记忆缺口，趋势区用红色系突出显示。
+ */
+export function emphasizedWeakDimensions(
+  examPhase: ExamPhase | undefined,
+): WeakDimensionTrend["key"][] {
+  if (examPhase === "临考期" || examPhase === "冲刺期") {
+    return ["lookup", "lapse", "slow-recall"];
+  }
+  return [];
 }
 
 /** 连续多周的薄弱维度趋势（含本周，按时间升序） */

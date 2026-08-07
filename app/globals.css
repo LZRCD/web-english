@@ -4783,3 +4783,38 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- 信号联动四轮：临考期薄弱强调 ---- */
+.weak-trend-series-row.emphasized > span {
+  color: #b0643f;
+  font-weight: 700;
+}
+.weak-trend-series-row.emphasized .weak-trend-series-col i.active {
+  background: #d98a6a;
+}
+.weak-trend-series-row.emphasized .weak-trend-series-col strong {
+  color: #a45f4e;
+}
+
+.lookup-weak-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  width: 100%;
+  margin-top: 6px;
+}
+.lookup-weak-study {
+  border: 1px solid #e7c9b8;
+  border-radius: 10px;
+  background: #fdf0e7;
+  color: #b0643f;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lookup-weak-study:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

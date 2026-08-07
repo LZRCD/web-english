@@ -122,6 +122,106 @@ test("例句反向索引：来源词查询次数加权排序生效", () => {
   assert.equal(ranked[0].sourceWord, "reflect");
 });
 
+test("例句反向索引：不规则动词变形双向命中", () => {
+  const index = buildSentenceIndex({
+    redbookWords: [
+      { id: 1, word: "go", meaning: "v. 去" },
+      { id: 2, word: "buy", meaning: "v. 买" },
+      { id: 3, word: "harvest", meaning: "n. 收获" },
+    ],
+    enrichments: {
+      1: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 去",
+          sentence: "They went to the market yesterday.",
+          translation: "他们昨天去了市场。",
+        }],
+      },
+      2: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 买",
+          sentence: "She bought a book about harvest.",
+          translation: "她买了一本关于丰收的书。",
+        }],
+      },
+    },
+  });
+  // 例句含 went，查询原形 go 可命中（索引侧收录 override 原形）
+  const forGo = reusedSentencesFor(index, "go");
+  assert.equal(forGo.length, 1);
+  assert.match(forGo[0].sentence, /went to the market/);
+  // 例句含 bought，查询原形 buy 可命中
+  const forBuy = reusedSentencesFor(index, "buy");
+  assert.equal(forBuy.length, 1);
+  assert.match(forBuy[0].sentence, /bought a book/);
+  // 反向：查询变形 went / bought 也可命中例句
+  assert.equal(reusedSentencesFor(index, "went").length, 1);
+  assert.equal(reusedSentencesFor(index, "bought").length, 1);
+});
+
+test("例句反向索引：来源词薄弱度优先于查询次数加权", () => {
+  const index = buildSentenceIndex({
+    redbookWords,
+    enrichments: {
+      1: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "adj. 丰富的",
+          sentence: "The abundant harvest surprised everyone.",
+          translation: "丰收让大家惊讶。",
+        }],
+      },
+      3: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 反映",
+          sentence: "The report reflects a big harvest.",
+          translation: "报告反映了大丰收。",
+        }],
+      },
+    },
+  });
+  const lookupWords: import("../lib/study.ts").LookupWord[] = [
+    {
+      id: 9_000_000_001,
+      linkedWordId: 3,
+      query: "reflect",
+      kind: "word",
+      phonetic: "",
+      part: "v.",
+      meaning: "反映",
+      note: "",
+      source: "redbook",
+      addedAt: "2026-08-01T00:00:00.000Z",
+    },
+  ];
+  const wordProgress = {
+    1: {
+      wordId: 1,
+      lapseCount: 2,
+      lastRating: 0,
+      lastReviewedAt: "2026-08-02T00:00:00.000Z",
+    },
+  } as unknown as import("../lib/learning.ts").WordProgressMap;
+  const ranked = reusedSentencesFor(index, "harvest", {
+    lookupStats: {
+      reflect: {
+        count: 5,
+        firstAt: "2026-08-01T00:00:00.000Z",
+        lastAt: "2026-08-05T00:00:00.000Z",
+      },
+    },
+    lookupWords,
+    wordProgress,
+  });
+  // 来源词 reflect 查过 5 次，但来源词 abundant 更薄弱（lapse 2 次）→ 排最前
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].sourceWord, "abundant");
+  assert.equal(ranked[1].sourceWord, "reflect");
+});
+
 test("例句反向索引：语义二审 failed 的例句不参与复用，passed 例句正常收录", () => {
   const reviewedEnrichments: Record<number, WordEnrichment> = {
     1: {
