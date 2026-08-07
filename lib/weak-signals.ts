@@ -7,19 +7,26 @@ import {
   type StubbornWordMap,
   type WordProgressMap,
 } from "./learning.ts";
-import type {
-  GuessMistakeMap,
-  LookupStat,
-  LookupStats,
-  LookupWord,
+import {
+  DEFAULT_WEAK_THRESHOLDS,
+  type WeakThresholds,
+  type GuessMistakeMap,
+  type LookupStat,
+  type LookupStats,
+  type LookupWord,
 } from "./study.ts";
 
-/** 回忆偏慢阈值（毫秒） */
-export const SLOW_RECALL_MS = 15_000;
+/** 回忆偏慢阈值（毫秒，默认值来自 study.ts 的 WeakThresholds） */
+export const SLOW_RECALL_MS = DEFAULT_WEAK_THRESHOLDS.slowRecallMs;
 /** 划词 ≥2 次自动进入薄弱候选（词本划词集可标注/过滤） */
-export const LOOKUP_WEAK_THRESHOLD = 2;
+export const LOOKUP_WEAK_THRESHOLD = DEFAULT_WEAK_THRESHOLDS.lookupWeak;
 /** 划词 ≥3 次自动插队今日任务 */
-export const LOOKUP_PRIORITY_THRESHOLD = 3;
+export const LOOKUP_PRIORITY_THRESHOLD = DEFAULT_WEAK_THRESHOLDS.lookupPriority;
+
+export {
+  DEFAULT_WEAK_THRESHOLDS,
+  type WeakThresholds,
+} from "./study.ts";
 
 /** 薄弱画像的全部信号源；均为已有状态，派生计算、不新增 schema。 */
 export type WeakSignalInput = {
@@ -134,12 +141,16 @@ function quizErrorCounts(attempts: readonly QuizAttempt[], wordId: number) {
   }, {});
 }
 
-/** 该词回忆耗时 ≥15s 的评分次数 */
-function slowReviewCount(reviews: readonly ReviewEvent[], wordId: number) {
+/** 该词回忆耗时不低于阈值的评分次数 */
+function slowReviewCount(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+  slowRecallMs: number,
+) {
   return reviews.filter((review) =>
     review.wordId === wordId
     && typeof review.recallMs === "number"
-    && review.recallMs >= SLOW_RECALL_MS).length;
+    && review.recallMs >= slowRecallMs).length;
 }
 
 /**
@@ -150,10 +161,11 @@ export function buildWordWeakSignals(
   wordId: number,
   input: WeakSignalInput,
   lookupById = lookupStatByWordId(input),
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): string[] {
   const signals: string[] = [];
   const lookupCount = lookupById.get(wordId)?.count ?? 0;
-  if (lookupCount >= LOOKUP_WEAK_THRESHOLD) {
+  if (lookupCount >= thresholds.lookupWeak) {
     signals.push(`查过${lookupCount}次`);
   }
   const guessCount = input.guessMistakes[wordId] ?? 0;
@@ -168,7 +180,7 @@ export function buildWordWeakSignals(
   if (quizErrors["meaning-choice"]) {
     signals.push(`辨析错${quizErrors["meaning-choice"]}次`);
   }
-  const slowCount = slowReviewCount(input.reviews, wordId);
+  const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
   if (slowCount > 0) signals.push(`回忆偏慢${slowCount}次`);
   if (input.stubbornWords[wordId]?.active) signals.push("顽固词");
   const lapseCount = input.wordProgress[wordId]?.lapseCount ?? 0;
@@ -179,6 +191,7 @@ export function buildWordWeakSignals(
 /** 全量词级薄弱画像：key 为学习项 wordId */
 export function buildWeakProfiles(
   input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): Record<number, WeakWordProfile> {
   const lookupById = lookupStatByWordId(input);
   const wordIds = new Set<number>();
@@ -200,7 +213,7 @@ export function buildWeakProfiles(
   for (const wordId of wordIds) {
     const recall = wordRecallStats(input.reviews, wordId);
     profiles[wordId] = {
-      signals: buildWordWeakSignals(wordId, input, lookupById),
+      signals: buildWordWeakSignals(wordId, input, lookupById, thresholds),
       lookupCount: lookupById.get(wordId)?.count ?? 0,
       ...(recall ? { recall } : {}),
     };
@@ -208,10 +221,13 @@ export function buildWeakProfiles(
   return profiles;
 }
 
-/** 划词 ≥2 次的薄弱候选（词本划词集标注/过滤） */
-export function lookupWeakCandidateIds(input: WeakSignalInput): number[] {
+/** 划词达到阈值的薄弱候选（词本划词集标注/过滤） */
+export function lookupWeakCandidateIds(
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): number[] {
   return [...lookupStatByWordId(input).entries()]
-    .filter(([, stat]) => (stat.count ?? 0) >= LOOKUP_WEAK_THRESHOLD)
+    .filter(([, stat]) => (stat.count ?? 0) >= thresholds.lookupWeak)
     .sort((first, second) => second[1].count - first[1].count)
     .map(([wordId]) => wordId);
 }
@@ -230,8 +246,94 @@ function isLookupDemoted(
   return progress.lastRating >= 2 && progress.lastReviewedAt >= stat.lastAt;
 }
 
+/** 单次冲刺记录（由评分日志按 sessionId 分组派生） */
+export type SprintHistoryRecord = {
+  sessionId: string;
+  /** 冲刺开始时间（createStudySession id 内嵌的 ISO 时间） */
+  startedAt: string;
+  /** 本次冲刺覆盖的去重词数 */
+  wordCount: number;
+  /** 本次冲刺顺利回忆（rating≥2）的去重词数 */
+  successCount: number;
+  /** 本次冲刺平均回忆耗时（毫秒），无合法样本为 null */
+  averageRecallMs: number | null;
+};
+
+/** 冲刺历史：按时间倒序的记录 + 总计 */
+export type SprintHistory = {
+  records: SprintHistoryRecord[];
+  /** 冲刺总次数 */
+  totalCount: number;
+  /** 全部冲刺覆盖的去重词数 */
+  totalWordCount: number;
+};
+
+/**
+ * 从评分日志派生冲刺历史：按 `sessionId.startsWith("sprint:")` 分组，
+ * 每条记录取内嵌 ISO 时间、去重词数、成功词数与平均回忆耗时。
+ */
+export function buildSprintHistory(
+  reviews: readonly ReviewEvent[],
+): SprintHistory {
+  const groups = new Map<string, ReviewEvent[]>();
+  for (const review of reviews) {
+    const sessionId = review.sessionId;
+    if (!sessionId || !sessionId.startsWith("sprint:")) continue;
+    const items = groups.get(sessionId) ?? [];
+    items.push(review);
+    groups.set(sessionId, items);
+  }
+  const records = [...groups.entries()].flatMap(([sessionId, items]) => {
+    const startedAt = sessionId.slice("sprint:".length);
+    if (!Number.isFinite(new Date(startedAt).getTime())) return [];
+    const wordIds = new Set(
+      items
+        .map((review) => review.wordId)
+        .filter((wordId): wordId is number => wordId !== undefined),
+    );
+    const successIds = new Set(
+      items
+        .filter((review) => review.rating >= 2)
+        .map((review) => review.wordId)
+        .filter((wordId): wordId is number => wordId !== undefined),
+    );
+    const recallTimes = items
+      .map((review) => review.recallMs)
+      .filter((value): value is number =>
+        typeof value === "number"
+        && Number.isFinite(value)
+        && value >= 0);
+    return [{
+      sessionId,
+      startedAt,
+      wordCount: wordIds.size,
+      successCount: successIds.size,
+      averageRecallMs: recallTimes.length
+        ? Math.round(
+            recallTimes.reduce((sum, ms) => sum + ms, 0) / recallTimes.length,
+          )
+        : null,
+    }];
+  });
+  records.sort((first, second) => second.startedAt.localeCompare(first.startedAt));
+  return {
+    records,
+    totalCount: records.length,
+    totalWordCount: new Set(
+      reviews
+        .filter((review) =>
+          review.sessionId?.startsWith("sprint:")
+          && review.wordId !== undefined)
+        .map((review) => review.wordId),
+    ).size,
+  };
+}
+
 /** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
-export function buildSprintWordIds(input: WeakSignalInput): number[] {
+export function buildSprintWordIds(
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): number[] {
   const lookupById = lookupStatByWordId(input);
   const items: {
     wordId: number;
@@ -246,9 +348,9 @@ export function buildSprintWordIds(input: WeakSignalInput): number[] {
     const lookupCount = lookupById.get(id)?.count ?? 0;
     const recall = wordRecallStats(input.reviews, id);
     const recallAvgMs = recall?.averageMs ?? 0;
-    const hitLookup = lookupCount >= LOOKUP_WEAK_THRESHOLD;
+    const hitLookup = lookupCount >= thresholds.lookupWeak;
     const hitLapse = progress.lapseCount >= 1;
-    const hitSlow = recallAvgMs >= SLOW_RECALL_MS;
+    const hitSlow = recallAvgMs >= thresholds.slowRecallMs;
     const hitWeak = isWeakProgress(progress);
     if (!hitLookup && !hitLapse && !hitSlow && !hitWeak) continue;
     items.push({
@@ -270,21 +372,25 @@ export function buildSprintWordIds(input: WeakSignalInput): number[] {
 export function buildSprintSummary(
   input: WeakSignalInput,
   wordById: Map<number, import("./study.ts").Word>,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): { word: string; signals: string[] }[] {
-  return buildSprintWordIds(input).flatMap((wordId) => {
+  return buildSprintWordIds(input, thresholds).flatMap((wordId) => {
     const word = wordById.get(wordId)?.word;
     if (!word) return [];
-    const signals = buildWordWeakSignals(wordId, input);
+    const signals = buildWordWeakSignals(wordId, input, undefined, thresholds);
     if (!signals.length) return [];
     return [{ word, signals }];
   });
 }
 
-/** 划词 ≥3 次且未被近期答对覆盖的词 id（今日任务插队，按查询次数倒序） */
-export function lookupPriorityWordIds(input: WeakSignalInput): number[] {
+/** 划词达到阈值且未被近期答对覆盖的词 id（今日任务插队，按查询次数倒序） */
+export function lookupPriorityWordIds(
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): number[] {
   const items: { wordId: number; stat: LookupStat }[] = [];
   for (const [wordId, stat] of lookupStatByWordId(input)) {
-    if ((stat.count ?? 0) < LOOKUP_PRIORITY_THRESHOLD) continue;
+    if ((stat.count ?? 0) < thresholds.lookupPriority) continue;
     if (isLookupDemoted(wordId, stat, input)) continue;
     items.push({ wordId, stat });
   }
@@ -328,13 +434,14 @@ function buildTrendForWeek(
   input: WeakSignalInput,
   weekStartMs: number,
   weekEndMs: number,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): WeakDimensionTrend[] {
   const previousStartMs = weekStartMs - 7 * 24 * 60 * 60 * 1000;
 
   const lookupById = lookupStatByWordId(input);
   const lookupWords = (startMs: number, endMs: number) =>
     [...lookupById.values()].filter((stat) =>
-      (stat.count ?? 0) >= LOOKUP_WEAK_THRESHOLD
+      (stat.count ?? 0) >= thresholds.lookupWeak
       && inWindow(stat.lastAt, startMs, endMs)).length;
   const lookupCount = lookupWords(weekStartMs, weekEndMs);
   const lookupPrevious = lookupWords(previousStartMs, weekStartMs);
@@ -357,7 +464,8 @@ function buildTrendForWeek(
     .map((review) => review.wordId)
     .filter((wordId): wordId is number => wordId !== undefined)).size;
   const slowPredicate = (review: ReviewEvent) =>
-    typeof review.recallMs === "number" && review.recallMs >= SLOW_RECALL_MS;
+    typeof review.recallMs === "number"
+    && review.recallMs >= thresholds.slowRecallMs;
   const lapsePredicate = (review: ReviewEvent) => review.rating === 0;
   const slowCount = reviewWords(slowPredicate, weekStartMs, weekEndMs);
   const slowPrevious = reviewWords(slowPredicate, previousStartMs, weekStartMs);
@@ -422,12 +530,14 @@ export type WeakDimensionTrendWeek = {
 export function buildWeakDimensionTrend(
   input: WeakSignalInput,
   now = new Date(),
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): WeakDimensionTrend[] {
   const weekStart = localWeekStart(now);
   return buildTrendForWeek(
     input,
     weekStart.getTime(),
     addLocalDays(weekStart, 7).getTime(),
+    thresholds,
   );
 }
 
@@ -439,6 +549,7 @@ export function buildWeakDimensionTrendSeries(
   input: WeakSignalInput,
   now = new Date(),
   weeks = 4,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): WeakDimensionTrendWeek[] {
   const thisWeekStart = localWeekStart(now);
   const count = Math.max(1, Math.trunc(weeks));
@@ -452,6 +563,7 @@ export function buildWeakDimensionTrendSeries(
         input,
         weekStartMs,
         weekStartMs + 7 * 24 * 60 * 60 * 1000,
+        thresholds,
       ),
     });
   }

@@ -117,6 +117,22 @@ export type LookupStat = {
 /** 划词查询次数统计：key 为小写查询词 */
 export type LookupStats = Record<string, LookupStat>;
 
+/** 薄弱判定阈值：设置页可调，持久化可选字段，缺省用默认值 */
+export type WeakThresholds = {
+  /** 划词 ≥ 该次数进入薄弱候选（词本标注/过滤） */
+  lookupWeak: number;
+  /** 划词 ≥ 该次数自动插队今日任务 */
+  lookupPriority: number;
+  /** 回忆 ≥ 该毫秒数判定为回忆偏慢 */
+  slowRecallMs: number;
+};
+
+export const DEFAULT_WEAK_THRESHOLDS: WeakThresholds = {
+  lookupWeak: 2,
+  lookupPriority: 3,
+  slowRecallMs: 15_000,
+};
+
 /** 隐藏释义阶段猜词猜错的累计次数：key 为学习项 wordId */
 export type GuessMistakeMap = Record<number, number>;
 
@@ -153,6 +169,8 @@ export type StoredState = {
   hideChineseMeaning: boolean;
   /** 多释义单词先显示英文语境句，让人猜测后再展开中文释义 */
   guessContextFirst: boolean;
+  /** 薄弱判定阈值（设置页可调；可选，缺省用默认值） */
+  weakThresholds?: WeakThresholds;
   studyMode: StudyMode;
   studyScope: StudyScope;
   shuffleSeed: number;
@@ -348,6 +366,20 @@ function normalizeSenseFrequency(value: unknown): SenseFrequencyMap {
     if (entries.length) result[wordId] = entries;
   }
   return result;
+}
+
+function normalizeWeakThresholds(value: unknown): WeakThresholds {
+  const raw = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const lookupWeak = normalizeCount(raw.lookupWeak, DEFAULT_WEAK_THRESHOLDS.lookupWeak);
+  const lookupPriority = normalizeCount(raw.lookupPriority, DEFAULT_WEAK_THRESHOLDS.lookupPriority);
+  const slowRecallMs = normalizeCount(raw.slowRecallMs, DEFAULT_WEAK_THRESHOLDS.slowRecallMs);
+  return {
+    lookupWeak: Math.min(20, Math.max(1, lookupWeak)),
+    lookupPriority: Math.min(20, Math.max(1, lookupPriority)),
+    slowRecallMs: Math.min(120_000, Math.max(1_000, slowRecallMs)),
+  };
 }
 
 function normalizeGuessMistakes(value: unknown): GuessMistakeMap {
@@ -1153,6 +1185,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     soundOn: state.soundOn !== false,
     hideChineseMeaning: state.hideChineseMeaning === true,
     guessContextFirst: state.guessContextFirst === true,
+    weakThresholds: normalizeWeakThresholds(state.weakThresholds),
     studyMode,
     studyScope,
     shuffleSeed,

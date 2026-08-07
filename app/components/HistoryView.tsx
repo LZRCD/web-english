@@ -10,6 +10,7 @@ import type {
 import type { ExamPhase, ExamProgressTiers } from "../../lib/learning";
 import {
   emphasizedWeakDimensions,
+  type SprintHistory,
   type WeakDimensionTrendWeek,
 } from "../../lib/weak-signals";
 
@@ -44,6 +45,8 @@ type HistoryViewProps = {
   /** 考研阶段（可选）：冲刺/临考期强调关键薄弱维度 */
   examPhase?: ExamPhase;
   examProgress: ExamProgressTiers | null;
+  /** 冲刺历史（按 sessionId 分组派生） */
+  sprintHistory: SprintHistory;
   /** 考前薄弱冲刺词数（冲刺/临考期显示入口） */
   sprintCount: number;
   onStartSprint: () => void;
@@ -74,6 +77,7 @@ export default function HistoryView({
   weakTrendSeries,
   examPhase,
   examProgress,
+  sprintHistory,
   sprintCount,
   onStartSprint,
   onCopySprint,
@@ -386,6 +390,41 @@ export default function HistoryView({
           <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>
         </div>
       </section>
+      {sprintHistory.totalCount > 0 && (
+        <section className="sprint-history" aria-labelledby="sprint-history-title">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">SPRINT TRACE</p>
+              <h2 id="sprint-history-title">冲刺记录</h2>
+            </div>
+            <small>共 {sprintHistory.totalCount} 次 · 覆盖 {sprintHistory.totalWordCount} 个不同单词</small>
+          </div>
+          <div className="sprint-history-list">
+            {sprintHistory.records.slice(0, 5).map((record) => {
+              const started = new Date(record.startedAt);
+              const successRate = record.wordCount > 0
+                ? Math.round((record.successCount / record.wordCount) * 100)
+                : 0;
+              return (
+                <div className="sprint-history-row" key={record.sessionId}>
+                  <strong>
+                    {started.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
+                    <small>{started.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
+                  </strong>
+                  <span>{record.wordCount} 词</span>
+                  <span>顺利 {successRate}%</span>
+                  <span>
+                    平均回忆{" "}
+                    {record.averageRecallMs === null
+                      ? "—"
+                      : `${(record.averageRecallMs / 1000).toFixed(1)}s`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <section className="insights-panel" aria-labelledby="insights-title">
         <div className="panel-title">
           <h2 id="insights-title">学习趋势</h2>

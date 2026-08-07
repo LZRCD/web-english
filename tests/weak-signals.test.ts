@@ -7,18 +7,21 @@ import type {
 } from "../lib/learning.ts";
 import type { LookupWord } from "../lib/study.ts";
 import {
+  buildSprintHistory,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakDimensionTrend,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   buildWordWeakSignals,
+  DEFAULT_WEAK_THRESHOLDS,
   emphasizedWeakDimensions,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
   wordRecallStats,
   type WeakSignalInput,
+  type WeakThresholds,
 } from "../lib/weak-signals.ts";
 
 function makeReview(
@@ -270,6 +273,69 @@ test("考前薄弱冲刺：未学词不入选，冲刺清单复用薄弱标签",
   assert.equal(summary[0].word, "abandon");
   assert.ok(summary[0].signals.includes("查过4次"));
   assert.ok(summary[0].signals.includes("FSRS lapse 1"));
+});
+
+test("冲刺历史：按 sessionId 分组、去重词数、时间倒序，无记录返回空", () => {
+  const reviews = [
+    makeReview(1, 2, "2026-08-11T08:05:00.000Z", 8_000),
+    makeReview(2, 0, "2026-08-11T08:06:00.000Z", 12_000),
+    makeReview(1, 2, "2026-08-11T08:07:00.000Z", 6_000),
+    makeReview(3, 2, "2026-08-12T09:00:00.000Z", 9_000),
+    makeReview(4, 1, "2026-08-12T09:01:00.000Z", 15_000),
+    // 非冲刺会话不参与
+    makeReview(5, 2, "2026-08-12T10:00:00.000Z"),
+  ].map((review, index) => ({
+    ...review,
+    id: `s:${index}`,
+    sessionId: index < 3
+      ? "sprint:2026-08-11T08:00:00.000Z"
+      : index < 5
+        ? "sprint:2026-08-12T09:00:00.000Z"
+        : "today:2026-08-12T10:00:00.000Z",
+  }));
+  const history = buildSprintHistory(reviews);
+  assert.equal(history.totalCount, 2);
+  assert.equal(history.totalWordCount, 4);
+  assert.deepEqual(
+    history.records.map((record) => record.sessionId),
+    ["sprint:2026-08-12T09:00:00.000Z", "sprint:2026-08-11T08:00:00.000Z"],
+  );
+  const latest = history.records[0];
+  assert.equal(latest.wordCount, 2); // 词 3、词 4 去重
+  assert.equal(latest.successCount, 1); // 词 3 rating 2
+  assert.equal(latest.averageRecallMs, 12_000); // (9+15)/2
+  assert.equal(history.records[1].wordCount, 2); // 词 1、词 2
+  assert.equal(history.records[1].averageRecallMs, 8_667); // (8+12+6)/3 取整
+  assert.equal(buildSprintHistory([]).totalCount, 0);
+  assert.deepEqual(buildSprintHistory([]).records, []);
+});
+
+test("薄弱阈值参数化：不同阈值产出不同薄弱画像", () => {
+  const input = baseInput({
+    lookupStats: {
+      a: { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("a", 1)],
+    reviews: [makeReview(1, 2, "2026-07-28T00:00:00.000Z", 16_000)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  // 默认阈值：查过 3 次 ≥2 命中；回忆 16s ≥15s 命中
+  const defaultSignals = buildWordWeakSignals(1, input);
+  assert.ok(defaultSignals.includes("查过3次"));
+  assert.ok(defaultSignals.includes("回忆偏慢1次"));
+  // 调高阈值：查过 <5、回忆 <20s 都不再命中
+  const strict: WeakThresholds = { lookupWeak: 5, lookupPriority: 6, slowRecallMs: 20_000 };
+  const strictSignals = buildWordWeakSignals(1, input, undefined, strict);
+  assert.equal(strictSignals.length, 0);
+  // 冲刺候选也随阈值变化
+  assert.deepEqual(buildSprintWordIds(input), [1]);
+  assert.deepEqual(buildSprintWordIds(input, strict), []);
+  // 默认值对象内容正确
+  assert.equal(DEFAULT_WEAK_THRESHOLDS.lookupWeak, 2);
+  assert.equal(DEFAULT_WEAK_THRESHOLDS.lookupPriority, 3);
+  assert.equal(DEFAULT_WEAK_THRESHOLDS.slowRecallMs, 15_000);
 });
 
 test("临考期薄弱强调：冲刺/临考期突出关键维度，其他阶段不强调", () => {

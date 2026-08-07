@@ -12,6 +12,7 @@ import {
   buildWeakDimensionTrend,
   type WeakDimensionTrend,
   type WeakSignalInput,
+  type WeakThresholds,
 } from "./weak-signals.ts";
 
 export type LearningInsightReview = Pick<
@@ -228,6 +229,8 @@ export function buildWeeklyLearningReport(input: {
   dailyNewGoal: number;
   /** 薄弱画像信号源（可选）：提供后周报追加「本周薄弱维度趋势」 */
   weakSignals?: WeakSignalInput;
+  /** 薄弱判定阈值（可选）：覆盖默认薄弱画像阈值 */
+  weakThresholds?: WeakThresholds;
 }): WeeklyLearningReport {
   const now = Number.isFinite(input.now.getTime()) ? input.now : new Date();
   const weekStart = localWeekStart(now);
@@ -311,7 +314,7 @@ export function buildWeeklyLearningReport(input: {
     paceStatus,
     paceAdvice,
     weakTrend: input.weakSignals
-      ? buildWeakDimensionTrend(input.weakSignals, now)
+      ? buildWeakDimensionTrend(input.weakSignals, now, input.weakThresholds)
       : [],
   };
 }

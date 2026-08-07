@@ -91,6 +91,33 @@ test("旧状态迁移到 v5 FSRS 并清理 CET 示例记录", () => {
   );
 });
 
+test("薄弱判定阈值：旧数据无 weakThresholds 时按默认值兼容，非法值被夹取", () => {
+  const legacy = parseStoredState(JSON.stringify({ schemaVersion: 5 }));
+  assert.deepEqual(legacy.weakThresholds, {
+    lookupWeak: 2,
+    lookupPriority: 3,
+    slowRecallMs: 15_000,
+  });
+  const withInvalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    weakThresholds: { lookupWeak: 99, lookupPriority: 0, slowRecallMs: 500 },
+  }));
+  assert.deepEqual(withInvalid.weakThresholds, {
+    lookupWeak: 20,
+    lookupPriority: 1,
+    slowRecallMs: 1_000,
+  });
+  const withValid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    weakThresholds: { lookupWeak: 4, lookupPriority: 5, slowRecallMs: 20_000 },
+  }));
+  assert.deepEqual(withValid.weakThresholds, {
+    lookupWeak: 4,
+    lookupPriority: 5,
+    slowRecallMs: 20_000,
+  });
+});
+
 test("v5 迁移把 passer-by 旧记录归到 passersby 学习项", () => {
   const state = parseStoredState(JSON.stringify({
     schemaVersion: 2,

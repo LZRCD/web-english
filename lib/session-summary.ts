@@ -7,8 +7,9 @@ import {
 } from "./learning.ts";
 import {
   buildWordWeakSignals,
-  type WeakSignalInput,
   type WeakDimensionTrend,
+  type WeakSignalInput,
+  type WeakThresholds,
 } from "./weak-signals.ts";
 
 const REINFORCEMENT_LIMIT = 5;
@@ -276,6 +277,8 @@ type SprintSummaryInput = {
   session: StudySession;
   reviews: readonly ReviewEvent[];
   weakSignals: WeakSignalInput;
+  /** 薄弱判定阈值（可选）：覆盖默认薄弱画像阈值 */
+  weakThresholds?: WeakThresholds;
 };
 
 /** 按薄弱标签前缀归类维度词数（buildWordWeakSignals 的标签为固定格式） */
@@ -341,6 +344,7 @@ export function buildSprintCompletionSummary({
   session,
   reviews,
   weakSignals,
+  weakThresholds,
 }: SprintSummaryInput): SprintCompletionSummary {
   const sessionReviews = reviewsForSession(session, reviews);
   const reviewedWordIds = new Set(
@@ -363,7 +367,12 @@ export function buildSprintCompletionSummary({
     : null;
   // 冲刺后仍薄弱：实时派生（buildWordWeakSignals 标签非空）
   const stillWeakWords = [...reviewedWordIds].flatMap((wordId) => {
-    const signals = buildWordWeakSignals(wordId, weakSignals);
+    const signals = buildWordWeakSignals(
+      wordId,
+      weakSignals,
+      undefined,
+      weakThresholds,
+    );
     if (!signals.length) return [];
     const word = sessionReviews.find((review) => review.wordId === wordId)?.word
       ?? `词 ${wordId}`;

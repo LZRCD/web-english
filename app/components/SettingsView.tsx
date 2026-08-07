@@ -3,7 +3,7 @@
 import type { ChangeEvent, RefObject } from "react";
 import type { ExamPlan, ExamProgressTiers } from "../../lib/learning";
 import type { AutomaticBackup } from "../../lib/backup";
-import type { StudyMode, StudyScope } from "../../lib/study";
+import type { StudyMode, StudyScope, WeakThresholds } from "../../lib/study";
 import PerformanceDiagnostics from "./PerformanceDiagnostics";
 
 type SettingsViewProps = {
@@ -18,6 +18,8 @@ type SettingsViewProps = {
   hideChineseMeaning: boolean;
   /** 多释义单词先显示英文语境句 */
   guessContextFirst: boolean;
+  /** 薄弱判定阈值（反复查词/插队/回忆偏慢） */
+  weakThresholds: WeakThresholds;
   studyMode: StudyMode;
   studyScope: StudyScope;
   learningItemCount: number;
@@ -43,6 +45,7 @@ type SettingsViewProps = {
   onSoundChange: (value: boolean) => void;
   onHideChineseMeaningChange: (value: boolean) => void;
   onGuessContextFirstChange: (value: boolean) => void;
+  onWeakThresholdsChange: (thresholds: WeakThresholds) => void;
   onModeChange: (mode: StudyMode | "all") => void;
   onExportBackup: () => void;
   onImportClick: () => void;
@@ -67,6 +70,7 @@ export default function SettingsView({
   soundOn,
   hideChineseMeaning,
   guessContextFirst,
+  weakThresholds,
   studyMode,
   studyScope,
   learningItemCount,
@@ -88,6 +92,7 @@ export default function SettingsView({
   onSoundChange,
   onHideChineseMeaningChange,
   onGuessContextFirstChange,
+  onWeakThresholdsChange,
   onModeChange,
   onExportBackup,
   onImportClick,
@@ -228,6 +233,60 @@ export default function SettingsView({
             onChange={(event) => onGuessContextFirstChange(event.target.checked)}
           />
         </label>
+        <div className="weak-thresholds-settings">
+          <span className="weak-thresholds-title">
+            <strong>薄弱判定阈值</strong>
+            <small>调整后词本薄弱标签、划词补漏插队、考前冲刺与周报趋势都会同步生效</small>
+          </span>
+          <label>
+            <span><strong>反复查词</strong><small>查过 ≥ 该次数的词标为薄弱候选并进入冲刺</small></span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={weakThresholds.lookupWeak}
+              disabled={dataReplacementLocked}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isFinite(value) && value >= 1 && value <= 20) {
+                  onWeakThresholdsChange({ ...weakThresholds, lookupWeak: Math.trunc(value) });
+                }
+              }}
+            />
+          </label>
+          <label>
+            <span><strong>插队复习</strong><small>查过 ≥ 该次数的词自动插队今日任务</small></span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={weakThresholds.lookupPriority}
+              disabled={dataReplacementLocked}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isFinite(value) && value >= 1 && value <= 20) {
+                  onWeakThresholdsChange({ ...weakThresholds, lookupPriority: Math.trunc(value) });
+                }
+              }}
+            />
+          </label>
+          <label>
+            <span><strong>回忆偏慢</strong><small>单次评分回忆 ≥ 该秒数判定为偏慢</small></span>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={Math.round(weakThresholds.slowRecallMs / 1000)}
+              disabled={dataReplacementLocked}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isFinite(value) && value >= 1 && value <= 120) {
+                  onWeakThresholdsChange({ ...weakThresholds, slowRecallMs: Math.trunc(value) * 1000 });
+                }
+              }}
+            />
+          </label>
+        </div>
         <label>
           <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 {learningItemCount} 个学习项</small></span>
           <select

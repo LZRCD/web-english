@@ -5016,3 +5016,67 @@ kbd {
 .sprint-dimension.cleared small {
   color: #34835f;
 }
+
+/* ---- 信号联动八轮：阈值设置 / 冲刺记录 ---- */
+.weak-thresholds-settings {
+  display: grid;
+  gap: 2px;
+  padding: 13px 0;
+  border-top: 1px dashed rgba(218, 226, 220, 0.8);
+  border-bottom: 1px dashed rgba(218, 226, 220, 0.8);
+}
+.weak-thresholds-title {
+  margin-bottom: 6px;
+}
+.weak-thresholds-settings input[type="number"] {
+  width: 72px;
+  border: 1px solid #cfe3d7;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 7px 10px;
+  font-size: 13px;
+  text-align: center;
+}
+.sprint-history {
+  margin-top: 16px;
+}
+.sprint-history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sprint-history-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 1fr 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(218, 226, 220, 0.76);
+  border-radius: 12px;
+  background: rgba(250, 252, 249, 0.86);
+}
+.sprint-history-row > strong {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #27352e;
+  font: 500 13px/1.1 Georgia, serif;
+}
+.sprint-history-row > strong small {
+  color: #929990;
+  font: 400 9px/1.2 "Courier New", monospace;
+}
+.sprint-history-row > span {
+  color: #6f7a72;
+  font-size: 11px;
+  text-align: right;
+}
+@media (max-width: 480px) {
+  .sprint-history-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sprint-history-row > span {
+    text-align: left;
+  }
+}

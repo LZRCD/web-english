@@ -59,14 +59,17 @@ import {
   buildWeeklyLearningReport,
 } from "../lib/insights";
 import {
+  buildSprintHistory,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   buildWordWeakSignals,
+  DEFAULT_WEAK_THRESHOLDS,
   lookupPriorityWordIds,
   lookupStatForWordId,
   type WeakSignalInput,
+  type WeakThresholds,
   type WordRecallStats,
 } from "../lib/weak-signals";
 import { useAiCoach } from "./hooks/useAiCoach";
@@ -176,6 +179,9 @@ export default function Home() {
   const [guessContextFirst, setGuessContextFirst] = useState(false);
   const [lookupStats, setLookupStats] = useState<LookupStats>({});
   const [guessMistakes, setGuessMistakes] = useState<GuessMistakeMap>({});
+  const [weakThresholds, setWeakThresholds] = useState<WeakThresholds>(
+    DEFAULT_WEAK_THRESHOLDS,
+  );
   const [senseFrequency, setSenseFrequency] = useState<SenseFrequencyMap>({});
   const [dailyGoal, setDailyGoal] = useState(20);
   const [adaptiveNewWords, setAdaptiveNewWords] = useState(true);
@@ -368,8 +374,8 @@ export default function Home() {
     wordProgress,
   ]);
   const weakProfiles = useMemo(
-    () => buildWeakProfiles(weakSignalInput),
-    [weakSignalInput],
+    () => buildWeakProfiles(weakSignalInput, weakThresholds),
+    [weakSignalInput, weakThresholds],
   );
   // 词本展示只需要标签数组
   const weakSignalsByWordId = useMemo(
@@ -389,10 +395,10 @@ export default function Home() {
     ) as Record<number, WordRecallStats>,
     [weakProfiles],
   );
-  // 划词补漏：查询 ≥3 次且未被近期答对覆盖的词插队今日任务
+  // 划词补漏：查询达到阈值且未被近期答对覆盖的词插队今日任务
   const lookupPriorityIds = useMemo(
-    () => lookupPriorityWordIds(weakSignalInput),
-    [weakSignalInput],
+    () => lookupPriorityWordIds(weakSignalInput, weakThresholds),
+    [weakSignalInput, weakThresholds],
   );
   const currentLookupStat = useMemo(
     () => current.id === undefined
@@ -402,8 +408,13 @@ export default function Home() {
   );
   // 薄弱维度近 4 周趋势（轨迹页周报下方）
   const weakTrendSeries = useMemo(
-    () => buildWeakDimensionTrendSeries(weakSignalInput, new Date(`${todayKey}T12:00:00`), 4),
-    [todayKey, weakSignalInput],
+    () => buildWeakDimensionTrendSeries(
+      weakSignalInput,
+      new Date(`${todayKey}T12:00:00`),
+      4,
+      weakThresholds,
+    ),
+    [todayKey, weakSignalInput, weakThresholds],
   );
   // 冲刺会话专属总结：薄弱维度分布、回忆对比、已解决/仍需关注
   const sprintCompletionSummary = useMemo(
@@ -412,14 +423,15 @@ export default function Home() {
           session: activeSession,
           reviews,
           weakSignals: weakSignalInput,
+          weakThresholds,
         })
       : undefined,
-    [activeSession, reviews, sessionComplete, weakSignalInput],
+    [activeSession, reviews, sessionComplete, weakSignalInput, weakThresholds],
   );
   // 考前薄弱冲刺：已学且命中任一薄弱信号的词
   const sprintWordIds = useMemo(
-    () => buildSprintWordIds(weakSignalInput),
-    [weakSignalInput],
+    () => buildSprintWordIds(weakSignalInput, weakThresholds),
+    [weakSignalInput, weakThresholds],
   );
   const sprintWordById = useMemo(() => {
     const map = new Map<number, Word>();
@@ -429,8 +441,8 @@ export default function Home() {
     return map;
   }, [wordById]);
   const sprintSummary = useMemo(
-    () => buildSprintSummary(weakSignalInput, sprintWordById),
-    [sprintWordById, weakSignalInput],
+    () => buildSprintSummary(weakSignalInput, sprintWordById, weakThresholds),
+    [sprintWordById, weakSignalInput, weakThresholds],
   );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
@@ -516,8 +528,14 @@ export default function Home() {
       examPlan,
       dailyNewGoal: effectiveNewGoal,
       weakSignals: weakSignalInput,
+      weakThresholds,
     }),
-    [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, weakSignalInput, wordProgress],
+    [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, weakSignalInput, weakThresholds, wordProgress],
+  );
+  // 冲刺历史：按 sessionId 分组派生，供轨迹页展示
+  const sprintHistory = useMemo(
+    () => buildSprintHistory(reviews),
+    [reviews],
   );
   // 冲刺维度 × 周报趋势联动：清零标记 + 本周对照
   const sprintDimensionTrend = useMemo(
@@ -689,6 +707,7 @@ export default function Home() {
     soundOn,
     hideChineseMeaning,
     guessContextFirst,
+    weakThresholds,
     lookupStats,
     guessMistakes,
     senseFrequency,
@@ -719,6 +738,7 @@ export default function Home() {
     soundOn,
     hideChineseMeaning,
     guessContextFirst,
+    weakThresholds,
     lookupStats,
     guessMistakes,
     senseFrequency,
@@ -1048,6 +1068,7 @@ export default function Home() {
     setSoundOn(state.soundOn);
     setHideChineseMeaning(state.hideChineseMeaning);
     setGuessContextFirst(state.guessContextFirst);
+    setWeakThresholds(state.weakThresholds ?? DEFAULT_WEAK_THRESHOLDS);
     setLookupStats(state.lookupStats);
     setGuessMistakes(state.guessMistakes);
     setSenseFrequency(state.senseFrequency);
@@ -1807,7 +1828,7 @@ export default function Home() {
                 }
                 sprintWeakSignals={
                   activeSession?.kind === "sprint" && current.id !== undefined
-                    ? buildWordWeakSignals(current.id, weakSignalInput)
+                    ? buildWordWeakSignals(current.id, weakSignalInput, undefined, weakThresholds)
                     : undefined
                 }
                 onFocusSourceWord={focusSourceWord}
@@ -1945,6 +1966,7 @@ export default function Home() {
             weakTrendSeries={weakTrendSeries}
             examPhase={examPlan?.phase}
             examProgress={examProgress}
+            sprintHistory={sprintHistory}
             sprintCount={sprintWordIds.length}
             onStartSprint={startSprintSession}
             onCopySprint={copySprintSummary}
@@ -1993,6 +2015,7 @@ export default function Home() {
             soundOn={soundOn}
             hideChineseMeaning={hideChineseMeaning}
             guessContextFirst={guessContextFirst}
+            weakThresholds={weakThresholds}
             studyMode={studyMode}
             studyScope={studyScope}
             learningItemCount={learningItemCount}
@@ -2015,6 +2038,7 @@ export default function Home() {
             onSoundChange={setSoundOn}
             onHideChineseMeaningChange={setHideChineseMeaning}
             onGuessContextFirstChange={setGuessContextFirst}
+            onWeakThresholdsChange={setWeakThresholds}
             onModeChange={(mode) => {
               if (mode === "all") startAllBookShuffle(false);
               else changeStudyMode(mode);

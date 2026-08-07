@@ -601,3 +601,23 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 116/116 通过，新增用例覆盖：维度联动清零标记、本周对照、周报缺失 key 降级、冲刺侧独有维度不进入结果。
 - 未启动或重启本地开发服务器；冲刺总结与联动结构均为实时派生，老用户无迁移负担。
+
+## 第二十七次迭代：信号联动八轮（冲刺历史、薄弱阈值可调）
+
+本次迭代：2026-08-14。
+
+### 新增
+
+- 冲刺历史（`lib/weak-signals.ts`）：`buildSprintHistory` 按评分日志 `sessionId.startsWith("sprint:")` 分组派生——每次冲刺的开始时间、去重词数、成功词数、平均回忆耗时，并按时间倒序；轨迹页新增「冲刺记录」区（仅存在记录时显示，最近 5 条 + 总次数/总覆盖词数），数据完全由 reviews 派生、不新增 schema。
+- 薄弱判定阈值参数化：`WeakThresholds` 类型与 `DEFAULT_WEAK_THRESHOLDS` 移入 `lib/study.ts`（避免循环依赖），weak-signals 的 `buildWordWeakSignals` / `buildWeakProfiles` / `lookupWeakCandidateIds` / `lookupPriorityWordIds` / `buildSprintWordIds` / `buildSprintSummary` / `buildWeakDimensionTrend(Series)` 全部新增可选 `thresholds` 参数（缺省回退默认值）；insights 周报与冲刺完成总结同步透传。
+- 设置页「薄弱判定阈值」区：反复查词（1–20 次，进薄弱候选）、插队复习（1–20 次，进今日任务）、回忆偏慢（1–120 秒）三个数字输入，保存进 StoredState 可选字段 `weakThresholds`（不升级 schemaVersion，`normalizeStoredState` 按默认值兼容旧数据并夹取非法值）；词本标签、划词补漏、冲刺、周报趋势全部实时联动。
+
+### 修正
+
+- 无。本轮为增量联动，未改动评分、排程、备份等既有数据链路；`weakThresholds` 为可选字段，老数据无迁移负担。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 117/117 通过，新增用例覆盖：冲刺历史分组/去重/倒序/空记录、阈值参数化（同数据不同阈值产出不同画像）、旧数据默认值兼容与非法值夹取。
+- 未启动或重启本地开发服务器。
