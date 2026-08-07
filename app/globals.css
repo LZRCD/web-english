@@ -4690,3 +4690,30 @@ kbd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- 信号联动二轮：例句来源词跳转 / 回忆耗时 ---- */
+.reused-source-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #2f7d58;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.reused-source-link:hover {
+  color: #1f5f41;
+}
+.recall-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #edf2ef;
+  color: #5b6b62;
+  font: 600 9px/1.5 "Courier New", monospace;
+  white-space: nowrap;
+}
+.lookup-hint.recall {
+  color: #5b6b62;
+}

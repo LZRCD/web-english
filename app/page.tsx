@@ -63,6 +63,7 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   type WeakSignalInput,
+  type WordRecallStats,
 } from "../lib/weak-signals";
 import { useAiCoach } from "./hooks/useAiCoach";
 import { useAudio } from "./hooks/useAudio";
@@ -369,6 +370,14 @@ export default function Home() {
         profile.signals,
       ]),
     ) as Record<number, string[]>,
+    [weakProfiles],
+  );
+  // 词级回忆耗时：有合法样本的词展示平均耗时
+  const weakRecallByWordId = useMemo(
+    () => Object.fromEntries(
+      Object.entries(weakProfiles).flatMap(([wordId, profile]) =>
+        profile.recall ? [[Number(wordId), profile.recall]] : []),
+    ) as Record<number, WordRecallStats>,
     [weakProfiles],
   );
   // 划词补漏：查询 ≥3 次且未被近期答对覆盖的词插队今日任务
@@ -1466,6 +1475,17 @@ export default function Home() {
     setActiveView("learn");
   }
 
+  // 例句来源词跳转：sourceId 缺省或词不在词库时静默降级为纯文本
+  function focusSourceWord(sourceId: number | undefined, sourceWord: string) {
+    if (sourceId === undefined) return;
+    const target = wordById.get(sourceId);
+    if (!target) {
+      showToast(`词库中未找到「${sourceWord}」`, 1800);
+      return;
+    }
+    focusSavedWord(target);
+  }
+
   function submitReinforcement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (reinforcementRating === null) return;
@@ -1684,6 +1704,10 @@ export default function Home() {
                   current.id === undefined ? 0 : guessMistakes[current.id] ?? 0
                 }
                 currentLookupStat={currentLookupStat}
+                currentRecallStats={
+                  current.id === undefined ? undefined : weakProfiles[current.id]?.recall
+                }
+                onFocusSourceWord={focusSourceWord}
                 activeSession={activeSession}
                 newCount={stats.newCount}
                 clock={clock}
@@ -1760,6 +1784,7 @@ export default function Home() {
             lookupWords={lookupWords}
             lookupStats={lookupStats}
             weakSignalsByWordId={weakSignalsByWordId}
+            weakRecallByWordId={weakRecallByWordId}
             ratingLabels={ratingLabels}
             clock={clock}
             favorites={favorites}
@@ -1785,6 +1810,10 @@ export default function Home() {
             words={redbookWords}
             wordProgress={wordProgress}
             familiarMeanings={familiarMeanings}
+            lookupStats={lookupStats}
+            lookupWords={lookupWords}
+            senseFrequency={senseFrequency}
+            stubbornWords={stubbornWords}
             soundOn={soundOn}
             onSpeak={speakWord}
             onRecordResult={recordQuizResult}

@@ -30,13 +30,58 @@ export type WeakSignalInput = {
   wordProgress: WordProgressMap;
 };
 
-/** 单个词的薄弱画像：标签列表 + 划词查询次数 */
+/** 词级回忆耗时统计（最近 N 次评分样本） */
+export type WordRecallStats = {
+  /** 合法回忆耗时样本数（最多取最近 N 次评分） */
+  sampleCount: number;
+  /** 最近 N 次平均（毫秒） */
+  averageMs: number;
+  /** 最近 N 次中位数（毫秒） */
+  medianMs: number;
+  /** 最近一次评分耗时（毫秒） */
+  latestMs: number;
+};
+
+/** 单个词的薄弱画像：标签列表 + 划词查询次数 + 回忆耗时统计 */
 export type WeakWordProfile = {
   /** 薄弱信号标签（固定顺序，供词本/学习卡展示） */
   signals: string[];
   /** 该词的划词累计查询次数 */
   lookupCount: number;
+  /** 该词最近评分的回忆耗时统计（无合法样本时为 undefined） */
+  recall?: WordRecallStats;
 };
+
+/** 按词聚合回忆耗时：取最近 sampleCount 次合法评分的平均/中位数/最新值 */
+export function wordRecallStats(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+  sampleCount = 5,
+): WordRecallStats | undefined {
+  const samples = reviews
+    .filter((review) =>
+      review.wordId === wordId
+      && typeof review.recallMs === "number"
+      && Number.isFinite(review.recallMs)
+      && review.recallMs >= 0)
+    .sort((first, second) => second.reviewedAt.localeCompare(first.reviewedAt))
+    .slice(0, sampleCount)
+    .map((review) => review.recallMs as number);
+  if (!samples.length) return undefined;
+  const sorted = [...samples].sort((first, second) => first - second);
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+  return {
+    sampleCount: samples.length,
+    averageMs: Math.round(
+      samples.reduce((sum, ms) => sum + ms, 0) / samples.length,
+    ),
+    medianMs: Math.round(median),
+    latestMs: samples[0],
+  };
+}
 
 /** 周报薄弱维度趋势的单个维度 */
 export type WeakDimensionTrend = {
@@ -151,9 +196,11 @@ export function buildWeakProfiles(
   }
   const profiles: Record<number, WeakWordProfile> = {};
   for (const wordId of wordIds) {
+    const recall = wordRecallStats(input.reviews, wordId);
     profiles[wordId] = {
       signals: buildWordWeakSignals(wordId, input, lookupById),
       lookupCount: lookupById.get(wordId)?.count ?? 0,
+      ...(recall ? { recall } : {}),
     };
   }
   return profiles;

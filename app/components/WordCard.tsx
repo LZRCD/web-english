@@ -11,6 +11,7 @@ import {
 import type { SenseFrequencyEntry, WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
 import type { ReusedSentence } from "../../lib/sentence-index";
 import { wordRetrievability } from "../../lib/learning";
+import type { WordRecallStats } from "../../lib/weak-signals";
 import type { LookupStat, Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
@@ -51,6 +52,10 @@ type WordCardProps = {
   guessMistakeCount: number;
   /** 该词的划词查询统计（用于补漏提示） */
   currentLookupStat?: LookupStat;
+  /** 该词最近评分的回忆耗时统计 */
+  currentRecallStats?: WordRecallStats;
+  /** 点击例句来源词跳转到该词学习卡；sourceId 缺失时降级为纯文本 */
+  onFocusSourceWord?: (sourceId: number | undefined, sourceWord: string) => void;
 
   // 上下文
   activeSession?: StudySession;
@@ -111,6 +116,8 @@ export default function WordCard({
   reusedSentences,
   guessMistakeCount,
   currentLookupStat,
+  currentRecallStats,
+  onFocusSourceWord,
   activeSession,
   newCount,
   clock,
@@ -297,6 +304,13 @@ export default function WordCard({
               {new Date(currentLookupStat.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
             </p>
           )}
+          {currentRecallStats && (
+            <p className="lookup-hint recall">
+              平均回忆 {(currentRecallStats.averageMs / 1000).toFixed(1)}s
+              {" · "}中位 {(currentRecallStats.medianMs / 1000).toFixed(1)}s
+              {" · "}{currentRecallStats.sampleCount} 次评分
+            </p>
+          )}
           {hideSenses && !sensesExpanded && (
             <div className="meaning-hidden">
               {guessSentence ? (
@@ -454,7 +468,22 @@ export default function WordCard({
                     {!hideChineseMeaning && item.translation && (
                       <p className="context-translation">{item.translation}</p>
                     )}
-                    <small>来自 {item.sourceWord} 的例句</small>
+                    <small>
+                      来自{" "}
+                      {onFocusSourceWord && item.sourceId !== undefined ? (
+                        <button
+                          type="button"
+                          className="reused-source-link"
+                          onClick={() => onFocusSourceWord(item.sourceId, item.sourceWord)}
+                          title={`去学习「${item.sourceWord}」`}
+                        >
+                          {item.sourceWord}
+                        </button>
+                      ) : (
+                        item.sourceWord
+                      )}
+                      {" "}的例句
+                    </small>
                   </li>
                 ))}
               </ol>

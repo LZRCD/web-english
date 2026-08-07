@@ -1,5 +1,15 @@
-import { isWeakProgress, type WordProgressMap } from "./learning.ts";
-import type { FamiliarMeaningMap, Word } from "./study.ts";
+import {
+  isWeakProgress,
+  type SenseFrequencyMap,
+  type StubbornWordMap,
+  type WordProgressMap,
+} from "./learning.ts";
+import type {
+  FamiliarMeaningMap,
+  LookupStats,
+  LookupWord,
+  Word,
+} from "./study.ts";
 import { seededScore, splitSenseItems } from "./word-utils.ts";
 
 export type QuizMode =
@@ -108,6 +118,11 @@ export function restoreQuizQuestions(
   words: Word[],
   progress: WordProgressMap,
   familiarMeanings: FamiliarMeaningMap,
+  signals?: Pick<Parameters<typeof buildQuizQuestions>[0],
+    | "lookupStats"
+    | "lookupWords"
+    | "senseFrequency"
+    | "stubbornWords">,
 ) {
   return buildQuizQuestions({
     words,
@@ -116,6 +131,7 @@ export function restoreQuizQuestions(
     mode: session.mode,
     count: 10,
     seed: session.seed,
+    ...signals,
   });
 }
 
@@ -245,13 +261,55 @@ function buildMeaningQuestion(
   };
 }
 
-function candidatePriority(word: Word & { id: number }, progress: WordProgressMap) {
+/** 出题信号：划词查询次数（按学习项 id 归并）、义项考频、顽固词 */
+type QuestionSignals = {
+  lookupCountByWordId: Map<number, number>;
+  senseFrequency?: SenseFrequencyMap;
+  stubbornWords?: StubbornWordMap;
+};
+
+/** 把划词查询次数按学习项 id 归并（linkedWordId 优先，无则用划词自身 id） */
+function lookupCountByWordId(
+  lookupStats?: LookupStats,
+  lookupWords?: LookupWord[],
+) {
+  const map = new Map<number, number>();
+  if (!lookupStats || !lookupWords) return map;
+  for (const word of lookupWords) {
+    const count = lookupStats[word.query.trim().toLowerCase()]?.count ?? 0;
+    if (!count) continue;
+    const id = word.linkedWordId ?? word.id;
+    map.set(id, Math.max(map.get(id) ?? 0, count));
+  }
+  return map;
+}
+
+function candidatePriority(
+  word: Word & { id: number },
+  progress: WordProgressMap,
+  signals: QuestionSignals,
+) {
   const item = progress[word.id];
-  if (!item) return 0;
-  return (isWeakProgress(item) ? 1_000_000 : 0)
-    + item.lapseCount * 10_000
-    + (item.lastRating <= 1 ? 1_000 : 0)
-    - item.consecutiveSuccesses * 10;
+  let priority = item
+    ? (isWeakProgress(item) ? 1_000_000 : 0)
+      + item.lapseCount * 10_000
+      + (item.lastRating <= 1 ? 1_000 : 0)
+      - item.consecutiveSuccesses * 10
+    : 0;
+  // 信号加成都低于「薄弱词」权重，保持现有语义：薄弱词仍最先出题
+  const lookupCount = signals.lookupCountByWordId.get(word.id) ?? 0;
+  priority += Math.min(40_000, lookupCount * 8_000);
+  if (signals.stubbornWords?.[word.id]?.active) priority += 25_000;
+  const frequencyEntries = signals.senseFrequency?.[word.id];
+  if (frequencyEntries?.length) {
+    let frequencyBoost = 0;
+    for (const entry of frequencyEntries) {
+      if (entry.level === "low") frequencyBoost += 1_500;
+      else if (entry.level === "medium") frequencyBoost += 800;
+    }
+    priority += Math.min(15_000, frequencyBoost);
+  }
+  return priority;
 }
 
 export function buildQuizQuestions(input: {
@@ -261,15 +319,28 @@ export function buildQuizQuestions(input: {
   mode: QuizMode;
   count?: number;
   seed?: number;
+  /** 划词查询统计：查得多的词优先出题 */
+  lookupStats?: LookupStats;
+  /** 划词记录：把查询词归并回学习项 */
+  lookupWords?: LookupWord[];
+  /** 义项考频：低频义项多的词优先出题 */
+  senseFrequency?: SenseFrequencyMap;
+  /** 顽固词：活跃顽固词优先出题 */
+  stubbornWords?: StubbornWordMap;
 }) {
   const count = Math.max(1, Math.min(30, Math.trunc(input.count ?? 10)));
   const seed = Number.isFinite(input.seed) ? Math.trunc(input.seed!) : Date.now();
   const learnedWords = input.words.filter(wordId).filter((word) =>
     Boolean(input.progress[word.id]));
+  const signals: QuestionSignals = {
+    lookupCountByWordId: lookupCountByWordId(input.lookupStats, input.lookupWords),
+    senseFrequency: input.senseFrequency,
+    stubbornWords: input.stubbornWords,
+  };
   const candidates = shuffled(learnedWords, seed, (word) => String(word.id))
     .sort((first, second) =>
-      candidatePriority(second, input.progress)
-      - candidatePriority(first, input.progress));
+      candidatePriority(second, input.progress, signals)
+      - candidatePriority(first, input.progress, signals));
 
   return candidates.flatMap<QuizQuestion>((word, index) => {
     if (input.mode === "listening-spelling") {

@@ -89,6 +89,81 @@ test("熟词僻义与近义辨析题包含唯一正确选项", () => {
   }
 });
 
+test("出题优先级纳入划词查询、低频考频与顽固词信号", () => {
+  // 全部已学习且非薄弱：基础分相同，只靠信号区分
+  const progress = progressFor([2, 2, 2, 2, 2]);
+  const lookupWords: import("../lib/study.ts").LookupWord[] = [
+    {
+      id: 9_000_000_001,
+      linkedWordId: 1,
+      query: "radiate",
+      kind: "word",
+      phonetic: "",
+      part: "vt.",
+      meaning: "散发",
+      note: "",
+      source: "redbook",
+      addedAt: "2026-08-01T00:00:00.000Z",
+    },
+  ];
+  const questions = buildQuizQuestions({
+    words: WORDS,
+    progress,
+    mode: "listening-spelling",
+    count: 4,
+    seed: 42,
+    // 词 1 查过 5 次 → 最高加分
+    lookupStats: {
+      radiate: {
+        count: 5,
+        firstAt: "2026-08-01T00:00:00.000Z",
+        lastAt: "2026-08-05T00:00:00.000Z",
+      },
+    },
+    lookupWords,
+    // 词 2 有两个低频义项 → 次高
+    senseFrequency: {
+      2: [
+        { meaning: "n. 目标", level: "low" },
+        { meaning: "adj. 客观的", level: "low" },
+      ],
+    },
+    // 词 3 活跃顽固词 → 第二
+    stubbornWords: {
+      3: {
+        wordId: 3,
+        active: true,
+        reason: "again-3",
+        triggeredAt: "2026-08-01T00:00:00.000Z",
+        lastChangedAt: "2026-08-01T00:00:00.000Z",
+        triggerCount: 1,
+      },
+    },
+  });
+
+  assert.deepEqual(
+    questions.map((question) => question.wordId),
+    [1, 3, 2, 4],
+  );
+});
+
+test("出题优先级：无信号时保持原有薄弱词优先语义", () => {
+  const progress = progressFor([2, 0, 2, 2, 2]);
+  const questions = buildQuizQuestions({
+    words: WORDS,
+    progress,
+    mode: "listening-spelling",
+    count: 2,
+    seed: 42,
+    lookupStats: {},
+    lookupWords: [],
+    senseFrequency: {},
+    stubbornWords: {},
+  });
+  // 词 2 薄弱（上次评分 0），仍最先出题
+  assert.equal(questions[0].wordId, 2);
+});
+
 test("测验每日首次作答才写入 FSRS，重复作答不再改写排程", () => {
   const now = new Date("2026-08-03T12:00:00.000Z");
   // 空记录：首次作答应写入

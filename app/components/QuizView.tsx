@@ -10,13 +10,31 @@ import {
   type QuizQuestion,
   type QuizSessionState,
 } from "../../lib/quiz";
-import { isWeakProgress, type WordProgressMap } from "../../lib/learning";
-import type { FamiliarMeaningMap, Word } from "../../lib/study";
+import {
+  isWeakProgress,
+  type SenseFrequencyMap,
+  type StubbornWordMap,
+  type WordProgressMap,
+} from "../../lib/learning";
+import type {
+  FamiliarMeaningMap,
+  LookupStats,
+  LookupWord,
+  Word,
+} from "../../lib/study";
 
 type QuizViewProps = {
   words: Word[];
   wordProgress: WordProgressMap;
   familiarMeanings: FamiliarMeaningMap;
+  /** 划词查询统计：查得多的词优先出题 */
+  lookupStats: LookupStats;
+  /** 划词记录：把查询词归并回学习项 */
+  lookupWords: LookupWord[];
+  /** 义项考频：低频义项多的词优先出题 */
+  senseFrequency: SenseFrequencyMap;
+  /** 顽固词：活跃顽固词优先出题 */
+  stubbornWords: StubbornWordMap;
   soundOn: boolean;
   onSpeak: (word: string, wordId?: number) => void;
   onRecordResult: (
@@ -37,6 +55,10 @@ export default function QuizView({
   words,
   wordProgress,
   familiarMeanings,
+  lookupStats,
+  lookupWords,
+  senseFrequency,
+  stubbornWords,
   soundOn,
   onSpeak,
   onRecordResult,
@@ -76,6 +98,7 @@ export default function QuizView({
         words,
         wordProgress,
         familiarMeanings,
+        { lookupStats, lookupWords, senseFrequency, stubbornWords },
       );
       if (restored.length) {
         setMode(savedQuiz.mode);
@@ -117,6 +140,10 @@ export default function QuizView({
       words,
       progress: wordProgress,
       familiarMeanings,
+      lookupStats,
+      lookupWords,
+      senseFrequency,
+      stubbornWords,
       mode: nextMode,
       count: 10,
       seed: nextSeed,

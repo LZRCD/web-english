@@ -13,6 +13,7 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  wordRecallStats,
   type WeakSignalInput,
 } from "../lib/weak-signals.ts";
 
@@ -220,6 +221,29 @@ test("周报薄弱维度趋势：按本地周一统计本周数量与变化", ()
   assert.equal(byKey.get("stubborn")!.change, 0);
   assert.equal(byKey.get("guess")!.count, 1);
   assert.equal(byKey.get("guess")!.change, null);
+});
+
+test("词级回忆耗时：聚合最近 5 次合法样本的平均/中位数/最新值", () => {
+  const input = baseInput({
+    reviews: [
+      makeReview(10, 2, "2026-07-27T08:00:00.000Z", 8_000),
+      makeReview(10, 2, "2026-07-28T08:00:00.000Z", 16_000),
+      makeReview(10, 1, "2026-07-29T08:00:00.000Z", 12_000),
+      // 非法样本被忽略
+      makeReview(10, 2, "2026-07-29T09:00:00.000Z", -100),
+    ],
+  });
+  const recall = wordRecallStats(input.reviews, 10);
+  assert.ok(recall);
+  assert.equal(recall.sampleCount, 3);
+  assert.equal(recall.averageMs, 12_000);
+  assert.equal(recall.medianMs, 12_000);
+  assert.equal(recall.latestMs, 12_000);
+  // 无合法样本返回 undefined
+  assert.equal(wordRecallStats(input.reviews, 999), undefined);
+  // 全量画像携带 recall 字段
+  const profiles = buildWeakProfiles(input);
+  assert.equal(profiles[10].recall?.averageMs, 12_000);
 });
 
 test("周报薄弱维度趋势：不提供信号源时 insights 周报返回空趋势", async () => {

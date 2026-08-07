@@ -3,6 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { dateKey, splitMeaning, type LookupStats, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
 import { wordRetrievability, type StubbornWordRecord, type WordProgress } from "../../lib/learning";
+import type { WordRecallStats } from "../../lib/weak-signals";
 
 type FavoriteWordItem = SavedWord & { word: Word };
 type MistakeWordItem = MistakeRecord & { word: Word };
@@ -19,6 +20,8 @@ type WordbookViewProps = {
   lookupStats: LookupStats;
   /** 薄弱画像标签：key 为学习项 wordId */
   weakSignalsByWordId: Record<number, string[]>;
+  /** 词级回忆耗时统计：key 为学习项 wordId */
+  weakRecallByWordId: Record<number, WordRecallStats>;
   ratingLabels: string[];
   clock: number;
   favorites: SavedWord[];
@@ -42,6 +45,7 @@ export default function WordbookView({
   lookupWords,
   lookupStats,
   weakSignalsByWordId,
+  weakRecallByWordId,
   ratingLabels,
   clock,
   favorites,
@@ -67,6 +71,16 @@ export default function WordbookView({
   const visibleLookupWords = weakLookupOnly
     ? lookupWords.filter((item) => isLookupWeakCandidate(item.query))
     : lookupWords;
+  // 词级回忆耗时标签（中性色，与薄弱信号区分）
+  const recallTag = (wordId: number) => {
+    const recall = weakRecallByWordId[wordId];
+    if (!recall) return null;
+    return (
+      <span className="recall-tag">
+        回忆 {(recall.averageMs / 1000).toFixed(1)}s · {recall.sampleCount} 次
+      </span>
+    );
+  };
   const totalLookupCount = Object.values(lookupStats)
     .reduce((sum, stat) => sum + stat.count, 0);
   const todayNewLookups = lookupWords.filter(
@@ -209,13 +223,12 @@ export default function WordbookView({
               <div><h2>{item.word.word}</h2><span>{item.word.phonetic ?? item.word.part ?? splitMeaning(item.word.meaning).part}</span></div>
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>{item.word.section ?? "红宝书"} · Unit {item.word.unit ?? "—"}</small>
-              {(weakSignalsByWordId[item.wordId] ?? []).length > 0 && (
-                <div className="weak-signal-tags">
-                  {weakSignalsByWordId[item.wordId].map((signal) => (
-                    <span className="weak-signal-tag" key={signal}>{signal}</span>
-                  ))}
-                </div>
-              )}
+              <div className="weak-signal-tags">
+                {recallTag(item.wordId)}
+                {(weakSignalsByWordId[item.wordId] ?? []).map((signal) => (
+                  <span className="weak-signal-tag" key={signal}>{signal}</span>
+                ))}
+              </div>
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>去复习</button>
@@ -230,13 +243,12 @@ export default function WordbookView({
               <div><h2>{item.word.word}</h2><span>{ratingLabels[item.lastRating]}</span></div>
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "红宝书"} Unit {item.word.unit ?? "—"}</small>
-              {(weakSignalsByWordId[item.wordId] ?? []).length > 0 && (
-                <div className="weak-signal-tags">
-                  {weakSignalsByWordId[item.wordId].map((signal) => (
-                    <span className="weak-signal-tag" key={signal}>{signal}</span>
-                  ))}
-                </div>
-              )}
+              <div className="weak-signal-tags">
+                {recallTag(item.wordId)}
+                {(weakSignalsByWordId[item.wordId] ?? []).map((signal) => (
+                  <span className="weak-signal-tag" key={signal}>{signal}</span>
+                ))}
+              </div>
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>重新学习</button>
@@ -263,13 +275,12 @@ export default function WordbookView({
                 当前牢固度 {item.progress ? wordRetrievability(item.progress, now) : 0}%
                 {" · "}连续 3 次“认识/熟练”后自动退出
               </small>
-              {(weakSignalsByWordId[item.record.wordId] ?? []).length > 0 && (
-                <div className="weak-signal-tags">
-                  {weakSignalsByWordId[item.record.wordId].map((signal) => (
-                    <span className="weak-signal-tag" key={signal}>{signal}</span>
-                  ))}
-                </div>
-              )}
+              <div className="weak-signal-tags">
+                {recallTag(item.record.wordId)}
+                {(weakSignalsByWordId[item.record.wordId] ?? []).map((signal) => (
+                  <span className="weak-signal-tag" key={signal}>{signal}</span>
+                ))}
+              </div>
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>专项修复</button>
@@ -348,13 +359,12 @@ export default function WordbookView({
               {isLookupWeakCandidate(item.query) && (
                 <span className="lookup-candidate-mark">薄弱候选</span>
               )}
-              {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).length > 0 && (
-                <div className="weak-signal-tags">
-                  {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).map((signal) => (
-                    <span className="weak-signal-tag" key={signal}>{signal}</span>
-                  ))}
-                </div>
-              )}
+              <div className="weak-signal-tags">
+                {recallTag(item.linkedWordId ?? item.id)}
+                {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).map((signal) => (
+                  <span className="weak-signal-tag" key={signal}>{signal}</span>
+                ))}
+              </div>
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onStartLookups([item.linkedWordId ?? item.id])}>去学习</button>
