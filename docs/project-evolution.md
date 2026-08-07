@@ -803,3 +803,22 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 152/152 通过（+3 新用例覆盖降级贯通三态）。
 - Playwright E2E 8/8 通过（17.1s）：复用 3000 端口既有本项目 dev server（npm 父 38632 + node 子 49328，日志 .dev-3000-20260808-021153.log），第 2/4/5 条依赖 lapse 信号的既有断言全部未受影响；运行后核对 3000 无新增残留。
+## 第三十七次迭代：信号联动十八轮（已解决反馈——学习卡「已稳定」正向提示）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- `lib/weak-signals.ts` 的 `isLookupDemoted`（答对且查询不再增长 → 自动降级）由内部函数改为导出，供学习卡正向反馈复用，判定逻辑不动。
+- 学习卡「已稳定」提示：page.tsx 派生 `currentLookupStabilized`（当前词有查词统计、已降级稳定、且 `buildWordWeakSignals` 为空——即唯一弱点就是查词且已消除）传给 WordCard；WordCard 新增 `lookupStabilized` prop，在薄弱信号区下方显示绿色「已稳定 · 查词弱点已消除」轻量标签（无其他薄弱信号时显示）。新增 `weak-stabilized` / `weak-stabilized-tag` 样式（绿色系，与 weak-signal-tag 同构）。薄弱→稳定的转换在用户视角可感知，闭环体验完整。
+- 新增 3 个单测直接覆盖 `isLookupDemoted` 三态：答对且查询不再增长 → true；查询仍增长 → false；未答对 → false，与第 17 轮 buildWordWeakSignals 降级贯通用例互相印证。
+
+### 修正
+
+- 无。本轮未新增持久化 schema，未改评分/排程/备份链路；仅导出既有派生函数 + 展示层增量。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 155/155 通过（+3：isLookupDemoted 三态）。
+- Playwright E2E 8/8 通过（22.2s）：复用 3000 端口既有本项目 dev server（node 49328，日志 .dev-3000-20260808-021153.log，非本轮启动、跑后不关闭），既有 8 条断言全部未受影响。

@@ -62,6 +62,8 @@ type WordCardProps = {
   onAddToToday?: () => void;
   /** 该词的薄弱信号时间线文本（多行，供标签悬停查看） */
   signalTimelineText?: string;
+  /** 曾因查词被标记薄弱、现已稳定（正向反馈） */
+  lookupStabilized?: boolean;
   /** 点击例句来源词跳转到该词学习卡；sourceId 缺失时降级为纯文本 */
   onFocusSourceWord?: (sourceId: number | undefined, sourceWord: string) => void;
 
@@ -128,6 +130,7 @@ export default function WordCard({
   sprintWeakSignals,
   sprintWeakLabel,
   signalTimelineText,
+  lookupStabilized,
   onAddToToday,
   onFocusSourceWord,
   activeSession,
@@ -336,6 +339,11 @@ export default function WordCard({
                   加入今日任务
                 </button>
               )}
+            </div>
+          )}
+          {lookupStabilized && (!sprintWeakSignals || sprintWeakSignals.length === 0) && (
+            <div className="weak-stabilized" title="曾因查词被标记薄弱，持续答对后已稳定">
+              <span className="weak-stabilized-tag">已稳定 · 查词弱点已消除</span>
             </div>
           )}
           {hideSenses && !sensesExpanded && (

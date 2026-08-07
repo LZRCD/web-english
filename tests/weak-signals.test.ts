@@ -25,6 +25,7 @@ import {
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
   emphasizedWeakDimensions,
+  isLookupDemoted,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
@@ -936,4 +937,46 @@ test("薄弱降级贯通：未答对（lastRating<2）不降级", () => {
     } as unknown as WordProgressMap,
   });
   assert.deepEqual(buildWordWeakSignals(1, input), ["查过3次", "FSRS lapse 1"]);
+});
+
+test("已稳定判定 isLookupDemoted：答对且查询不再增长 → true", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const stat = lookupStatForWordId(1, input)!;
+  assert.equal(isLookupDemoted(1, stat, input), true);
+});
+
+test("已稳定判定 isLookupDemoted：查询仍增长 → false", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-30T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const stat = lookupStatForWordId(1, input)!;
+  assert.equal(isLookupDemoted(1, stat, input), false);
+});
+
+test("已稳定判定 isLookupDemoted：未答对 → false", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 1, lastRating: 1, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const stat = lookupStatForWordId(1, input)!;
+  assert.equal(isLookupDemoted(1, stat, input), false);
 });

@@ -4797,6 +4797,21 @@ kbd {
 .weak-add-today:hover {
   background: #eef5f0;
 }
+.weak-stabilized {
+  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.weak-stabilized-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef5f0;
+  color: #2f7d58;
+  font: 600 9px/1.5 "Courier New", monospace;
+  white-space: nowrap;
+}
 .lookup-weak-export {
   border: 1px solid rgba(47, 125, 88, 0.35);
   padding: 5px 12px;

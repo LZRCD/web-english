@@ -303,8 +303,7 @@ export function buildWeakCandidateSummary(
 /**
  * 反复查过但之后答对（rating≥2 且查询次数不再增长）→ 自动降级出队。
  * 纯派生判断：最近一次评分时间晚于最近查询时间即认为已覆盖。
- */
-function isLookupDemoted(
+ */ export function isLookupDemoted(
   wordId: number,
   stat: LookupStat,
   input: WeakSignalInput,
