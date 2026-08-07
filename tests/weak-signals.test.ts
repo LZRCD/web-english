@@ -7,6 +7,8 @@ import type {
 } from "../lib/learning.ts";
 import type { LookupWord } from "../lib/study.ts";
 import {
+  buildSprintSummary,
+  buildSprintWordIds,
   buildWeakDimensionTrend,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
@@ -223,6 +225,51 @@ test("周报薄弱维度趋势：按本地周一统计本周数量与变化", ()
   assert.equal(byKey.get("stubborn")!.change, 0);
   assert.equal(byKey.get("guess")!.count, 1);
   assert.equal(byKey.get("guess")!.change, null);
+});
+
+test("考前薄弱冲刺：只选已学且命中薄弱信号的词，按薄弱程度排序", () => {
+  const input = baseInput({
+    lookupStats: {
+      a: { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("a", 1)],
+    reviews: [
+      makeReview(1, 2, "2026-07-28T00:00:00.000Z", 16_000), // 回忆偏慢
+      makeReview(2, 0, "2026-07-28T00:00:00.000Z"), // lapse + 薄弱
+      makeReview(3, 2, "2026-07-28T00:00:00.000Z"), // 已学但无信号
+    ],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 2, lastRating: 0, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+      3: { wordId: 3, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  // 词 2（lapse 2）最靠前；词 1（回忆慢 + 查过）次之；词 3 无信号不入选
+  assert.deepEqual(buildSprintWordIds(input), [2, 1]);
+});
+
+test("考前薄弱冲刺：未学词不入选，冲刺清单复用薄弱标签", () => {
+  const input = baseInput({
+    lookupStats: {
+      a: { count: 4, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+      b: { count: 2, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("a", 1), lookupWord("b", 99)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 1, lastRating: 1, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  // 词 99 查过 2 次但未学（无 wordProgress）→ 不入选
+  assert.deepEqual(buildSprintWordIds(input), [1]);
+  const wordById = new Map([
+    [1, { id: 1, word: "abandon", meaning: "vt. 抛弃" }],
+    [99, { id: 99, word: "zebra", meaning: "n. 斑马" }],
+  ]) as Map<number, import("../lib/study.ts").Word>;
+  const summary = buildSprintSummary(input, wordById);
+  assert.equal(summary.length, 1);
+  assert.equal(summary[0].word, "abandon");
+  assert.ok(summary[0].signals.includes("查过4次"));
+  assert.ok(summary[0].signals.includes("FSRS lapse 1"));
 });
 
 test("临考期薄弱强调：冲刺/临考期突出关键维度，其他阶段不强调", () => {

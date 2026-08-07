@@ -4818,3 +4818,39 @@ kbd {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ---- 信号联动五轮：考前薄弱冲刺 ---- */
+.sprint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px dashed rgba(218, 226, 220, 0.8);
+}
+.sprint-start {
+  border: 1px solid #e2b9a4;
+  border-radius: 12px;
+  background: #fdeee6;
+  color: #a45f4e;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sprint-start:hover {
+  background: #fbe4d8;
+}
+.sprint-copy {
+  border: 1px solid #d5e0da;
+  border-radius: 12px;
+  background: #f4f8f5;
+  color: #5b6b62;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sprint-copy:hover {
+  background: #eaf2ed;
+}

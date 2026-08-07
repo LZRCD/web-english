@@ -59,6 +59,8 @@ import {
   buildWeeklyLearningReport,
 } from "../lib/insights";
 import {
+  buildSprintSummary,
+  buildSprintWordIds,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   lookupPriorityWordIds,
@@ -396,6 +398,22 @@ export default function Home() {
   const weakTrendSeries = useMemo(
     () => buildWeakDimensionTrendSeries(weakSignalInput, new Date(`${todayKey}T12:00:00`), 4),
     [todayKey, weakSignalInput],
+  );
+  // 考前薄弱冲刺：已学且命中任一薄弱信号的词
+  const sprintWordIds = useMemo(
+    () => buildSprintWordIds(weakSignalInput),
+    [weakSignalInput],
+  );
+  const sprintWordById = useMemo(() => {
+    const map = new Map<number, Word>();
+    for (const [id, word] of wordById) {
+      if (id !== undefined) map.set(id, word);
+    }
+    return map;
+  }, [wordById]);
+  const sprintSummary = useMemo(
+    () => buildSprintSummary(weakSignalInput, sprintWordById),
+    [sprintWordById, weakSignalInput],
   );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
@@ -1362,6 +1380,24 @@ export default function Home() {
     startSession("lookups", "划词集复习", wordIds);
   }
 
+  function startSprintSession() {
+    startSession("sprint", "考前薄弱冲刺", sprintWordIds);
+  }
+
+  // 复制薄弱冲刺清单：多行「词 — 信号1、信号2」文本
+  function copySprintSummary() {
+    const lines = sprintSummary.map((item) =>
+      `${item.word} — ${item.signals.join("、")}`);
+    if (!lines.length) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(lines.join("\n"))
+        .then(() => showToast("已复制薄弱清单", 1800))
+        .catch(() => showToast("复制失败，请手动记录", 1800));
+    } else {
+      showToast("当前环境不支持复制", 1800);
+    }
+  }
+
   function startSearchSession() {
     const ids = selectedSearchIds.length
       ? selectedSearchIds
@@ -1392,6 +1428,20 @@ export default function Home() {
           }
           setUndoVisible(false);
           setSearchOpen(true);
+        },
+      };
+    }
+    if (sourceKind === "sprint") {
+      return {
+        label: "返回轨迹页",
+        onClick: () => {
+          clearSession();
+          if (ratingUndoTimerRef.current !== undefined) {
+            window.clearTimeout(ratingUndoTimerRef.current);
+            ratingUndoTimerRef.current = undefined;
+          }
+          setUndoVisible(false);
+          setActiveView("history");
         },
       };
     }
@@ -1852,6 +1902,9 @@ export default function Home() {
             weakTrendSeries={weakTrendSeries}
             examPhase={examPlan?.phase}
             examProgress={examProgress}
+            sprintCount={sprintWordIds.length}
+            onStartSprint={startSprintSession}
+            onCopySprint={copySprintSummary}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {
               setActivityRange(range);

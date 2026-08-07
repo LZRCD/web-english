@@ -44,6 +44,10 @@ type HistoryViewProps = {
   /** 考研阶段（可选）：冲刺/临考期强调关键薄弱维度 */
   examPhase?: ExamPhase;
   examProgress: ExamProgressTiers | null;
+  /** 考前薄弱冲刺词数（冲刺/临考期显示入口） */
+  sprintCount: number;
+  onStartSprint: () => void;
+  onCopySprint: () => void;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
@@ -70,6 +74,9 @@ export default function HistoryView({
   weakTrendSeries,
   examPhase,
   examProgress,
+  sprintCount,
+  onStartSprint,
+  onCopySprint,
   onStartTodaySession,
   onActivityRangeChange,
   onActivityNavigate,
@@ -331,6 +338,16 @@ export default function HistoryView({
                 ));
               })()}
             </div>
+            {(examPhase === "冲刺期" || examPhase === "临考期") && sprintCount > 0 && (
+              <div className="sprint-actions">
+                <button type="button" className="sprint-start" onClick={onStartSprint}>
+                  开始考前薄弱冲刺（{sprintCount} 词）
+                </button>
+                <button type="button" className="sprint-copy" onClick={onCopySprint}>
+                  复制薄弱清单
+                </button>
+              </div>
+            )}
           </div>
         )}
         {weeklyReport.weakTrend.length > 0 && (

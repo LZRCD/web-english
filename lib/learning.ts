@@ -20,6 +20,7 @@ export type SessionKind =
   | "stubborn"
   | "search"
   | "lookups"
+  | "sprint"
   | "reinforcement";
 
 export type ReviewEvent = {

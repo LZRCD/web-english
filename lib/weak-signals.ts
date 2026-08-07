@@ -1,10 +1,11 @@
 import type { QuizAttempt, QuizMode } from "./quiz.ts";
 import { learningWordId } from "./selection-lookup.ts";
-import type {
-  ExamPhase,
-  ReviewEvent,
-  StubbornWordMap,
-  WordProgressMap,
+import {
+  isWeakProgress,
+  type ExamPhase,
+  type ReviewEvent,
+  type StubbornWordMap,
+  type WordProgressMap,
 } from "./learning.ts";
 import type {
   GuessMistakeMap,
@@ -227,6 +228,56 @@ function isLookupDemoted(
   const progress = input.wordProgress[wordId];
   if (!progress) return false;
   return progress.lastRating >= 2 && progress.lastReviewedAt >= stat.lastAt;
+}
+
+/** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
+export function buildSprintWordIds(input: WeakSignalInput): number[] {
+  const lookupById = lookupStatByWordId(input);
+  const items: {
+    wordId: number;
+    lapseCount: number;
+    lookupCount: number;
+    recallAvgMs: number;
+  }[] = [];
+  for (const wordId of Object.keys(input.wordProgress)) {
+    const id = Number(wordId);
+    const progress = input.wordProgress[id];
+    if (!progress) continue;
+    const lookupCount = lookupById.get(id)?.count ?? 0;
+    const recall = wordRecallStats(input.reviews, id);
+    const recallAvgMs = recall?.averageMs ?? 0;
+    const hitLookup = lookupCount >= LOOKUP_WEAK_THRESHOLD;
+    const hitLapse = progress.lapseCount >= 1;
+    const hitSlow = recallAvgMs >= SLOW_RECALL_MS;
+    const hitWeak = isWeakProgress(progress);
+    if (!hitLookup && !hitLapse && !hitSlow && !hitWeak) continue;
+    items.push({
+      wordId: id,
+      lapseCount: progress.lapseCount,
+      lookupCount,
+      recallAvgMs,
+    });
+  }
+  return items
+    .sort((first, second) =>
+      second.lapseCount - first.lapseCount
+      || second.lookupCount - first.lookupCount
+      || second.recallAvgMs - first.recallAvgMs)
+    .map((item) => item.wordId);
+}
+
+/** 薄弱冲刺清单：只含冲刺词，复用词级薄弱标签 */
+export function buildSprintSummary(
+  input: WeakSignalInput,
+  wordById: Map<number, import("./study.ts").Word>,
+): { word: string; signals: string[] }[] {
+  return buildSprintWordIds(input).flatMap((wordId) => {
+    const word = wordById.get(wordId)?.word;
+    if (!word) return [];
+    const signals = buildWordWeakSignals(wordId, input);
+    if (!signals.length) return [];
+    return [{ word, signals }];
+  });
 }
 
 /** 划词 ≥3 次且未被近期答对覆盖的词 id（今日任务插队，按查询次数倒序） */
