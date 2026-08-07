@@ -1,5 +1,5 @@
 import type { WordEnrichment } from "./learning.ts";
-import type { Word } from "./study.ts";
+import type { LookupStats, LookupWord, Word } from "./study.ts";
 
 /** 一条可复用的已见例句：句子、翻译与来源词 */
 export type ReusedSentence = {
@@ -81,23 +81,32 @@ export function buildSentenceIndex({
   ) => {
     const tokens = sentence.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
     const seen = new Set<string>();
+    const seenKeys = new Set<string>();
     for (const token of tokens) {
       const lower = token.toLowerCase();
       if (seen.has(lower)) continue;
       seen.add(lower);
       if (lower === sourceWord.toLowerCase()) continue;
       if (STOP_WORDS.has(lower)) continue;
-      const matched = inflections(lower).find((candidate) => exact.has(candidate));
-      if (!matched) continue;
+      // 词形双向展开：token 及其变形候选凡命中词库均作为 key 收录，
+      // 让「原形 ↔ 变形」互相可查；每条例句最多收录 2 个 key 控制膨胀
+      const keys = [...new Set(
+        inflections(lower).filter((candidate) => exact.has(candidate)),
+      )].slice(0, 2);
+      if (!keys.length) continue;
       const entry: ReusedSentence = {
         sentence,
         ...(translation ? { translation } : {}),
         sourceWord,
         ...(sourceId !== undefined ? { sourceId } : {}),
       };
-      const list = index.get(lower);
-      if (list) list.push(entry);
-      else index.set(lower, [entry]);
+      for (const key of keys) {
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        const list = index.get(key);
+        if (list) list.push(entry);
+        else index.set(key, [entry]);
+      }
     }
   };
 
@@ -123,10 +132,30 @@ export function buildSentenceIndex({
   return index;
 }
 
-/** 查询某词在已见例句中的复用列表（含简单变形匹配） */
+/** 例句来源词的划词查询次数（linkedWordId 命中来源 id 时归并） */
+function sourceLookupCount(
+  sourceId: number | undefined,
+  lookupStats?: LookupStats,
+  lookupWords?: LookupWord[],
+) {
+  if (sourceId === undefined || !lookupStats || !lookupWords) return 0;
+  let best = 0;
+  for (const word of lookupWords) {
+    if (word.linkedWordId !== sourceId) continue;
+    const count = lookupStats[word.query.trim().toLowerCase()]?.count ?? 0;
+    if (count > best) best = count;
+  }
+  return best;
+}
+
+/** 查询某词在已见例句中的复用列表（含简单变形匹配，来源词查得多的例句优先） */
 export function reusedSentencesFor(
   index: SentenceIndex,
   word: string,
+  options?: {
+    lookupStats?: LookupStats;
+    lookupWords?: LookupWord[];
+  },
 ): ReusedSentence[] {
   const lower = word.trim().toLowerCase();
   if (!lower) return [];
@@ -137,5 +166,15 @@ export function reusedSentencesFor(
       if (!seen.has(key)) seen.set(key, entry);
     }
   }
-  return [...seen.values()].slice(0, 6);
+  const countByEntry = new Map<ReusedSentence, number>();
+  for (const entry of seen.values()) {
+    countByEntry.set(
+      entry,
+      sourceLookupCount(entry.sourceId, options?.lookupStats, options?.lookupWords),
+    );
+  }
+  return [...seen.values()]
+    .sort((first, second) =>
+      (countByEntry.get(second) ?? 0) - (countByEntry.get(first) ?? 0))
+    .slice(0, 6);
 }

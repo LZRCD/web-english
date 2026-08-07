@@ -147,6 +147,26 @@ test("出题优先级纳入划词查询、低频考频与顽固词信号", () =>
   );
 });
 
+test("出题优先级：未生成考频的多义词按义项数冷启动代理加分", () => {
+  const words: Word[] = [
+    { id: 1, word: "state", meaning: "n. 状态;州;国家 vt. 陈述", section: "必考词", unit: 1 },
+    { id: 2, word: "abandon", meaning: "vt. 抛弃,放弃", section: "必考词", unit: 1 },
+    { id: 3, word: "objective", meaning: "n. 目标 adj. 客观的", section: "必考词", unit: 1 },
+  ];
+  const progress = progressFor([2, 2, 2]);
+  // 全部非薄弱、无考频；词 1 有三个义项 → 代理加分排最前
+  const questions = buildQuizQuestions({
+    words,
+    progress,
+    mode: "listening-spelling",
+    count: 3,
+    seed: 42,
+    senseFrequency: {},
+    stubbornWords: {},
+  });
+  assert.equal(questions[0].wordId, 1);
+});
+
 test("出题优先级：无信号时保持原有薄弱词优先语义", () => {
   const progress = progressFor([2, 0, 2, 2, 2]);
   const questions = buildQuizQuestions({

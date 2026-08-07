@@ -8,6 +8,7 @@ import type {
   WeeklyLearningReport,
 } from "../../lib/insights";
 import type { ExamProgressTiers } from "../../lib/learning";
+import type { WeakDimensionTrendWeek } from "../../lib/weak-signals";
 
 type ActivityRange = 140 | 182 | 365;
 
@@ -35,6 +36,8 @@ type HistoryViewProps = {
   insights: LearningInsights;
   reviewForecast: ReviewForecastDay[];
   weeklyReport: WeeklyLearningReport;
+  /** 薄弱维度近 N 周趋势（按时间升序，含本周） */
+  weakTrendSeries: WeakDimensionTrendWeek[];
   examProgress: ExamProgressTiers | null;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
@@ -59,6 +62,7 @@ export default function HistoryView({
   insights,
   reviewForecast,
   weeklyReport,
+  weakTrendSeries,
   examProgress,
   onStartTodaySession,
   onActivityRangeChange,
@@ -273,6 +277,46 @@ export default function HistoryView({
             </small>
           </div>
         </div>
+        {weakTrendSeries.length > 1 && (
+          <div className="weak-trend-series" aria-label="薄弱维度近 4 周趋势">
+            <div className="weak-trend-head">
+              <strong>薄弱维度近 4 周趋势</strong>
+              <small>
+                {weakTrendSeries[0].weekStart.replaceAll("-", ".")} — {weakTrendSeries.at(-1)!.weekStart.replaceAll("-", ".")}
+              </small>
+            </div>
+            <div className="weak-trend-series-grid">
+              {weakTrendSeries[0].dimensions.map((dimension) => (
+                <div className="weak-trend-series-row" key={dimension.key}>
+                  <span>{dimension.label}</span>
+                  <div className="weak-trend-series-bars">
+                    {weakTrendSeries.map((week, weekIndex) => {
+                      const current = week.dimensions.find((row) => row.key === dimension.key);
+                      const value = current?.count ?? 0;
+                      const max = Math.max(1, ...weakTrendSeries.flatMap(
+                        (item) => item.dimensions
+                          .filter((row) => row.key === dimension.key)
+                          .map((row) => row.count),
+                      ));
+                      return (
+                        <div className="weak-trend-series-col" key={week.weekStart}>
+                          <i
+                            className={value > 0 ? "active" : ""}
+                            style={{ height: `${Math.max(4, (value / max) * 26)}px` }}
+                          />
+                          <small>
+                            {weekIndex === weakTrendSeries.length - 1 ? "本周" : week.weekStart.slice(5)}
+                          </small>
+                          <strong>{value}</strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {weeklyReport.weakTrend.length > 0 && (
           <div className="weak-trend" aria-label="本周薄弱维度趋势">
             <div className="weak-trend-head">

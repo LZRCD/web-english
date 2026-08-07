@@ -308,6 +308,9 @@ function candidatePriority(
       else if (entry.level === "medium") frequencyBoost += 800;
     }
     priority += Math.min(15_000, frequencyBoost);
+  } else if (wordSenses(word).length >= 3) {
+    // 冷启动代理：多义词未生成考频时给一个中等加分（低于低频考频、高于普通词）
+    priority += 1_000;
   }
   return priority;
 }

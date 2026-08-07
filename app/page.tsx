@@ -59,6 +59,7 @@ import {
   buildWeeklyLearningReport,
 } from "../lib/insights";
 import {
+  buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   lookupPriorityWordIds,
   lookupStatForWordId,
@@ -391,6 +392,11 @@ export default function Home() {
       : lookupStatForWordId(current.id, weakSignalInput),
     [current.id, weakSignalInput],
   );
+  // 薄弱维度近 4 周趋势（轨迹页周报下方）
+  const weakTrendSeries = useMemo(
+    () => buildWeakDimensionTrendSeries(weakSignalInput, new Date(`${todayKey}T12:00:00`), 4),
+    [todayKey, weakSignalInput],
+  );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
     minimumNewWords,
@@ -496,8 +502,11 @@ export default function Home() {
     [enrichments, redbookWords],
   );
   const currentReusedSentences: ReusedSentence[] = useMemo(
-    () => reusedSentencesFor(sentenceIndex, current.word),
-    [current.word, sentenceIndex],
+    () => reusedSentencesFor(sentenceIndex, current.word, {
+      lookupStats,
+      lookupWords,
+    }),
+    [current.word, lookupStats, lookupWords, sentenceIndex],
   );
 
   const currentMeaning = splitMeaning(current.meaning);
@@ -1839,6 +1848,7 @@ export default function Home() {
             insights={insights}
             reviewForecast={reviewForecast}
             weeklyReport={weeklyReport}
+            weakTrendSeries={weakTrendSeries}
             examProgress={examProgress}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {

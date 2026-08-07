@@ -264,19 +264,20 @@ function inWindow(value: string | undefined, startMs: number, endMs: number) {
   return Number.isFinite(ms) && ms >= startMs && ms < endMs;
 }
 
-/**
- * 本周各薄弱维度趋势（按本地周一划分，风格与 insights.ts 周报一致）。
- * 可归因到周的维度统计本周/上周去重词数；猜词猜错为累计口径（无周级时间源）。
- */
-export function buildWeakDimensionTrend(
+function localDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** 单个维度的周级统计（startMs 所在周 vs 上一周） */
+function buildTrendForWeek(
   input: WeakSignalInput,
-  now = new Date(),
+  weekStartMs: number,
+  weekEndMs: number,
 ): WeakDimensionTrend[] {
-  const weekStart = localWeekStart(now);
-  const previousWeekStart = addLocalDays(weekStart, -7);
-  const weekStartMs = weekStart.getTime();
-  const previousStartMs = previousWeekStart.getTime();
-  const weekEndMs = addLocalDays(weekStart, 7).getTime();
+  const previousStartMs = weekStartMs - 7 * 24 * 60 * 60 * 1000;
 
   const lookupById = lookupStatByWordId(input);
   const lookupWords = (startMs: number, endMs: number) =>
@@ -340,4 +341,54 @@ export function buildWeakDimensionTrend(
     dimension("stubborn", "新顽固词", stubbornCount, stubbornPrevious),
     dimension("lapse", "遗忘词", lapseCount, lapsePrevious),
   ];
+}
+
+/** 连续多周的薄弱维度趋势（含本周，按时间升序） */
+export type WeakDimensionTrendWeek = {
+  /** 该周起始日（本地周一，YYYY-MM-DD） */
+  weekStart: string;
+  dimensions: WeakDimensionTrend[];
+};
+
+/**
+ * 本周各薄弱维度趋势（按本地周一划分，风格与 insights.ts 周报一致）。
+ * 可归因到周的维度统计本周/上周去重词数；猜词猜错为累计口径（无周级时间源）。
+ */
+export function buildWeakDimensionTrend(
+  input: WeakSignalInput,
+  now = new Date(),
+): WeakDimensionTrend[] {
+  const weekStart = localWeekStart(now);
+  return buildTrendForWeek(
+    input,
+    weekStart.getTime(),
+    addLocalDays(weekStart, 7).getTime(),
+  );
+}
+
+/**
+ * 薄弱维度近 N 周趋势序列（含本周，按时间升序）。
+ * 复用 buildWeakDimensionTrend 的周划分与维度口径，供轨迹页连续观察。
+ */
+export function buildWeakDimensionTrendSeries(
+  input: WeakSignalInput,
+  now = new Date(),
+  weeks = 4,
+): WeakDimensionTrendWeek[] {
+  const thisWeekStart = localWeekStart(now);
+  const count = Math.max(1, Math.trunc(weeks));
+  const series: WeakDimensionTrendWeek[] = [];
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const start = addLocalDays(thisWeekStart, -offset * 7);
+    const weekStartMs = start.getTime();
+    series.push({
+      weekStart: localDateKey(start),
+      dimensions: buildTrendForWeek(
+        input,
+        weekStartMs,
+        weekStartMs + 7 * 24 * 60 * 60 * 1000,
+      ),
+    });
+  }
+  return series;
 }

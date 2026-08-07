@@ -8,6 +8,7 @@ import type {
 import type { LookupWord } from "../lib/study.ts";
 import {
   buildWeakDimensionTrend,
+  buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   buildWordWeakSignals,
   lookupPriorityWordIds,
@@ -221,6 +222,54 @@ test("周报薄弱维度趋势：按本地周一统计本周数量与变化", ()
   assert.equal(byKey.get("stubborn")!.change, 0);
   assert.equal(byKey.get("guess")!.count, 1);
   assert.equal(byKey.get("guess")!.change, null);
+});
+
+test("薄弱维度 4 周趋势：按连续周返回序列且每周口径与单周一致", () => {
+  const now = new Date(2026, 6, 30, 12); // 2026-07-30 周四，周起始 07-27
+  const input = baseInput({
+    lookupStats: {
+      a: { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("a", 21)],
+    quizAttempts: [
+      { id: "q1", wordId: 21, mode: "listening-spelling", correct: false, recallMs: 0, answeredAt: "2026-07-28T00:00:00.000Z", appliedToSchedule: false },
+    ],
+    reviews: [
+      makeReview(21, 1, "2026-07-28T00:00:00.000Z", 16_000),
+      makeReview(23, 0, "2026-07-29T00:00:00.000Z"),
+      makeReview(24, 0, "2026-07-22T00:00:00.000Z"),
+      makeReview(25, 0, "2026-07-01T00:00:00.000Z"),
+    ],
+    stubbornWords: {
+      26: {
+        wordId: 26,
+        active: true,
+        reason: "again-3",
+        triggeredAt: "2026-07-29T00:00:00.000Z",
+        lastChangedAt: "2026-07-29T00:00:00.000Z",
+        triggerCount: 1,
+      },
+    },
+  });
+
+  const series = buildWeakDimensionTrendSeries(input, now, 4);
+  assert.equal(series.length, 4);
+  // 按时间升序：7-06 / 7-13 / 7-20 / 7-27
+  assert.deepEqual(
+    series.map((week) => week.weekStart),
+    ["2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27"],
+  );
+  // 最新一周口径与 buildWeakDimensionTrend 一致
+  const latest = series.at(-1)!;
+  const single = buildWeakDimensionTrend(input, now);
+  assert.deepEqual(latest.dimensions, single);
+  // 上周（07-20 周）的遗忘词只统计 07-22 的词，数量为 1
+  const weekBefore = series[2];
+  const lapse = weekBefore.dimensions.find((row) => row.key === "lapse");
+  assert.equal(lapse?.count, 1);
+  // 更早两周（07-06/07-13 周）无信号
+  assert.equal(series[0].dimensions.every((row) => row.count === 0), true);
+  assert.equal(series[1].dimensions.every((row) => row.count === 0), true);
 });
 
 test("词级回忆耗时：聚合最近 5 次合法样本的平均/中位数/最新值", () => {

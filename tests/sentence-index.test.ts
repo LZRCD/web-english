@@ -49,6 +49,79 @@ test("例句反向索引：查询词的变形可命中原形", () => {
   assert.equal(forHarvested.length, 1);
 });
 
+test("例句反向索引：词形双向展开，原形与变形互相可查", () => {
+  const index = buildSentenceIndex({
+    redbookWords,
+    enrichments: {
+      3: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 反映",
+          sentence: "The abundant harvest reflects the hard work.",
+          translation: "丰收反映了辛勤劳动。",
+        }],
+      },
+    },
+  });
+  // 例句含 reflects（变形），查询原形 reflect 可命中（索引侧展开收录）
+  const forReflect = reusedSentencesFor(index, "reflect");
+  assert.equal(forReflect.length, 1);
+  assert.match(forReflect[0].sentence, /reflects the hard work/);
+  // 例句含 harvest（原形），查询变形 harvested 仍可命中（查询侧展开）
+  const forHarvested = reusedSentencesFor(index, "harvested");
+  assert.equal(forHarvested.length, 1);
+  assert.match(forHarvested[0].sentence, /harvest reflects/);
+});
+
+test("例句反向索引：来源词查询次数加权排序生效", () => {
+  const index = buildSentenceIndex({
+    redbookWords,
+    enrichments: {
+      1: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "adj. 丰富的",
+          sentence: "The abundant harvest surprised everyone.",
+          translation: "丰收让大家惊讶。",
+        }],
+      },
+      3: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 反映",
+          sentence: "The report reflects a big harvest.",
+          translation: "报告反映了大丰收。",
+        }],
+      },
+    },
+  });
+  const lookupWords: import("../lib/study.ts").LookupWord[] = [{
+    id: 9_000_000_001,
+    linkedWordId: 3,
+    query: "reflect",
+    kind: "word",
+    phonetic: "",
+    part: "v.",
+    meaning: "反映",
+    note: "",
+    source: "redbook",
+    addedAt: "2026-08-01T00:00:00.000Z",
+  }];
+  const ranked = reusedSentencesFor(index, "harvest", {
+    lookupStats: {
+      reflect: {
+        count: 5,
+        firstAt: "2026-08-01T00:00:00.000Z",
+        lastAt: "2026-08-05T00:00:00.000Z",
+      },
+    },
+    lookupWords,
+  });
+  // 来源词 reflect 查过 5 次，其例句排最前
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].sourceWord, "reflect");
+});
+
 test("例句反向索引：语义二审 failed 的例句不参与复用，passed 例句正常收录", () => {
   const reviewedEnrichments: Record<number, WordEnrichment> = {
     1: {
