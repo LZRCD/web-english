@@ -254,3 +254,59 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
   await page.getByRole("button", { name: "显示单词释义" }).click();
   await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
 });
+
+test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async ({ context, page }) => {
+  await installStateSeed(context, sprintSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "每一次回忆都算数" }),
+  ).toBeVisible();
+  // 轨迹页冲刺区导出按钮存在（不做下载断言）
+  await expect(
+    page.locator(".sprint-actions").getByRole("button", { name: "导出 CSV" }),
+  ).toBeVisible();
+  // 薄弱集中区出现：必考词 2 词（radiate/objective 均查过 2 次+）
+  const concentration = page.locator('[aria-label="薄弱集中区"]');
+  await expect(concentration).toBeVisible();
+  await expect(concentration).toContainText("必考词");
+  // 点必考词分册「冲刺」按钮，进入限定范围冲刺会话
+  const sectionSprint = concentration.getByRole("button", {
+    name: "冲刺",
+    exact: true,
+  }).first();
+  await expect(sectionSprint).toBeEnabled();
+  await sectionSprint.click();
+  // 学习卡：冲刺会话中释义面板显示薄弱原因
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
+  await expect(page.locator(".weak-signal-tags")).not.toBeEmpty();
+  // 逐词评分推进完成（第二张卡需先展开释义，rating 栏才可见）
+  for (let index = 0; index < 2; index += 1) {
+    if (index > 0) {
+      await page.getByRole("button", { name: "显示单词释义" }).click();
+    }
+    await page.getByRole("button", { name: /认识/ }).click();
+  }
+  await expect(
+    page.getByRole("heading", { name: "本次冲刺小结" }),
+  ).toBeVisible();
+  // 词本划词集：薄弱候选导出按钮存在
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /词本$/ })
+    .click();
+  await page.getByRole("tab", { name: /划词集/ }).click();
+  await expect(
+    page.getByRole("button", { name: "导出 CSV" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /学习全部薄弱候选（2）/ }),
+  ).toBeVisible();
+});

@@ -4742,6 +4742,40 @@ kbd {
   background: #cfd8d2;
   cursor: not-allowed;
 }
+/* ---- 信号联动十三轮：薄弱候选导出 / 集中区单元冲刺 ---- */
+.concentration-unit {
+  border: 1px solid rgba(47, 125, 88, 0.35);
+  padding: 1px 7px;
+  margin: 0 2px 2px 0;
+  border-radius: 999px;
+  background: #eef5f0;
+  color: #2f7d58;
+  font-size: 9px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.concentration-unit:hover {
+  background: #dcece2;
+}
+.lookup-weak-export {
+  border: 1px solid rgba(47, 125, 88, 0.35);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #2f7d58;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lookup-weak-export:hover {
+  background: #eef5f0;
+}
+.lookup-weak-export:disabled {
+  background: #f2f5f2;
+  color: #aab4ac;
+  border-color: #dfe6e0;
+  cursor: not-allowed;
+}
 
 @media (max-width: 640px) {
   .sprint-effectiveness-series {

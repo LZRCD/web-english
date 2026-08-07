@@ -61,6 +61,7 @@ import {
 import {
   buildSprintCsv,
   buildSprintEffectivenessSeries,
+  buildWeakCandidateSummary,
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintSummary,
@@ -1535,6 +1536,26 @@ export default function Home() {
     URL.revokeObjectURL(url);
     showToast("已导出薄弱清单 CSV", 1800);
   }
+  // 导出薄弱候选清单 CSV：复用 buildSprintCsv 转义与 BOM
+  function exportWeakCandidateCsv() {
+    const csv = buildSprintCsv(
+      buildWeakCandidateSummary(weakSignalInput, wordById, weakThresholds),
+    );
+    if (!csv) {
+      showToast("暂无薄弱候选可导出", 1800);
+      return;
+    }
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "薄弱候选清单.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("已导出薄弱候选 CSV", 1800);
+  }
 
   function startSearchSession() {
     const ids = selectedSearchIds.length
@@ -2009,6 +2030,7 @@ export default function Home() {
             onStartMistakes={startMistakeSession}
             onStartStubborn={startStubbornSession}
             onStartLookups={startLookupSession}
+            onExportWeakCandidateCsv={exportWeakCandidateCsv}
             onRemoveLookup={(item) => {
               const identity = lookupIdentity(item);
               setLookupWords((items) =>

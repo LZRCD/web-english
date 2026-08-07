@@ -703,3 +703,23 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 143/143 通过，新增 5 用例覆盖：冲刺成效 4 周多周聚合/空周 null/与单周口径一致、限定范围冲刺 section 过滤/unit 归一/空 scope 全量/空结果/阈值参数、词级时间线各源提取/时间排序/空与异词不混入。
 - 未启动本地开发服务器：均为新增展示区块与按钮/tooltip，不触碰既有 4 条 E2E 链路，signal-flow.spec.mjs 无需改动。
+
+## 第三十二次迭代：信号联动十三轮（薄弱候选 CSV 导出、集中区单元级冲刺、按分册冲刺 E2E）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 薄弱候选 CSV 导出：`lib/weak-signals.ts` 新增 `buildWeakCandidateSummary(input, wordById, thresholds)`——用 `lookupWeakCandidateIds` 取候选词 id → `wordById` 映射词名 → `buildWordWeakSignals` 取信号（空信号跳过），与 `buildSprintSummary` 同构；page.tsx 新增 `exportWeakCandidateCsv()` 复用 `buildSprintCsv`（BOM + 转义）走 Blob 下载「薄弱候选清单.csv」；词本划词集「学习全部薄弱候选」旁新增「导出 CSV」按钮（空候选 disabled）。
+- 集中区单元级冲刺入口：HistoryView 集中区 unit 明细由纯文本改为可点击 chip 按钮（`onScopedSprint(section, unit)`），复用第十二轮的 `buildScopedSprintWordIds` unit 过滤能力（零 lib 改动）；无 `onScopedSprint` 时降级为纯文本。新增 `concentration-unit` / `lookup-weak-export` 样式。
+- E2E 第 5 条：集中区按分册冲刺链路（seed 过去时间 + 冲刺期 examDate + 必考词薄弱词）→ 轨迹页冲刺区导出按钮存在 + 薄弱集中区出现 → 点必考词「冲刺」进入限定范围会话 → 词卡信号原因 → 逐词评分完成 → 词本划词集导出按钮存在。5/5 通过（11.8s）。
+
+### 修正
+
+- E2E 第 5 条首跑失败定位：连点两次「认识」时，第二张卡释义未展开导致 rating 栏处于 `aria-hidden`（RatingBar `inert` + `aria-hidden`），`getByRole` 默认排除隐藏元素；修正为第二张卡先展开释义再评分，与既有完整冲刺用例结构一致。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 146/146 通过，新增 3 用例覆盖：薄弱候选清单映射词名与信号/仅含达标词、无候选返回空/未映射跳过/阈值生效、与 buildSprintCsv 组合含 BOM 表头。
+- Playwright E2E 5/5 通过（11.8s）：新增集中区按分册冲刺与导出入口断言；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 44688 + node 子 48336 均逐一核对并关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。

@@ -14,6 +14,7 @@ import {
   buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
+  buildWeakCandidateSummary,
   buildScopedSprintWordIds,
   buildWeakConcentration,
   buildWeakDimensionTrend,
@@ -774,4 +775,59 @@ test("词级信号时间线：无记录返回空，非目标词不混入", () =>
   });
   assert.deepEqual(buildWordSignalTimeline(99, input), []);
   assert.deepEqual(buildWordSignalTimeline(1, baseInput()), []);
+});
+
+test("薄弱候选清单：映射词名与信号，仅含查询达标的词", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+      "word-2": { count: 1, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1), lookupWord("word-2", 2)],
+    guessMistakes: { 1: 2 },
+  });
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2, "必考词", 2)],
+  ]);
+  const summary = buildWeakCandidateSummary(input, wordById);
+  // 词 1 查过 3 次（达标）且有猜错信号；词 2 查过 1 次（不达标）不入列
+  assert.deepEqual(summary, [{ word: "word-1", signals: ["查过3次", "猜错2次"] }]);
+});
+
+test("薄弱候选清单：无候选返回空，未映射词跳过，阈值生效", () => {
+  const wordById = new Map<number, Word>([[1, makeWord(1, "必考词", 1)]]);
+  assert.deepEqual(buildWeakCandidateSummary(baseInput(), wordById), []);
+  // 查过但 wordById 无映射 → 跳过
+  const input = baseInput({
+    lookupStats: {
+      "word-9": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-9", 9)],
+  });
+  assert.deepEqual(buildWeakCandidateSummary(input, wordById), []);
+  // 阈值提高后不再命中
+  const hit = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+  });
+  assert.deepEqual(
+    buildWeakCandidateSummary(hit, wordById, { ...DEFAULT_WEAK_THRESHOLDS, lookupWeak: 4 }),
+    [],
+  );
+});
+
+test("薄弱候选清单：与 buildSprintCsv 组合导出含 BOM 表头", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 2, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+  });
+  const wordById = new Map<number, Word>([[1, makeWord(1, "必考词", 1)]]);
+  const csv = buildSprintCsv(buildWeakCandidateSummary(input, wordById));
+  assert.ok(csv.startsWith("\uFEFF词,信号列表\n"));
+  assert.ok(csv.includes("word-1,查过2次"));
 });

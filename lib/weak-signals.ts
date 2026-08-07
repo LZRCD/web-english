@@ -280,6 +280,21 @@ export function lookupWeakCandidateIds(
     .map(([wordId]) => wordId);
 }
 
+/** 薄弱候选清单：只含划词薄弱候选词，复用词级薄弱标签（与 buildSprintSummary 同构） */
+export function buildWeakCandidateSummary(
+  input: WeakSignalInput,
+  wordById: ReadonlyMap<number | undefined, import("./study.ts").Word>,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): { word: string; signals: string[] }[] {
+  return lookupWeakCandidateIds(input, thresholds).flatMap((wordId) => {
+    const word = wordById.get(wordId)?.word;
+    if (!word) return [];
+    const signals = buildWordWeakSignals(wordId, input, undefined, thresholds);
+    if (!signals.length) return [];
+    return [{ word, signals }];
+  });
+}
+
 /**
  * 反复查过但之后答对（rating≥2 且查询次数不再增长）→ 自动降级出队。
  * 纯派生判断：最近一次评分时间晚于最近查询时间即认为已覆盖。

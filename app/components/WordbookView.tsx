@@ -33,6 +33,8 @@ type WordbookViewProps = {
   onStartMistakes: () => void;
   onStartStubborn: () => void;
   onStartLookups: (wordIds?: number[]) => void;
+  /** 导出薄弱候选清单 CSV（复用 buildSprintCsv） */
+  onExportWeakCandidateCsv: () => void;
   onRemoveLookup: (word: LookupWord) => void;
   onNavigateLearn: () => void;
 };
@@ -57,6 +59,7 @@ export default function WordbookView({
   onStartMistakes,
   onStartStubborn,
   onStartLookups,
+  onExportWeakCandidateCsv,
   onRemoveLookup,
   onNavigateLearn,
 }: WordbookViewProps) {
@@ -321,6 +324,13 @@ export default function WordbookView({
                 onClick={() => onStartLookups(lookupWeakCandidateIds)}
               >
                 学习全部薄弱候选（{lookupWeakCandidateIds.length}）
+              </button>              <button
+                type="button"
+                className="lookup-weak-export"
+                disabled={lookupWeakCandidateIds.length === 0}
+                onClick={onExportWeakCandidateCsv}
+              >
+                导出 CSV
               </button>
             </div>
             <div className="lookup-dist-mini" aria-label="查询次数分布">

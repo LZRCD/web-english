@@ -555,11 +555,33 @@ export default function HistoryView({
                       })
                       .join("；")}
                   >
-                    {section.units
-                      .slice(0, 3)
-                      .map((unit) => `${unit.unit} ${unit.count}词`)
-                      .join("、")}
-                    {section.units.length > 3 ? ` 等 ${section.units.length} 个单元` : ""}
+                    {onScopedSprint
+                      ? section.units.slice(0, 5).map((unit) => {
+                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
+                        const unitPct = unitTotal > 0
+                          ? Math.round((unit.count / unitTotal) * 100)
+                          : 0;
+                        return (
+                          <button
+                            type="button"
+                            className="concentration-unit"
+                            key={unit.unit}
+                            title={`${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`}
+                            onClick={() => onScopedSprint(section.section, unit.unit)}
+                          >
+                            {unit.unit} {unit.count}词
+                          </button>
+                        );
+                      })
+                      : section.units
+                        .slice(0, 3)
+                        .map((unit) => `${unit.unit} ${unit.count}词`)
+                        .join("、")}
+                    {section.units.length > 5 && onScopedSprint
+                      ? ` 等 ${section.units.length} 个单元`
+                      : section.units.length > 3 && !onScopedSprint
+                        ? ` 等 ${section.units.length} 个单元`
+                        : ""}
                   </small>
                   {onScopedSprint && (
                     <button
