@@ -74,6 +74,22 @@ export default function HistoryView({
     .map((stat) => stat.lastAt)
     .sort()
     .at(-1);
+  // 查询次数分布：1 次 / 2 次 / 3-5 次 / 6+ 次的词数
+  const lookupDistribution = (() => {
+    const buckets = { once: 0, twice: 0, repeated: 0, frequent: 0 };
+    for (const stat of Object.values(lookupStats)) {
+      if (stat.count === 1) buckets.once += 1;
+      else if (stat.count === 2) buckets.twice += 1;
+      else if (stat.count <= 5) buckets.repeated += 1;
+      else buckets.frequent += 1;
+    }
+    const max = Math.max(1,
+      buckets.once, buckets.twice, buckets.repeated, buckets.frequent);
+    return { ...buckets, max };
+  })();
+  // 查询 2 次以上的词 = 反复查 = 薄弱词依据
+  const weakLookupCount = Object.values(lookupStats)
+    .filter((stat) => stat.count >= 2).length;
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
   weekStart.setHours(0, 0, 0, 0);
@@ -170,6 +186,29 @@ export default function HistoryView({
             <div><span>累计查询</span><strong>{totalLookupCount}</strong><small>划词查义次数</small></div>
             <div><span>划词收录</span><strong>{lookupWords.length}</strong><small>累计加入划词集</small></div>
             <div><span>本周新增</span><strong>{weekNewLookups}</strong><small>新查询并收录的词</small></div>
+          </div>
+          <div className="lookup-distribution" aria-label="查询次数分布">
+            <div className="lookup-dist-head">
+              <strong>查询次数分布</strong>
+              <small>反复查询 = 薄弱词依据，共 {weakLookupCount} 个词查过 2 次以上</small>
+            </div>
+            {[
+              { key: "once", label: "查过 1 次", count: lookupDistribution.once },
+              { key: "twice", label: "查过 2 次", count: lookupDistribution.twice },
+              { key: "repeated", label: "查过 3-5 次", count: lookupDistribution.repeated },
+              { key: "frequent", label: "查过 6 次以上", count: lookupDistribution.frequent },
+            ].map((row) => (
+              <div className="lookup-dist-row" key={row.key}>
+                <span>{row.label}</span>
+                <div className="lookup-dist-bar">
+                  <i
+                    className={row.key === "frequent" ? "hot" : ""}
+                    style={{ width: `${Math.max(4, (row.count / lookupDistribution.max) * 100)}%` }}
+                  />
+                </div>
+                <strong>{row.count}</strong>
+              </div>
+            ))}
           </div>
           <p className="lookup-trace-note">
             在词本「划词集」标签可直接复习；查询过的释义会缓存复用，同一语境再次划选会秒出结果。

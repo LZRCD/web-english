@@ -19,6 +19,7 @@ import {
   splitMeaning,
   STORAGE_VERSION,
   type FamiliarMeaningMap,
+  type GuessMistakeMap,
   type LookupStats,
   type LookupWord,
   type MistakeRecord,
@@ -159,6 +160,7 @@ export default function Home() {
   const [hideChineseMeaning, setHideChineseMeaning] = useState(false);
   const [guessContextFirst, setGuessContextFirst] = useState(false);
   const [lookupStats, setLookupStats] = useState<LookupStats>({});
+  const [guessMistakes, setGuessMistakes] = useState<GuessMistakeMap>({});
   const [senseFrequency, setSenseFrequency] = useState<SenseFrequencyMap>({});
   const [dailyGoal, setDailyGoal] = useState(20);
   const [adaptiveNewWords, setAdaptiveNewWords] = useState(true);
@@ -574,6 +576,7 @@ export default function Home() {
     hideChineseMeaning,
     guessContextFirst,
     lookupStats,
+    guessMistakes,
     senseFrequency,
     studyMode,
     studyScope,
@@ -603,6 +606,7 @@ export default function Home() {
     hideChineseMeaning,
     guessContextFirst,
     lookupStats,
+    guessMistakes,
     senseFrequency,
     started,
     stubbornHistory,
@@ -931,6 +935,7 @@ export default function Home() {
     setHideChineseMeaning(state.hideChineseMeaning);
     setGuessContextFirst(state.guessContextFirst);
     setLookupStats(state.lookupStats);
+    setGuessMistakes(state.guessMistakes);
     setSenseFrequency(state.senseFrequency);
     setFavorites(state.favorites);
     setMistakes(state.mistakes);
@@ -1390,6 +1395,14 @@ export default function Home() {
     });
   }
 
+  function recordGuessMistake() {
+    if (current.id === undefined) return;
+    setGuessMistakes((items) => ({
+      ...items,
+      [current.id!]: (items[current.id!] ?? 0) + 1,
+    }));
+  }
+
   function focusSavedWord(word: Word) {
     const section = word.section ?? selectedSection;
     const unit = word.unit ?? "all";
@@ -1616,6 +1629,9 @@ export default function Home() {
                 }
                 frequencyLoading={frequencyLoading}
                 reusedSentences={currentReusedSentences}
+                guessMistakeCount={
+                  current.id === undefined ? 0 : guessMistakes[current.id] ?? 0
+                }
                 activeSession={activeSession}
                 newCount={stats.newCount}
                 clock={clock}
@@ -1633,6 +1649,7 @@ export default function Home() {
                 onToggleMeaningFamiliar={toggleMeaningFamiliar}
                 onEnrichWord={enrichCurrentWord}
                 onGenerateSenseFrequency={generateSenseFrequency}
+                onGuessMistake={recordGuessMistake}
                 onReportSenseMismatch={reportSenseMismatch}
                 onRewriteSenseExample={rewriteSenseExample}
                 onTextSelection={handleTextSelection}

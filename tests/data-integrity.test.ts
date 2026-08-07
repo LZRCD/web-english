@@ -34,6 +34,7 @@ function emptyState(): StoredState {
     enrichments: {},
     lookupWords: [],
     lookupStats: {},
+    guessMistakes: {},
     senseFrequency: {},
     familiarMeanings: {},
     started: false,

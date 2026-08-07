@@ -4448,3 +4448,137 @@ kbd {
   line-height: 1.6;
 }
 
+
+/* ---- 隐藏释义阶段猜词（1.txt #2 扩展） ---- */
+.guess-input-row {
+  display: flex;
+  gap: 8px;
+}
+.guess-input-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #cfe3d7;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.guess-input-row input:focus-visible {
+  outline: 2px solid #63a986;
+  outline-offset: 1px;
+}
+.guess-input-row button {
+  border: 1px solid #cfe3d7;
+  border-radius: 10px;
+  background: #eef7f1;
+  color: #2f7d58;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.guess-input-row button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.guess-wrong {
+  color: #c0392b;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.guess-mistake-badge {
+  color: #c0392b;
+  font: 700 10px/1.4 "Courier New", monospace;
+}
+.guess-correct {
+  color: #2f7d58;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+/* ---- 查询次数分布（1.txt #5 扩展） ---- */
+.lookup-distribution {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  border-top: 1px dashed #dde9e1;
+  padding-top: 12px;
+}
+.lookup-dist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.lookup-dist-head strong {
+  color: #27352e;
+  font-size: 12px;
+}
+.lookup-dist-head small {
+  color: #8a948d;
+  font-size: 11px;
+}
+.lookup-dist-row {
+  display: grid;
+  grid-template-columns: 84px 1fr 34px;
+  align-items: center;
+  gap: 10px;
+}
+.lookup-dist-row > span {
+  color: #6f7a72;
+  font-size: 12px;
+}
+.lookup-dist-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #edf3ee;
+  overflow: hidden;
+}
+.lookup-dist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #6fae8e;
+  transition: width 300ms ease;
+}
+.lookup-dist-bar i.hot {
+  background: #d98a6a;
+}
+.lookup-dist-row > strong {
+  color: #27352e;
+  font-size: 12px;
+  text-align: right;
+}
+.lookup-dist-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  width: 100%;
+  margin-top: 6px;
+}
+.lookup-dist-mini-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.lookup-dist-mini-item i {
+  display: inline-block;
+  width: 34px;
+  height: 6px;
+  border-radius: 999px;
+  background: #6fae8e;
+}
+.lookup-dist-mini-item i.hot {
+  background: #d98a6a;
+}
+.lookup-dist-mini-item small {
+  color: #6f7a72;
+  font-size: 11px;
+  white-space: nowrap;
+}
+

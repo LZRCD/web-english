@@ -117,6 +117,9 @@ export type LookupStat = {
 /** 划词查询次数统计：key 为小写查询词 */
 export type LookupStats = Record<string, LookupStat>;
 
+/** 隐藏释义阶段猜词猜错的累计次数：key 为学习项 wordId */
+export type GuessMistakeMap = Record<number, number>;
+
 export type StudyMode = "ordered" | "shuffled";
 export type StudyScope = "selection" | "all";
 export type StudyPositions = Record<string, number>;
@@ -135,6 +138,8 @@ export type StoredState = {
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
   lookupStats: LookupStats;
+  /** 隐藏释义阶段猜词猜错的累计次数 */
+  guessMistakes: GuessMistakeMap;
   /** 多义词义项考频（AI 生成，按需缓存） */
   senseFrequency: SenseFrequencyMap;
   familiarMeanings: FamiliarMeaningMap;
@@ -341,6 +346,18 @@ function normalizeSenseFrequency(value: unknown): SenseFrequencyMap {
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
       .slice(0, 12);
     if (entries.length) result[wordId] = entries;
+  }
+  return result;
+}
+
+function normalizeGuessMistakes(value: unknown): GuessMistakeMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: GuessMistakeMap = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const wordId = canonicalWordId(Number(key));
+    const count = Number(raw);
+    if (!isValidStudyWordId(wordId) || !Number.isInteger(count) || count < 1) continue;
+    result[wordId] = Math.min(Number.MAX_SAFE_INTEGER, count);
   }
   return result;
 }
@@ -1118,6 +1135,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     enrichments: normalizeEnrichments(state.enrichments),
     lookupWords: normalizeLookupWords(state.lookupWords),
     lookupStats: normalizeLookupStats(state.lookupStats),
+    guessMistakes: normalizeGuessMistakes(state.guessMistakes),
     senseFrequency: normalizeSenseFrequency(state.senseFrequency),
     familiarMeanings: normalizeFamiliarMeanings(state.familiarMeanings),
     started: state.started === true,

@@ -64,6 +64,16 @@ export default function WordbookView({
     .map((stat) => stat.lastAt)
     .sort()
     .at(-1);
+  // 查询次数分布（作为薄弱词依据）
+  const lookupBuckets = { once: 0, twice: 0, repeated: 0, frequent: 0 };
+  for (const stat of Object.values(lookupStats)) {
+    if (stat.count === 1) lookupBuckets.once += 1;
+    else if (stat.count === 2) lookupBuckets.twice += 1;
+    else if (stat.count <= 5) lookupBuckets.repeated += 1;
+    else lookupBuckets.frequent += 1;
+  }
+  const lookupBucketMax = Math.max(1,
+    lookupBuckets.once, lookupBuckets.twice, lookupBuckets.repeated, lookupBuckets.frequent);
   const batchAction = {
     favorites: {
       label: "复习全部收藏",
@@ -247,6 +257,22 @@ export default function WordbookView({
             {recentLookupAt && (
               <span>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
             )}
+            <div className="lookup-dist-mini" aria-label="查询次数分布">
+              {[
+                { key: "once", label: "1次", count: lookupBuckets.once },
+                { key: "twice", label: "2次", count: lookupBuckets.twice },
+                { key: "repeated", label: "3-5次", count: lookupBuckets.repeated },
+                { key: "frequent", label: "6次+", count: lookupBuckets.frequent },
+              ].map((row) => (
+                <span className="lookup-dist-mini-item" key={row.key}>
+                  <i
+                    className={row.key === "frequent" ? "hot" : ""}
+                    style={{ width: `${Math.max(4, (row.count / lookupBucketMax) * 100)}%` }}
+                  />
+                  <small>{row.label} {row.count}</small>
+                </span>
+              ))}
+            </div>
           </div>
         )}
         {activeTab === "lookups" && lookupWords.map((item) => (

@@ -47,6 +47,8 @@ type WordCardProps = {
   frequencyLoading: boolean;
   /** 该词出现在这些已见例句中（跨词复用） */
   reusedSentences: ReusedSentence[];
+  /** 该词在隐藏释义阶段猜错的累计次数 */
+  guessMistakeCount: number;
 
   // 上下文
   activeSession?: StudySession;
@@ -72,6 +74,8 @@ type WordCardProps = {
   onToggleMeaningFamiliar: (meaning: string) => void;
   onEnrichWord: () => void;
   onGenerateSenseFrequency: () => void;
+  /** 记录一次猜词猜错 */
+  onGuessMistake: () => void;
   onReportSenseMismatch: (index: number) => void;
   onRewriteSenseExample: (index: number) => void;
   onTextSelection: (
@@ -103,6 +107,7 @@ export default function WordCard({
   currentSenseFrequency,
   frequencyLoading,
   reusedSentences,
+  guessMistakeCount,
   activeSession,
   newCount,
   clock,
@@ -120,6 +125,7 @@ export default function WordCard({
   onToggleMeaningFamiliar,
   onEnrichWord,
   onGenerateSenseFrequency,
+  onGuessMistake,
   onReportSenseMismatch,
   onRewriteSenseExample,
   onTextSelection,
@@ -149,6 +155,33 @@ export default function WordCard({
     ?? current.sentence;
   const guessTranslation =
     currentEnrichment?.senseExamples?.[0]?.translation;
+  // 隐藏释义阶段猜词：输入中文，命中任一义项即展开
+  const [guessInput, setGuessInput] = useState("");
+  const [guessFeedback, setGuessFeedback] = useState<
+    | { kind: "correct"; matched: string }
+    | { kind: "wrong" }
+    | undefined
+  >(undefined);
+  const submitGuess = () => {
+    const input = guessInput.trim();
+    if (!input) return;
+    const matched = currentSenseItems.find((item) =>
+      item.includes(input) || input.includes(item),
+    );
+    if (matched) {
+      setGuessFeedback({ kind: "correct", matched });
+      setSensesExpanded(true);
+    } else {
+      setGuessFeedback({ kind: "wrong" });
+      onGuessMistake();
+    }
+  };
+  // 切换单词时清空猜词状态
+  if (lastSenseWordId !== current.id) {
+    setGuessInput("");
+    setGuessFeedback(undefined);
+  }
+
   // 义项考频等级文案
   const frequencyLabel = (level: SenseFrequencyEntry["level"]) =>
     level === "high"
@@ -274,6 +307,42 @@ export default function WordCard({
                   释义已隐藏，先在心里回忆 {current.word} 的含义
                 </p>
               )}
+              {/* 猜词：输入中文猜测词义 */}
+              <div className="guess-input-row">
+                <input
+                  value={guessInput}
+                  onChange={(event) => {
+                    setGuessInput(event.target.value);
+                    setGuessFeedback(undefined);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      submitGuess();
+                    }
+                  }}
+                  placeholder="输入中文释义（回车确认）"
+                  autoComplete="off"
+                  aria-label={`猜测 ${current.word} 的中文释义`}
+                />
+                <button
+                  type="button"
+                  onClick={submitGuess}
+                  disabled={!guessInput.trim()}
+                >
+                  猜一猜
+                </button>
+              </div>
+              {guessFeedback?.kind === "wrong" && (
+                <p className="guess-wrong" role="alert">
+                  没猜中，已记录一次。看看例句再试试，或直接看释义。
+                </p>
+              )}
+              {guessMistakeCount > 0 && (
+                <small className="guess-mistake-badge">
+                  这个词已猜错 {guessMistakeCount} 次
+                </small>
+              )}
               <button
                 type="button"
                 className="meaning-reveal"
@@ -285,6 +354,11 @@ export default function WordCard({
           )}
           {(!hideSenses || sensesExpanded) && (
             <>
+              {guessFeedback?.kind === "correct" && (
+                <p className="guess-correct">
+                  猜中了「{guessFeedback.matched}」，看下完整释义确认
+                </p>
+              )}
               <div className="meaning-main">
             {currentSenses.map((sense) => (
               <div className="meaning-row" key={sense.part}>
