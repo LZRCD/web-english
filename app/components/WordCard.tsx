@@ -54,8 +54,12 @@ type WordCardProps = {
   currentLookupStat?: LookupStat;
   /** 该词最近评分的回忆耗时统计 */
   currentRecallStats?: WordRecallStats;
-  /** 冲刺会话中展示：该词因哪些薄弱信号进入冲刺 */
+  /** 该词薄弱信号标签（任意会话态展示） */
   sprintWeakSignals?: string[];
+  /** 薄弱信号区文案（冲刺态/日常态区分） */
+  sprintWeakLabel?: string;
+  /** 一键把当前词加入今日任务 */
+  onAddToToday?: () => void;
   /** 该词的薄弱信号时间线文本（多行，供标签悬停查看） */
   signalTimelineText?: string;
   /** 点击例句来源词跳转到该词学习卡；sourceId 缺失时降级为纯文本 */
@@ -122,7 +126,9 @@ export default function WordCard({
   currentLookupStat,
   currentRecallStats,
   sprintWeakSignals,
+  sprintWeakLabel,
   signalTimelineText,
+  onAddToToday,
   onFocusSourceWord,
   activeSession,
   newCount,
@@ -319,12 +325,17 @@ export default function WordCard({
           )}
           {sprintWeakSignals && sprintWeakSignals.length > 0 && (
             <div className="sprint-weak-reasons" title={signalTimelineText}>
-              <span>本词因以下信号进入冲刺：</span>
+              <span>{sprintWeakLabel ?? "本词存在薄弱信号："}</span>
               <div className="weak-signal-tags">
                 {sprintWeakSignals.map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
               </div>
+              {onAddToToday && (
+                <button type="button" className="weak-add-today" onClick={onAddToToday}>
+                  加入今日任务
+                </button>
+              )}
             </div>
           )}
           {hideSenses && !sensesExpanded && (

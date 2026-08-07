@@ -444,3 +444,27 @@ test("信号联动：复发词一键再冲刺与词书薄弱单元", async ({ co
   await expect(requiredCard.locator(".book-weak-units")).toBeVisible();
   await expect(requiredCard.locator(".book-weak-units")).toContainText("薄弱集中");
 });
+
+test("信号联动：学习卡非冲刺态薄弱提示与一键补漏", async ({ context, page }) => {
+  await installStateSeed(context, sprintSeedState());
+  await openApp(page);
+  // 学习页（非冲刺态）：radiate 是当前词（必考词 Unit 1 首词）
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  // 非冲刺态也显示薄弱信号（日常文案）+ 一键补漏按钮
+  await expect(page.getByText("本词存在薄弱信号：")).toBeVisible();
+  await expect(page.locator(".weak-signal-tags")).not.toBeEmpty();
+  const addToday = page.getByRole("button", { name: "加入今日任务" });
+  await expect(addToday).toBeVisible();
+  await addToday.click();
+  // 进入今日任务会话（补漏），词卡仍显示薄弱信号
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.getByText("本词存在薄弱信号：")).toBeVisible();
+  // 会话名应为「今日任务 · 补漏」
+  await expect(page.getByText(/今日任务 · 补漏/).first()).toBeVisible();
+});

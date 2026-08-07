@@ -4783,6 +4783,20 @@ kbd {
 .concentration-unit:hover {
   background: #dcece2;
 }
+.weak-add-today {
+  margin-top: 7px;
+  border: 1px solid rgba(47, 125, 88, 0.35);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #2f7d58;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.weak-add-today:hover {
+  background: #eef5f0;
+}
 .lookup-weak-export {
   border: 1px solid rgba(47, 125, 88, 0.35);
   padding: 5px 12px;

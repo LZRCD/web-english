@@ -1459,6 +1459,15 @@ export default function Home() {
     );
   }
 
+  // 学习卡一键补漏：当前词加入今日任务（独立轻量会话，不动 buildTodayQueue）
+  function startTodayWithCurrent(): boolean {
+    if (current.id === undefined) {
+      showToast("当前单词未关联学习项", 1800);
+      return false;
+    }
+    return startSession("today", "今日任务 · 补漏", [current.id]);
+  }
+
   function startFavoriteSession() {
     startSession("favorites", "收藏复习", favorites.map((item) => item.wordId));
   }
@@ -1951,10 +1960,16 @@ export default function Home() {
                   current.id === undefined ? undefined : weakProfiles[current.id]?.recall
                 }
                 sprintWeakSignals={
-                  activeSession?.kind === "sprint" && current.id !== undefined
+                  current.id !== undefined
                     ? buildWordWeakSignals(current.id, weakSignalInput, undefined, weakThresholds)
                     : undefined
                 }
+                sprintWeakLabel={
+                  activeSession?.kind === "sprint"
+                    ? "本词因以下信号进入冲刺："
+                    : "本词存在薄弱信号："
+                }
+                onAddToToday={() => startTodayWithCurrent()}
                 signalTimelineText={
                   current.id === undefined
                     ? undefined

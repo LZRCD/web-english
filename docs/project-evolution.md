@@ -764,3 +764,23 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 149/149 通过（本轮无新 lib 函数，未新增单测）。
 - Playwright E2E 7/7 通过（15.7s）：新增复发词再冲刺 + 词书薄弱单元链路；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 47504 + node 子 13592 均核对关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。
+
+## 第三十五次迭代：信号联动十六轮（学习卡薄弱感知、一键补漏）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 学习卡薄弱感知：`sprintWeakSignals` 传参从「仅冲刺会话」改为「任意会话/自由学习态都传」（page.tsx），WordCard 薄弱信号区文案按会话态区分（冲刺态「本词因以下信号进入冲刺：」、日常态「本词存在薄弱信号：」），`signalTimelineText` 悬停时间线保持全态——日常学习遇到薄弱词即时可见。
+- 学习卡一键补漏：page.tsx 新增 `startTodayWithCurrent()`（当前薄弱词 `startSession("today", "今日任务 · 补漏", [current.id])`，复用通用会话入口、不动 buildTodayQueue），WordCard 薄弱信号区新增「加入今日任务」小按钮（仅薄弱时显示）；新增 `weak-add-today` 样式。
+- E2E 第 8 条：非冲刺态薄弱提示 + 一键补漏链路，8/8 通过（18.3s）。
+
+### 修正
+
+- 无。本轮为增量联动，未改动评分、排程、备份等既有数据链路；未新增 lib 函数、未新增持久化 schema。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 149/149 通过（本轮无新 lib 函数，未新增单测；buildWordWeakSignals 判定已有覆盖）。
+- Playwright E2E 8/8 通过（18.3s）：新增学习卡非冲刺态薄弱提示与一键补漏链路；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 48308 + node 子 43272 均核对关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。
