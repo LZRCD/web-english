@@ -9,6 +9,7 @@ import type {
   ReinforcementWord,
   SessionCompletionSummary,
   SprintCompletionSummary,
+  SprintDimensionWithTrend,
 } from "../../lib/session-summary";
 
 type CompletionAction = {
@@ -20,6 +21,10 @@ export type SessionCompleteViewProps = {
   summary: SessionCompletionSummary;
   /** 冲刺会话专属总结（kind === "sprint" 时展示） */
   sprintSummary?: SprintCompletionSummary;
+  /** 冲刺维度 × 周报趋势联动展示结构 */
+  sprintDimensionTrend?: SprintDimensionWithTrend[];
+  /** 一键再冲刺（只带仍需关注词） */
+  onResprint?: () => void;
   onReinforce: (wordIds: number[]) => void;
   onFreeStudy: () => void;
   primaryAction?: CompletionAction;
@@ -40,9 +45,16 @@ function candidateClassName(word: ReinforcementWord) {
     : "completion-candidate steady";
 }
 
+/** 冲刺回忆对比条宽度：以两次中较大值为基准，至少 6% */
+function sprintBarWidth(valueMs: number, maxMs: number) {
+  return Math.max(6, Math.min(100, Math.round((valueMs / Math.max(1, maxMs)) * 100)));
+}
+
 export default function SessionCompleteView({
   summary,
   sprintSummary,
+  sprintDimensionTrend,
+  onResprint,
   onReinforce,
   onFreeStudy,
   primaryAction,
@@ -153,6 +165,75 @@ export default function SessionCompleteView({
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {sprintSummary.beforeAverageRecallMs !== null
+            && sprintSummary.sprintAverageRecallMs !== null && (
+            <div className="sprint-recall-compare" aria-label="冲刺前后回忆耗时对比">
+              <p className="sprint-recall-compare-title">冲刺前后平均回忆</p>
+              <div className="sprint-recall-compare-row">
+                <span>冲刺前</span>
+                <div className="sprint-recall-bar">
+                  <i style={{ width: `${sprintBarWidth(sprintSummary.beforeAverageRecallMs, sprintSummary.sprintAverageRecallMs)}%` }} />
+                </div>
+                <strong>{(sprintSummary.beforeAverageRecallMs / 1000).toFixed(1)}s</strong>
+              </div>
+              <div className="sprint-recall-compare-row">
+                <span>冲刺后</span>
+                <div className="sprint-recall-bar">
+                  <i className="after" style={{ width: `${sprintBarWidth(sprintSummary.sprintAverageRecallMs, sprintSummary.sprintAverageRecallMs)}%` }} />
+                </div>
+                <strong>{(sprintSummary.sprintAverageRecallMs / 1000).toFixed(1)}s</strong>
+              </div>
+              <small className={
+                sprintSummary.sprintAverageRecallMs < sprintSummary.beforeAverageRecallMs
+                  ? "positive"
+                  : "neutral"
+              }>
+                {sprintSummary.sprintAverageRecallMs < sprintSummary.beforeAverageRecallMs
+                  ? `↑ 平均回忆提升 ${Math.max(0, sprintSummary.beforeAverageRecallMs - sprintSummary.sprintAverageRecallMs) / 1000}s`
+                  : "回忆耗时与冲刺前持平或略升"}
+              </small>
+            </div>
+          )}
+
+          {sprintDimensionTrend && sprintDimensionTrend.some((row) => row.weeklyCount !== null) && (
+            <div className="sprint-dimension-trend" aria-label="薄弱维度与本周趋势">
+              <p className="sprint-recall-compare-title">薄弱维度 × 本周趋势</p>
+              <div className="sprint-dimension-trend-list">
+                {sprintDimensionTrend.map((row) => {
+                  if (row.sprintCount === 0 && row.weeklyCount === 0) return null;
+                  return (
+                    <span
+                      className={row.cleared ? "sprint-dimension cleared" : "sprint-dimension"}
+                      key={row.key}
+                    >
+                      <strong>{row.label}</strong>
+                      <small>
+                        {row.cleared
+                          ? "已清零"
+                          : `冲刺后 ${row.sprintCount} 词`}
+                        {row.weeklyCount !== null && row.weeklyCount > 0
+                          ? ` · 本周 ${row.weeklyCount}`
+                          : ""}
+                      </small>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {onResprint && sprintSummary.stillWeakCount > 0 && (
+            <div className="sprint-actions">
+              <button
+                type="button"
+                className="sprint-start"
+                onClick={onResprint}
+              >
+                再冲刺仍需关注（{sprintSummary.stillWeakCount}）
+              </button>
             </div>
           )}
         </section>

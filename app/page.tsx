@@ -109,6 +109,7 @@ import {
 import {
   buildSessionCompletionSummary,
   buildSprintCompletionSummary,
+  mergeSprintWithTrend,
 } from "../lib/session-summary";
 import {
   createPerformanceTrace,
@@ -517,6 +518,16 @@ export default function Home() {
       weakSignals: weakSignalInput,
     }),
     [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, weakSignalInput, wordProgress],
+  );
+  // 冲刺维度 × 周报趋势联动：清零标记 + 本周对照
+  const sprintDimensionTrend = useMemo(
+    () => sprintCompletionSummary && weeklyReport
+      ? mergeSprintWithTrend(
+          sprintCompletionSummary.dimensionCounts,
+          weeklyReport.weakTrend,
+        )
+      : undefined,
+    [sprintCompletionSummary, weeklyReport],
   );
   const availableUnits = useMemo(() => {
     const values = redbookWords
@@ -1400,6 +1411,14 @@ export default function Home() {
     startSession("sprint", "考前薄弱冲刺", sprintWordIds);
   }
 
+  // 从完成页一键再冲刺：只带「仍需关注」的词
+  function startResprintSession() {
+    const stillWeakIds = sprintCompletionSummary?.stillWeakWords.map(
+      (item) => item.wordId,
+    ) ?? [];
+    startSession("sprint", "薄弱冲刺 · 补漏", stillWeakIds);
+  }
+
   // 复制薄弱冲刺清单：多行「词 — 信号1、信号2」文本
   function copySprintSummary() {
     const lines = sprintSummary.map((item) =>
@@ -1736,6 +1755,8 @@ export default function Home() {
               <SessionCompleteView
                 summary={sessionCompletionSummary}
                 sprintSummary={sprintCompletionSummary}
+                sprintDimensionTrend={sprintDimensionTrend}
+                onResprint={startResprintSession}
                 onReinforce={(wordIds) => {
                   const originKind = activeSession?.kind === "reinforcement"
                     ? activeSession.originKind

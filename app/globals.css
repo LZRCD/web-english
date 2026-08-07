@@ -4933,3 +4933,86 @@ kbd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- 信号联动七轮：冲刺回忆对比 / 维度联动 / 再冲刺 ---- */
+.sprint-recall-compare {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(250, 252, 249, 0.86);
+}
+.sprint-recall-compare-title {
+  margin: 0 0 10px;
+  color: #6f7a72;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sprint-recall-compare-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.sprint-recall-compare-row > span {
+  color: #858d85;
+  font-size: 9px;
+}
+.sprint-recall-compare-row > strong {
+  color: #27352e;
+  font-size: 11px;
+  text-align: right;
+}
+.sprint-recall-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e8eee9;
+  overflow: hidden;
+}
+.sprint-recall-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #b9cdc0;
+}
+.sprint-recall-bar i.after {
+  background: #6fae8e;
+}
+.sprint-recall-compare > small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.sprint-recall-compare > small.positive { color: #34835f; }
+.sprint-recall-compare > small.neutral { color: #858d85; }
+.sprint-dimension-trend {
+  margin-top: 14px;
+}
+.sprint-dimension-trend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.sprint-dimension {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fdf0e7;
+  color: #b0643f;
+}
+.sprint-dimension strong {
+  font-size: 10px;
+}
+.sprint-dimension small {
+  color: #a45f4e;
+  font-size: 9px;
+}
+.sprint-dimension.cleared {
+  background: #eef7f1;
+  color: #34835f;
+}
+.sprint-dimension.cleared small {
+  color: #34835f;
+}

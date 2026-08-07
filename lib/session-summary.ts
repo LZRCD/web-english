@@ -220,6 +220,38 @@ export function buildSessionCompletionSummary({
   };
 }
 
+/** 冲刺维度与周报联动后的展示结构：清零标记 + 本周趋势对照 */
+export type SprintDimensionWithTrend = {
+  key: WeakDimensionTrend["key"];
+  label: string;
+  /** 冲刺后仍薄弱词数（0 = 已清零） */
+  sprintCount: number;
+  /** 本周该维度薄弱词数（周报 weakTrend） */
+  weeklyCount: number | null;
+  /** 冲刺后是否已清零 */
+  cleared: boolean;
+};
+
+/**
+ * 把冲刺维度分布与周报薄弱维度趋势合并为展示结构：
+ * sprintCount 为 0 标「已清零」，weeklyCount 取自同 key 的周报维度。
+ */
+export function mergeSprintWithTrend(
+  sprintCounts: readonly WeakDimensionTrend[],
+  weeklyCounts: readonly WeakDimensionTrend[],
+): SprintDimensionWithTrend[] {
+  const weeklyByKey = new Map(
+    weeklyCounts.map((row) => [row.key, row.count]),
+  );
+  return sprintCounts.map((row) => ({
+    key: row.key,
+    label: row.label,
+    sprintCount: row.count,
+    weeklyCount: weeklyByKey.get(row.key) ?? null,
+    cleared: row.count === 0,
+  }));
+}
+
 /** 冲刺完成总结：本次冲刺的薄弱维度分布、回忆对比、已解决/仍需关注 */
 export type SprintCompletionSummary = {
   /** 本次冲刺完成的词数 */

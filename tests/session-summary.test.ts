@@ -9,9 +9,11 @@ import {
 import {
   buildSessionCompletionSummary,
   buildSprintCompletionSummary,
+  mergeSprintWithTrend,
   reviewsForSession,
   selectReinforcementWords,
 } from "../lib/session-summary.ts";
+import type { WeakDimensionTrend } from "../lib/weak-signals.ts";
 import type { WeakSignalInput } from "../lib/weak-signals.ts";
 import { parseStoredState } from "../lib/study.ts";
 
@@ -313,4 +315,35 @@ test("冲刺完成总结：统计已解决/仍需关注、回忆对比与薄弱�
   assert.equal(lapse?.count, 1);
   const stubborn = summary.dimensionCounts.find((row) => row.key === "stubborn");
   assert.equal(stubborn?.count, 1);
+});
+
+test("冲刺维度与周报趋势联动：清零标记与本周对照", () => {
+  const sprintCounts: WeakDimensionTrend[] = [
+    { key: "lookup", label: "反复查词", count: 0, change: null },
+    { key: "lapse", label: "遗忘词", count: 1, change: null },
+    { key: "slow-recall", label: "回忆偏慢", count: 2, change: null },
+    { key: "stubborn", label: "顽固词", count: 0, change: null },
+  ];
+  const weeklyCounts: WeakDimensionTrend[] = [
+    { key: "lookup", label: "反复查词", count: 3, change: 1 },
+    { key: "lapse", label: "遗忘词", count: 2, change: 0 },
+    { key: "slow-recall", label: "回忆偏慢", count: 0, change: 0 },
+  ];
+  const merged = mergeSprintWithTrend(sprintCounts, weeklyCounts);
+
+  const lookup = merged.find((row) => row.key === "lookup")!;
+  assert.equal(lookup.sprintCount, 0);
+  assert.equal(lookup.weeklyCount, 3);
+  assert.equal(lookup.cleared, true);
+  const lapse = merged.find((row) => row.key === "lapse")!;
+  assert.equal(lapse.sprintCount, 1);
+  assert.equal(lapse.weeklyCount, 2);
+  assert.equal(lapse.cleared, false);
+  // 周报缺失的 key：weeklyCount 为 null
+  const stubborn = merged.find((row) => row.key === "stubborn")!;
+  assert.equal(stubborn.sprintCount, 0);
+  assert.equal(stubborn.weeklyCount, null);
+  assert.equal(stubborn.cleared, true);
+  // 周报存在但冲刺没有的维度不进入结果
+  assert.equal(merged.some((row) => row.key === "guess"), false);
 });
