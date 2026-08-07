@@ -641,3 +641,23 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功；单元测试 117/117 通过（新增 buildSprintRecordWordIds 提取/去重/异会话隔离用例）。
 - 新增 Playwright 跨链路 E2E 3/3 通过（4.6s）；运行前后固定端口 3000 无残留监听进程。
 - 本次启动/关闭 dev server 均记录并核对了 PID，未批量终止无关 node 进程。
+
+## 第二十九次迭代：信号联动十轮（完整冲刺 E2E、阈值预览明细、CI 兼容）
+
+本次迭代：2026-08-16。
+
+### 新增
+
+- 完整冲刺交互 E2E（signal-flow.spec.mjs 第 4 条）：seed（过去时间 + 冲刺期 examDate + 薄弱词）→ 轨迹页点「开始考前薄弱冲刺（2 词）」→ 学习卡释义面板显示「本词因以下信号进入冲刺」→ 逐词评分推进到完成 → 完成页「本次冲刺小结」（已解决/仍需关注）→ 点「再冲刺仍需关注」建立新冲刺会话并回到学习卡。本地 3000 dev server 实测 4/4 通过（8.8s）。
+- 阈值预览命中明细 tooltip：page.tsx 派生 `weakLookupCandidateWords`（候选词名映射，词库缺失跳过），设置页预览行 title 显示「薄弱候选：radiate、objective …」最多前 10 词，超出显示「… 等 N 词」；无候选时显示「当前无薄弱候选词」。
+- E2E 接入 CI：signal-flow.spec.mjs 文件级检测私有红宝书数据（`public/data/redbook.json` 被 gitignore），缺失时整文件 `test.skip` 并注明「CI 干净检出无私有红宝书数据」，release 触发跑全量时本地数据齐全正常执行。
+
+### 修正
+
+- 无。本轮为增量联动，未改动评分、排程、备份等既有数据链路。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功；单元测试 117/117 通过。
+- 新增 Playwright E2E 4/4 通过（8.8s），覆盖完整冲刺交互链路；运行前后固定端口 3000 无残留监听进程（本次 dev server 由 npm.cmd 拉起 node 子进程，父 npm 与子 node 均逐一核对并关闭，未批量终止无关进程）。
+- CI 干净检出场景：无 redbook.json 时 signal-flow 整文件跳过，其余 e2e 不受影响。

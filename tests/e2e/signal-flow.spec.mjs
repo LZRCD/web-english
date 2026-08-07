@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { existsSync } from "node:fs";
 import {
   createState,
 } from "./fixtures.mjs";
@@ -8,6 +9,18 @@ import {
   openSettings,
   openWordbook,
 } from "./helpers.mjs";
+
+// CI 干净检出无私有红宝书数据（public/data/redbook.json 被 gitignore），
+// 信号联动 E2E 依赖红宝书词（radiate/objective），缺失时整文件跳过。
+const PRIVATE_REDBOOK_PATH = new URL(
+  "../../public/data/redbook.json",
+  import.meta.url,
+);
+const hasPrivateData = existsSync(PRIVATE_REDBOOK_PATH);
+test.skip(
+  !hasPrivateData,
+  "CI 干净检出无私有红宝书数据，信号联动 E2E 跳过",
+);
 
 /** 过去第 days 天（本地时刻）的 ISO 字符串 */
 function daysAgo(days, hour = 8, minute = 0) {
@@ -189,4 +202,55 @@ test("信号联动：词本划词集展示薄弱候选与一键学习入口", as
   await expect(
     page.getByRole("button", { name: /学习全部薄弱候选（2）/ }),
   ).toBeVisible();
+});
+
+test("信号联动：完整冲刺交互（入口→词卡原因→完成小结→再冲刺）", async ({ context, page }) => {
+  await installStateSeed(context, sprintSeedState());
+  await openApp(page);
+  // 进入轨迹页，冲刺期/临考期（examDate 5 天后）+ 冲刺词数 2 → 显示冲刺入口
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  const sprintStart = page.getByRole("button", {
+    name: /开始考前薄弱冲刺（2 词）/,
+  });
+  await expect(sprintStart).toBeVisible();
+  await sprintStart.click();
+
+  // 学习卡：冲刺会话中释义面板显示薄弱原因
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
+  await expect(page.locator(".weak-signal-tags")).not.toBeEmpty();
+
+  // 逐词评分（认识）推进会话到完成
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByRole("button", { name: /认识/ }).click();
+    if (index === 0) {
+      // 下一个词仍处于冲刺会话
+      await expect(page.getByRole("button", { name: "显示单词释义" })).toBeEnabled();
+      await page.getByRole("button", { name: "显示单词释义" }).click();
+      await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
+    }
+  }
+
+  // 完成页：本次冲刺小结 + 再冲刺仍需关注
+  await expect(
+    page.getByRole("heading", { name: "本次冲刺小结" }),
+  ).toBeVisible();
+  await expect(page.getByText("已解决")).toBeVisible();
+  const resprintButton = page.getByRole("button", {
+    name: /再冲刺仍需关注（\d+）/,
+  });
+  await expect(resprintButton).toBeVisible();
+  await resprintButton.click();
+  // 新冲刺会话建立：回到学习卡，仍显示冲刺薄弱原因
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
 });

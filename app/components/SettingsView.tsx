@@ -20,6 +20,8 @@ type SettingsViewProps = {
   guessContextFirst: boolean;
   /** 薄弱判定阈值（反复查词/插队/回忆偏慢） */
   weakThresholds: WeakThresholds;
+  /** 当前阈值下的薄弱候选词名（设置页 tooltip 明细） */
+  weakLookupCandidateWords: string[];
   /** 当前阈值下的薄弱候选词数（设置页即时预览） */
   weakLookupCandidateCount: number;
   /** 当前阈值下的插队词数（设置页即时预览） */
@@ -77,6 +79,7 @@ export default function SettingsView({
   hideChineseMeaning,
   guessContextFirst,
   weakThresholds,
+  weakLookupCandidateWords,
   weakLookupCandidateCount,
   weakLookupPriorityCount,
   weakSprintCount,
@@ -246,7 +249,12 @@ export default function SettingsView({
           <span className="weak-thresholds-title">
             <strong>薄弱判定阈值</strong>
             <small>调整后词本薄弱标签、划词补漏插队、考前冲刺与周报趋势都会同步生效</small>
-            <em className="weak-thresholds-preview">
+            <em
+              className="weak-thresholds-preview"
+              title={weakLookupCandidateWords.length
+                ? `薄弱候选：${weakLookupCandidateWords.slice(0, 10).join("、")}${weakLookupCandidateWords.length > 10 ? ` … 等 ${weakLookupCandidateWords.length} 词` : ""}`
+                : "当前无薄弱候选词"}
+            >
               当前将影响：薄弱候选 {weakLookupCandidateCount} 词 · 插队 {weakLookupPriorityCount} 词 · 冲刺 {weakSprintCount} 词
             </em>
           </span>

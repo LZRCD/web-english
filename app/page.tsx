@@ -402,6 +402,13 @@ export default function Home() {
     () => lookupWeakCandidateIds(weakSignalInput, weakThresholds),
     [weakSignalInput, weakThresholds],
   );
+  // 候选词名（设置页 tooltip 明细，词库缺失跳过）
+  const weakLookupCandidateWords = useMemo(
+    () => weakLookupCandidateIds
+      .map((wordId) => wordById.get(wordId)?.word)
+      .filter((word): word is string => Boolean(word)),
+    [weakLookupCandidateIds, wordById],
+  );
   // 划词补漏：查询达到阈值且未被近期答对覆盖的词插队今日任务
   const lookupPriorityIds = useMemo(
     () => lookupPriorityWordIds(weakSignalInput, weakThresholds),
@@ -2030,6 +2037,7 @@ export default function Home() {
             hideChineseMeaning={hideChineseMeaning}
             guessContextFirst={guessContextFirst}
             weakThresholds={weakThresholds}
+            weakLookupCandidateWords={weakLookupCandidateWords}
             weakLookupCandidateCount={weakLookupCandidateIds.length}
             weakLookupPriorityCount={lookupPriorityIds.length}
             weakSprintCount={sprintWordIds.length}
