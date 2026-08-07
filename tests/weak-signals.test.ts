@@ -5,12 +5,15 @@ import type {
   StubbornWordMap,
   WordProgressMap,
 } from "../lib/learning.ts";
-import type { LookupWord } from "../lib/study.ts";
+import type { LookupWord, Word } from "../lib/study.ts";
 import {
+  buildSprintCsv,
+  buildSprintEffectiveness,
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
+  buildWeakConcentration,
   buildWeakDimensionTrend,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
@@ -451,4 +454,149 @@ test("周报薄弱维度趋势：不提供信号源时 insights 周报返回空�
     dailyNewGoal: 20,
   });
   assert.deepEqual(report.weakTrend, []);
+});
+
+function makeWord(
+  id: number,
+  section?: string,
+  unit?: number | string,
+): Word {
+  return {
+    id,
+    word: `word-${id}`,
+    meaning: "释义",
+    ...(section ? { section } : {}),
+    ...(unit !== undefined ? { unit } : {}),
+  };
+}
+
+test("冲刺成效：按本地周一聚合次数/覆盖词数/回忆降幅/解决词数", () => {
+  // 2026-08-10 为周一（本周），2026-08-05 在上周
+  const reviews = [
+    // 本周冲刺 1
+    { ...makeReview(1, 2, "2026-08-10T08:05:00.000Z", 8_000), sessionId: "sprint:2026-08-10" },
+    { ...makeReview(2, 0, "2026-08-10T08:06:00.000Z", 12_000), sessionId: "sprint:2026-08-10" },
+    { ...makeReview(3, 2, "2026-08-10T08:07:00.000Z", 16_000), sessionId: "sprint:2026-08-10" },
+    // 本周冲刺 2（同周第二次，评分不应混入 baseline）
+    { ...makeReview(1, 3, "2026-08-12T08:00:00.000Z", 5_000), sessionId: "sprint:2026-08-12" },
+    // 冲刺前历史（早于本周首次冲刺、非冲刺会话）
+    makeReview(1, 1, "2026-08-08T08:00:00.000Z", 10_000),
+    makeReview(2, 0, "2026-08-08T08:00:00.000Z", 30_000),
+    makeReview(3, 1, "2026-08-08T08:00:00.000Z", 20_000),
+    // 上周冲刺（不属本周）
+    { ...makeReview(1, 1, "2026-08-05T08:00:00.000Z", 25_000), sessionId: "sprint:2026-08-05" },
+  ];
+  const result = buildSprintEffectiveness(
+    reviews,
+    new Date("2026-08-14T12:00:00.000Z"),
+  );
+  assert.ok(result);
+  assert.equal(result.sprintCount, 2);
+  assert.equal(result.coveredWordCount, 3); // 去重词 1/2/3
+  assert.equal(result.resolvedCount, 2); // 词 1、词 3（词 1 两次答对去重）
+  // 冲刺期间平均：(8+12+16+5)/4 = 10.25s
+  assert.equal(result.sprintAverageRecallMs, 10_250);
+  // baseline：早于 08-10T08:05 且非冲刺：(10+30+20)/3 = 20s
+  assert.equal(result.beforeAverageRecallMs, 20_000);
+  // 降幅：20 − 10.25 = 9.75s
+  assert.equal(result.recallImprovementMs, 9_750);
+});
+
+test("冲刺成效：无本周冲刺记录返回 null", () => {
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-05T08:00:00.000Z", 8_000), sessionId: "sprint:2026-08-05" },
+  ];
+  assert.equal(
+    buildSprintEffectiveness(reviews, new Date("2026-08-14T12:00:00.000Z")),
+    null,
+  );
+  assert.equal(
+    buildSprintEffectiveness([], new Date("2026-08-14T12:00:00.000Z")),
+    null,
+  );
+});
+
+test("冲刺成效：baseline 排除冲刺会话样本", () => {
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-10T08:05:00.000Z", 8_000), sessionId: "sprint:2026-08-10" },
+    makeReview(1, 1, "2026-08-08T08:00:00.000Z", 10_000), // 普通历史
+    { ...makeReview(1, 1, "2026-08-07T08:00:00.000Z", 40_000), sessionId: "sprint:2026-08-07" }, // 旧冲刺，应排除
+  ];
+  const result = buildSprintEffectiveness(
+    reviews,
+    new Date("2026-08-14T12:00:00.000Z"),
+  );
+  assert.ok(result);
+  assert.equal(result.beforeAverageRecallMs, 10_000);
+});
+
+test("薄弱集中度：按 section 分组、unit 聚合，total 与 count 降序", () => {
+  const input = baseInput({
+    guessMistakes: { 1: 2, 2: 3, 3: 1, 4: 2, 5: 1 },
+  });
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2, "必考词", 1)],
+    [3, makeWord(3, "必考词", 2)],
+    [4, makeWord(4, "基础词", 5)],
+    [5, makeWord(5, "基础词", 6)],
+  ]);
+  const result = buildWeakConcentration(input, wordById);
+  assert.deepEqual(result.map((row) => row.section), ["必考词", "基础词"]);
+  assert.deepEqual(result.map((row) => row.total), [3, 2]);
+  assert.deepEqual(result[0].units, [
+    { unit: "1", count: 2 },
+    { unit: "2", count: 1 },
+  ]);
+});
+
+test("薄弱集中度：无薄弱词返回空，section 缺失跳过", () => {
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2)],
+  ]);
+  assert.deepEqual(buildWeakConcentration(baseInput(), wordById), []);
+  const input = baseInput({ guessMistakes: { 1: 2, 2: 1 } });
+  const result = buildWeakConcentration(input, wordById);
+  assert.deepEqual(result.map((row) => row.section), ["必考词"]);
+  assert.equal(result[0].total, 1);
+});
+
+test("薄弱集中度：阈值参数生效（提高查词阈值后集中度下降）", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+      "word-2": { count: 1, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-28T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1), lookupWord("word-2", 2)],
+  });
+  const wordById = new Map<number, Word>([
+    [1, makeWord(1, "必考词", 1)],
+    [2, makeWord(2, "必考词", 1)],
+  ]);
+  const relaxed = buildWeakConcentration(input, wordById);
+  assert.equal(relaxed[0]?.total, 1); // 默认 lookupWeak=2，count=3 命中
+  const strict = buildWeakConcentration(
+    input,
+    wordById,
+    { ...DEFAULT_WEAK_THRESHOLDS, lookupWeak: 4 },
+  );
+  assert.equal(strict.length, 0); // 提高到 4 后不再命中
+});
+
+test("冲刺清单 CSV：含 BOM 表头，逗号/双引号/换行转义", () => {
+  const csv = buildSprintCsv([
+    { word: "abandon", signals: ["查过2次", "回忆偏慢1次"] },
+    { word: 'he said, "hi"', signals: ["含,逗号", "含\n换行"] },
+  ]);
+  assert.ok(csv.startsWith("\uFEFF词,信号列表\n"));
+  assert.ok(csv.includes("abandon,查过2次、回忆偏慢1次"));
+  // 含逗号的词被双引号包裹，内部双引号翻倍
+  assert.ok(csv.includes('"he said, ""hi"""'));
+  // 信号字段含逗号与换行，整体被双引号包裹
+  assert.ok(csv.includes('"含,逗号、含\n换行"'));
+});
+
+test("冲刺清单 CSV：空清单返回空串", () => {
+  assert.equal(buildSprintCsv([]), "");
 });

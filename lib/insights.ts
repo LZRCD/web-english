@@ -9,7 +9,9 @@ import {
   type WordProgressMap,
 } from "./learning.ts";
 import {
+  buildSprintEffectiveness,
   buildWeakDimensionTrend,
+  type SprintEffectiveness,
   type WeakDimensionTrend,
   type WeakSignalInput,
   type WeakThresholds,
@@ -59,6 +61,8 @@ export type WeeklyLearningReport = {
   paceAdvice: string;
   /** 本周各薄弱维度趋势（薄弱画像派生，见 lib/weak-signals.ts） */
   weakTrend: WeakDimensionTrend[];
+  /** 本周冲刺成效（有本周冲刺评分时存在，见 lib/weak-signals.ts） */
+  sprintEffectiveness?: SprintEffectiveness;
 };
 
 type TimedReview = LearningInsightReview & {
@@ -314,7 +318,8 @@ export function buildWeeklyLearningReport(input: {
     paceStatus,
     paceAdvice,
     weakTrend: input.weakSignals
-      ? buildWeakDimensionTrend(input.weakSignals, now, input.weakThresholds)
-      : [],
+        ? buildWeakDimensionTrend(input.weakSignals, now, input.weakThresholds)
+        : [],
+    sprintEffectiveness: buildSprintEffectiveness(input.reviews, now) ?? undefined,
   };
 }

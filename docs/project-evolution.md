@@ -661,3 +661,24 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功；单元测试 117/117 通过。
 - 新增 Playwright E2E 4/4 通过（8.8s），覆盖完整冲刺交互链路；运行前后固定端口 3000 无残留监听进程（本次 dev server 由 npm.cmd 拉起 node 子进程，父 npm 与子 node 均逐一核对并关闭，未批量终止无关进程）。
 - CI 干净检出场景：无 redbook.json 时 signal-flow 整文件跳过，其余 e2e 不受影响。
+
+## 第三十次迭代：信号联动十一轮（冲刺成效沉淀周报、薄弱集中度、冲刺清单 CSV）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 冲刺成效沉淀周报：`lib/weak-signals.ts` 新增 `buildSprintEffectiveness(reviews, now)`——按本地周一聚合本周冲刺次数、覆盖去重词数、平均回忆降幅（冲刺前历史平均 vs 冲刺期间平均）、解决词数（rating≥2 去重），无本周冲刺记录返回 null；`buildWeeklyLearningReport` 新增可选输出 `sprintEffectiveness`（提供 reviews 时内部派生，不新增输入/不破坏既有调用方）；轨迹页周报下方新增「本周冲刺成效」栏（仅存在时显示，复用 weak-trend 样式，降幅标绿色「↑ 提升」、升幅标红色）。
+- 薄弱集中度热力图：`lib/weak-signals.ts` 新增 `buildWeakConcentration(input, wordById, thresholds)`——复用 `buildWeakProfiles` 一次性算全量薄弱标签（避免逐词重扫），按 section 分组、section 内按 unit 聚合，total 与 unit count 降序；无 section 的词跳过、unit 统一转字符串；轨迹页周报区新增「薄弱集中区」横向条形（新增少量 CSS，悬停 title 显示单元明细）。
+- 冲刺清单导出 CSV：`lib/weak-signals.ts` 新增纯函数 `buildSprintCsv(summary)`——输出「词,信号列表」，字段含逗号/双引号/换行时按 CSV 规则转义（双引号包裹 + 内部翻倍），含 `\uFEFF` BOM 防 Excel 中文乱码，空清单返回空串；page.tsx 新增 `exportSprintCsv()`（Blob + `URL.createObjectURL` + `<a download="薄弱冲刺清单.csv">` 点击下载，完成后 `revokeObjectURL`）；轨迹页冲刺入口「导出 CSV」按钮与「复制薄弱清单」并存。
+
+### 修正
+
+- `npm test` 显式文件列表补上 `tests/weak-signals.test.ts`：此前该文件 13 个用例未被 test script 执行（补入后总用例 117 → 138，全部通过）。
+- 冲刺成效口径：baseline 取覆盖词集中早于本周首次冲刺开始、且非冲刺会话的历史评分，排除同周后续冲刺样本混入（比完成页 `beforeAverageRecallMs` 更严格，测试明确锚定该行为）。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 138/138 通过，新增 8 用例覆盖：冲刺成效周聚合/去重/无记录返回 null/回忆降幅/baseline 排除冲刺会话、薄弱集中度分组排序/空与 section 缺失/阈值参数生效、CSV 逗号引号换行转义/空清单/BOM。
+- 未启动本地开发服务器：三项均为新增展示区块与导出按钮，不触碰既有 4 条 E2E 链路，signal-flow.spec.mjs 无需改动。

@@ -4691,6 +4691,51 @@ kbd {
   }
 }
 
+/* ---- 信号联动十一轮：薄弱集中区 / 冲刺成效 ---- */
+.weak-concentration {
+  margin-top: 13px;
+  padding: 15px 17px;
+  border: 1px solid rgba(218, 226, 220, 0.76);
+  border-radius: 15px;
+  background: rgba(250, 252, 249, 0.6);
+}
+.weak-concentration-row {
+  display: grid;
+  grid-template-columns: auto minmax(60px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+.weak-concentration-label {
+  color: #27352e;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.weak-concentration-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #edf3ee;
+  overflow: hidden;
+}
+.weak-concentration-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f0b27a, #c36f52);
+}
+.weak-concentration-count {
+  color: #27352e;
+  font: 400 15px/1 Georgia, serif;
+}
+.weak-concentration-units {
+  color: #858d85;
+  font-size: 9px;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- 信号联动二轮：例句来源词跳转 / 回忆耗时 ---- */
 .reused-source-link {
   border: 0;

@@ -221,6 +221,54 @@ export function buildWeakProfiles(
   return profiles;
 }
 
+/** 单个分册内的单元薄弱集中度 */
+export type WeakUnitConcentration = {
+  unit: string;
+  count: number;
+};
+
+/** 按词本分册（section）分组的薄弱集中度 */
+export type WeakSectionConcentration = {
+  section: string;
+  /** 该分册薄弱词数 */
+  total: number;
+  /** 单元明细（按 count 降序） */
+  units: WeakUnitConcentration[];
+};
+
+/**
+ * 薄弱集中度：按 section 分组统计薄弱词数（buildWordWeakSignals 标签非空），
+ * section 内按 unit 分组；无 section 的词跳过，unit 统一转字符串。
+ */
+export function buildWeakConcentration(
+  input: WeakSignalInput,
+  wordById: ReadonlyMap<number | undefined, import("./study.ts").Word>,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): WeakSectionConcentration[] {
+  const profiles = buildWeakProfiles(input, thresholds);
+  const bySection = new Map<string, Map<string, number>>();
+  for (const [wordIdKey, profile] of Object.entries(profiles)) {
+    if (!profile.signals.length) continue;
+    const word = wordById.get(Number(wordIdKey));
+    const section = word?.section;
+    if (!section) continue;
+    const unit = word?.unit;
+    const unitKey = unit === undefined ? "未分单元" : String(unit);
+    const units = bySection.get(section) ?? new Map<string, number>();
+    units.set(unitKey, (units.get(unitKey) ?? 0) + 1);
+    bySection.set(section, units);
+  }
+  return [...bySection.entries()]
+    .map(([section, units]) => ({
+      section,
+      total: [...units.values()].reduce((sum, count) => sum + count, 0),
+      units: [...units.entries()]
+        .map(([unit, count]) => ({ unit, count }))
+        .sort((first, second) => second.count - first.count),
+    }))
+    .sort((first, second) => second.total - first.total);
+}
+
 /** 划词达到阈值的薄弱候选（词本划词集标注/过滤） */
 export function lookupWeakCandidateIds(
   input: WeakSignalInput,
@@ -342,6 +390,95 @@ export function buildSprintRecordWordIds(
   return [...wordIds];
 }
 
+/** 本周冲刺成效：按本地周一聚合，纯派生、不新增 schema */
+export type SprintEffectiveness = {
+  /** 本周冲刺次数 */
+  sprintCount: number;
+  /** 本周冲刺覆盖的去重词数 */
+  coveredWordCount: number;
+  /** 冲刺前这些词的历史平均回忆耗时（毫秒），无样本为 null */
+  beforeAverageRecallMs: number | null;
+  /** 冲刺期间平均回忆耗时（毫秒），无样本为 null */
+  sprintAverageRecallMs: number | null;
+  /** 平均回忆降幅（毫秒）：冲刺前平均 − 冲刺期间平均；正值表示回忆更快 */
+  recallImprovementMs: number | null;
+  /** 冲刺期间顺利回忆（rating≥2）的去重词数 */
+  resolvedCount: number;
+};
+
+/**
+ * 从评分日志按本地周一聚合本周冲刺成效。
+ * 周归属用 reviewedAt；baseline 取覆盖词集中早于本周首次冲刺开始、
+ * 且非冲刺会话的历史评分，避免后续冲刺样本混入（与完成页口径同源）。
+ */
+export function buildSprintEffectiveness(
+  reviews: readonly ReviewEvent[],
+  now = new Date(),
+): SprintEffectiveness | null {
+  const weekStart = localWeekStart(now);
+  const weekStartMs = weekStart.getTime();
+  const weekEndMs = addLocalDays(weekStart, 7).getTime();
+  const weekSprints = reviews.filter((review) =>
+    review.sessionId?.startsWith("sprint:")
+    && inWindow(review.reviewedAt, weekStartMs, weekEndMs));
+  if (!weekSprints.length) return null;
+  const firstSprintMs = weekSprints.reduce<number>((min, review) => {
+    const ms = new Date(review.reviewedAt).getTime();
+    return Number.isFinite(ms) && ms < min ? ms : min;
+  }, Number.POSITIVE_INFINITY);
+  const coveredIds = new Set(
+    weekSprints
+      .map((review) => review.wordId)
+      .filter((wordId): wordId is number => wordId !== undefined),
+  );
+  const resolvedCount = new Set(
+    weekSprints
+      .filter((review) => review.rating >= 2)
+      .map((review) => review.wordId),
+  ).size;
+  const sprintSamples = weekSprints
+    .map((review) => review.recallMs)
+    .filter((value): value is number =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0);
+  const sprintAverageRecallMs = sprintSamples.length
+    ? Math.round(
+        sprintSamples.reduce((sum, ms) => sum + ms, 0) / sprintSamples.length,
+      )
+    : null;
+  const beforeSamples = reviews.flatMap<number>((review) => {
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (
+      review.wordId !== undefined
+      && coveredIds.has(review.wordId)
+      && Number.isFinite(reviewedAtMs)
+      && reviewedAtMs < firstSprintMs
+      && !review.sessionId?.startsWith("sprint:")
+      && typeof review.recallMs === "number"
+      && Number.isFinite(review.recallMs)
+      && review.recallMs >= 0
+    ) {
+      return [review.recallMs];
+    }
+    return [];
+  });
+  const beforeAverageRecallMs = beforeSamples.length
+    ? Math.round(
+        beforeSamples.reduce((sum, ms) => sum + ms, 0) / beforeSamples.length,
+      )
+    : null;
+  return {
+    sprintCount: new Set(weekSprints.map((review) => review.sessionId)).size,
+    coveredWordCount: coveredIds.size,
+    beforeAverageRecallMs,
+    sprintAverageRecallMs,
+    recallImprovementMs:
+      beforeAverageRecallMs !== null && sprintAverageRecallMs !== null
+        ? beforeAverageRecallMs - sprintAverageRecallMs
+        : null,
+    resolvedCount,
+  };
+}
+
 /** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,
@@ -384,7 +521,7 @@ export function buildSprintWordIds(
 /** 薄弱冲刺清单：只含冲刺词，复用词级薄弱标签 */
 export function buildSprintSummary(
   input: WeakSignalInput,
-  wordById: Map<number, import("./study.ts").Word>,
+  wordById: ReadonlyMap<number | undefined, import("./study.ts").Word>,
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): { word: string; signals: string[] }[] {
   return buildSprintWordIds(input, thresholds).flatMap((wordId) => {
@@ -394,6 +531,24 @@ export function buildSprintSummary(
     if (!signals.length) return [];
     return [{ word, signals }];
   });
+}
+
+/** CSV 字段转义：含逗号/双引号/换行时双引号包裹，内部双引号翻倍 */
+function csvField(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+/**
+ * 薄弱冲刺清单导出 CSV（词,信号列表）。含 BOM 前缀，Excel 打开中文不乱码；
+ * 无条目返回空串。
+ */
+export function buildSprintCsv(
+  summary: readonly { word: string; signals: string[] }[],
+): string {
+  if (!summary.length) return "";
+  const lines = summary.map((item) =>
+    [item.word, item.signals.join("、")].map(csvField).join(","));
+  return `\uFEFF词,信号列表\n${lines.join("\n")}\n`;
 }
 
 /** 划词达到阈值且未被近期答对覆盖的词 id（今日任务插队，按查询次数倒序） */

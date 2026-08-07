@@ -59,10 +59,12 @@ import {
   buildWeeklyLearningReport,
 } from "../lib/insights";
 import {
+  buildSprintCsv,
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
+  buildWeakConcentration,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
   buildWordWeakSignals,
@@ -457,6 +459,10 @@ export default function Home() {
   const sprintSummary = useMemo(
     () => buildSprintSummary(weakSignalInput, sprintWordById, weakThresholds),
     [sprintWordById, weakSignalInput, weakThresholds],
+  );
+  const weakConcentration = useMemo(
+    () => buildWeakConcentration(weakSignalInput, wordById, weakThresholds),
+    [weakSignalInput, wordById, weakThresholds],
   );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
@@ -1474,6 +1480,25 @@ export default function Home() {
     }
   }
 
+  // 导出薄弱冲刺清单 CSV：Blob 下载，完成后释放对象 URL
+  function exportSprintCsv() {
+    const csv = buildSprintCsv(sprintSummary);
+    if (!csv) {
+      showToast("暂无薄弱清单可导出", 1800);
+      return;
+    }
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "薄弱冲刺清单.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("已导出薄弱清单 CSV", 1800);
+  }
+
   function startSearchSession() {
     const ids = selectedSearchIds.length
       ? selectedSearchIds
@@ -1991,6 +2016,8 @@ export default function Home() {
             onResprintHistory={startSprintFromHistory}
             onStartSprint={startSprintSession}
             onCopySprint={copySprintSummary}
+            onExportSprint={exportSprintCsv}
+            weakConcentration={weakConcentration}
             onStartTodaySession={startTodaySession}
             onActivityRangeChange={(range) => {
               setActivityRange(range);

@@ -12,6 +12,7 @@ import {
   emphasizedWeakDimensions,
   type SprintHistory,
   type WeakDimensionTrendWeek,
+  type WeakSectionConcentration,
 } from "../../lib/weak-signals";
 
 type ActivityRange = 140 | 182 | 365;
@@ -49,10 +50,13 @@ type HistoryViewProps = {
   sprintHistory: SprintHistory;
   /** 考前薄弱冲刺词数（冲刺/临考期显示入口） */
   sprintCount: number;
+  /** 薄弱集中区（按词本分册/单元派生） */
+  weakConcentration: WeakSectionConcentration[];
   /** 用历史冲刺的词集再跑一次 */
   onResprintHistory?: (sessionId: string) => void;
   onStartSprint: () => void;
   onCopySprint: () => void;
+  onExportSprint: () => void;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
@@ -81,9 +85,11 @@ export default function HistoryView({
   examProgress,
   sprintHistory,
   sprintCount,
+  weakConcentration,
   onResprintHistory,
   onStartSprint,
   onCopySprint,
+  onExportSprint,
   onStartTodaySession,
   onActivityRangeChange,
   onActivityNavigate,
@@ -91,6 +97,13 @@ export default function HistoryView({
   onSelectDate,
 }: HistoryViewProps) {
   const now = new Date(clock);
+  // 回忆耗时格式化：毫秒 → x.xs；null 显示 —
+  const formatRecall = (ms: number | null) =>
+    ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`;
+  const maxConcentrationTotal = Math.max(
+    1,
+    ...weakConcentration.map((section) => section.total),
+  );
   const todayKey = dateKey(now);
   const totalLookupCount = Object.values(lookupStats)
     .reduce((sum, stat) => sum + stat.count, 0);
@@ -353,6 +366,9 @@ export default function HistoryView({
                 <button type="button" className="sprint-copy" onClick={onCopySprint}>
                   复制薄弱清单
                 </button>
+                <button type="button" className="sprint-copy" onClick={onExportSprint}>
+                  导出 CSV
+                </button>
               </div>
             )}
           </div>
@@ -388,7 +404,80 @@ export default function HistoryView({
             </div>
           </div>
         )}
-        <div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
+                {weeklyReport.sprintEffectiveness && (
+          <div className="weak-trend" aria-label="本周冲刺成效">
+            <div className="weak-trend-head">
+              <strong>本周冲刺成效</strong>
+              <small>冲刺次数 · 覆盖词数 · 平均回忆变化 · 解决词数</small>
+            </div>
+            <div className="weak-trend-grid">
+              <div className="weak-trend-item">
+                <span>冲刺次数</span>
+                <strong>{weeklyReport.sprintEffectiveness.sprintCount}</strong>
+              </div>
+              <div className="weak-trend-item">
+                <span>覆盖词数</span>
+                <strong>{weeklyReport.sprintEffectiveness.coveredWordCount}</strong>
+              </div>
+              <div className="weak-trend-item">
+                <span>平均回忆</span>
+                <strong title={`冲刺前 ${formatRecall(weeklyReport.sprintEffectiveness.beforeAverageRecallMs)} → 冲刺 ${formatRecall(weeklyReport.sprintEffectiveness.sprintAverageRecallMs)}`}>
+                  {formatRecall(weeklyReport.sprintEffectiveness.sprintAverageRecallMs)}
+                </strong>
+                <small className={
+                  weeklyReport.sprintEffectiveness.recallImprovementMs === null
+                    ? "neutral"
+                    : weeklyReport.sprintEffectiveness.recallImprovementMs > 0
+                      ? "positive"
+                      : "negative"
+                }>
+                  {weeklyReport.sprintEffectiveness.recallImprovementMs === null
+                    ? "无样本"
+                    : weeklyReport.sprintEffectiveness.recallImprovementMs > 0
+                      ? `↑ 提升 ${(weeklyReport.sprintEffectiveness.recallImprovementMs / 1000).toFixed(1)}s`
+                      : `↓ 变慢 ${(-weeklyReport.sprintEffectiveness.recallImprovementMs / 1000).toFixed(1)}s`}
+                </small>
+              </div>
+              <div className="weak-trend-item">
+                <span>解决词数</span>
+                <strong>{weeklyReport.sprintEffectiveness.resolvedCount}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+        {weakConcentration.length > 0 && (
+          <div className="weak-concentration" aria-label="薄弱集中区">
+            <div className="weak-trend-head">
+              <strong>薄弱集中区</strong>
+              <small>按词本分册统计薄弱词分布 · 悬停查看单元明细</small>
+            </div>
+            {weakConcentration.map((section) => (
+              <div className="weak-concentration-row" key={section.section}>
+                <span className="weak-concentration-label">{section.section}</span>
+                <div className="weak-concentration-track">
+                  <div
+                    className="weak-concentration-fill"
+                    style={{ width: `${Math.round((section.total / maxConcentrationTotal) * 100)}%` }}
+                  />
+                </div>
+                <strong className="weak-concentration-count">{section.total}</strong>
+                <small
+                  className="weak-concentration-units"
+                  title={section.units
+                    .map((unit) => `${unit.unit}：${unit.count} 词`)
+                    .join("；")}
+                >
+                  {section.units
+                    .slice(0, 3)
+                    .map((unit) => `${unit.unit} ${unit.count}词`)
+                    .join("、")}
+                  {section.units.length > 3 ? ` 等 ${section.units.length} 个单元` : ""}
+                </small>
+              </div>
+            ))}
+          </div>
+        )}
+<div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
           <span aria-hidden="true">↗</span>
           <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>
         </div>
