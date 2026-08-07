@@ -442,6 +442,47 @@ test("今日新词埋藏已出现的同词族成员但不永久排除", () => {
   );
 });
 
+test("今日任务划词补漏：反复查询词插在到期后、新词前，同词族当天错开", () => {
+  const due = applyRating(undefined, {
+    wordId: 1,
+    word: "due",
+    rating: 0,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "due",
+  }).progress;
+  const queue = buildTodayQueue(
+    [1, 2, 3, 4, 5],
+    { 1: due },
+    2,
+    new Date("2026-07-28T00:11:00.000Z"),
+    {
+      lookupPriorityIds: [3, 4],
+      familyKeyByWordId: { 3: "lemma:3", 4: "lemma:3" },
+    },
+  );
+  // 到期 1 在前，补漏 3 插入，同族 4 错开；新词候选 2、5 补齐目标 2 个
+  assert.deepEqual(queue, [1, 3, 2, 5]);
+});
+
+test("今日任务划词补漏：已到期或已入队的补漏词不重复进队", () => {
+  const due = applyRating(undefined, {
+    wordId: 1,
+    word: "due",
+    rating: 0,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "due",
+  }).progress;
+  const queue = buildTodayQueue(
+    [1, 2],
+    { 1: due },
+    1,
+    new Date("2026-07-28T00:11:00.000Z"),
+    { lookupPriorityIds: [1, 2, 2] },
+  );
+  // 1 已在到期队列不重复；2 补漏插入且去重
+  assert.deepEqual(queue, [1, 2]);
+});
+
 test("回忆耗时随评分日志保存但不改变用户评分", () => {
   const state = parseStoredState(JSON.stringify({
     reviews: [{

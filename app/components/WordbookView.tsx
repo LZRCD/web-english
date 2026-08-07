@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { dateKey, splitMeaning, type LookupStats, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
 import { wordRetrievability, type StubbornWordRecord, type WordProgress } from "../../lib/learning";
 
@@ -17,6 +17,8 @@ type WordbookViewProps = {
   stubbornWordList: StubbornWordItem[];
   lookupWords: LookupWord[];
   lookupStats: LookupStats;
+  /** 薄弱画像标签：key 为学习项 wordId */
+  weakSignalsByWordId: Record<number, string[]>;
   ratingLabels: string[];
   clock: number;
   favorites: SavedWord[];
@@ -39,6 +41,7 @@ export default function WordbookView({
   stubbornWordList,
   lookupWords,
   lookupStats,
+  weakSignalsByWordId,
   ratingLabels,
   clock,
   favorites,
@@ -55,6 +58,15 @@ export default function WordbookView({
 }: WordbookViewProps) {
   const now = new Date(clock);
   const todayKey = dateKey(now);
+  // 划词薄弱候选：查询 ≥2 次的词自动标注，可只看候选
+  const [weakLookupOnly, setWeakLookupOnly] = useState(false);
+  const isLookupWeakCandidate = (query: string) =>
+    (lookupStats[query.trim().toLowerCase()]?.count ?? 0) >= 2;
+  const lookupWeakCandidateCount = lookupWords
+    .filter((item) => isLookupWeakCandidate(item.query)).length;
+  const visibleLookupWords = weakLookupOnly
+    ? lookupWords.filter((item) => isLookupWeakCandidate(item.query))
+    : lookupWords;
   const totalLookupCount = Object.values(lookupStats)
     .reduce((sum, stat) => sum + stat.count, 0);
   const todayNewLookups = lookupWords.filter(
@@ -197,6 +209,13 @@ export default function WordbookView({
               <div><h2>{item.word.word}</h2><span>{item.word.phonetic ?? item.word.part ?? splitMeaning(item.word.meaning).part}</span></div>
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>{item.word.section ?? "红宝书"} · Unit {item.word.unit ?? "—"}</small>
+              {(weakSignalsByWordId[item.wordId] ?? []).length > 0 && (
+                <div className="weak-signal-tags">
+                  {weakSignalsByWordId[item.wordId].map((signal) => (
+                    <span className="weak-signal-tag" key={signal}>{signal}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>去复习</button>
@@ -211,6 +230,13 @@ export default function WordbookView({
               <div><h2>{item.word.word}</h2><span>{ratingLabels[item.lastRating]}</span></div>
               <p>{splitMeaning(item.word.meaning).meaning}</p>
               <small>累计失误 {item.mistakeCount} 次 · {item.word.section ?? "红宝书"} Unit {item.word.unit ?? "—"}</small>
+              {(weakSignalsByWordId[item.wordId] ?? []).length > 0 && (
+                <div className="weak-signal-tags">
+                  {weakSignalsByWordId[item.wordId].map((signal) => (
+                    <span className="weak-signal-tag" key={signal}>{signal}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>重新学习</button>
@@ -237,6 +263,13 @@ export default function WordbookView({
                 当前牢固度 {item.progress ? wordRetrievability(item.progress, now) : 0}%
                 {" · "}连续 3 次“认识/熟练”后自动退出
               </small>
+              {(weakSignalsByWordId[item.record.wordId] ?? []).length > 0 && (
+                <div className="weak-signal-tags">
+                  {weakSignalsByWordId[item.record.wordId].map((signal) => (
+                    <span className="weak-signal-tag" key={signal}>{signal}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onFocusWord(item.word)}>专项修复</button>
@@ -257,6 +290,14 @@ export default function WordbookView({
             {recentLookupAt && (
               <span>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
             )}
+            <label className="lookup-weak-filter">
+              <input
+                type="checkbox"
+                checked={weakLookupOnly}
+                onChange={(event) => setWeakLookupOnly(event.target.checked)}
+              />
+              只看薄弱候选（{lookupWeakCandidateCount} 词查过 2 次+）
+            </label>
             <div className="lookup-dist-mini" aria-label="查询次数分布">
               {[
                 { key: "once", label: "1次", count: lookupBuckets.once },
@@ -275,7 +316,7 @@ export default function WordbookView({
             </div>
           </div>
         )}
-        {activeTab === "lookups" && lookupWords.map((item) => (
+        {activeTab === "lookups" && visibleLookupWords.map((item) => (
           <article
             className="saved-word-card lookup-word-card"
             key={item.linkedWordId === undefined
@@ -304,6 +345,16 @@ export default function WordbookView({
                   return ` · 查询 ${stat.count} 次 · 最近 ${time}`;
                 })()}
               </small>
+              {isLookupWeakCandidate(item.query) && (
+                <span className="lookup-candidate-mark">薄弱候选</span>
+              )}
+              {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).length > 0 && (
+                <div className="weak-signal-tags">
+                  {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).map((signal) => (
+                    <span className="weak-signal-tag" key={signal}>{signal}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="saved-word-actions">
               <button onClick={() => onStartLookups([item.linkedWordId ?? item.id])}>去学习</button>
@@ -338,6 +389,13 @@ export default function WordbookView({
             <h2>没有活跃顽固词</h2>
             <p>连续成功 3 次或 30 天没有新的低评分会自动退出专项。</p>
             <button onClick={onNavigateLearn}>继续学习</button>
+          </div>
+        )}
+        {activeTab === "lookups" && weakLookupOnly && visibleLookupWords.length === 0 && lookupWords.length > 0 && (
+          <div className="wordbook-empty">
+            <span>✓</span>
+            <h2>没有符合条件的薄弱候选</h2>
+            <p>取消「只看薄弱候选」即可查看全部划词；查询 2 次以上的词会自动标注。</p>
           </div>
         )}
         {activeTab === "lookups" && lookupWords.length === 0 && (

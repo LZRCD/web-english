@@ -4582,3 +4582,111 @@ kbd {
   white-space: nowrap;
 }
 
+
+/* ---- 信号联动：薄弱画像标签 / 划词补漏 ---- */
+.weak-signal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+.weak-signal-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fdf0e7;
+  color: #b0643f;
+  font: 600 9px/1.5 "Courier New", monospace;
+  white-space: nowrap;
+}
+.lookup-candidate-mark {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fdeee6;
+  color: #c06a41;
+  font: 700 9px/1.5 "Courier New", monospace;
+}
+.lookup-weak-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #6f7a72;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lookup-weak-filter input {
+  accent-color: #63a986;
+}
+.lookup-hint {
+  margin: 0 0 12px;
+  color: #b0643f;
+  font: 600 11px/1.5 "Courier New", monospace;
+}
+
+/* ---- 信号联动：周报薄弱维度趋势 ---- */
+.weak-trend {
+  margin-top: 13px;
+  padding: 15px 17px;
+  border: 1px solid rgba(218, 226, 220, 0.76);
+  border-radius: 15px;
+  background: rgba(250, 252, 249, 0.6);
+}
+.weak-trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+.weak-trend-head strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+.weak-trend-head small {
+  color: #858d85;
+  font-size: 9px;
+}
+.weak-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.weak-trend-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f8f5;
+}
+.weak-trend-item > span {
+  color: #6f7a72;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weak-trend-item > strong {
+  grid-column: 1;
+  color: #27352e;
+  font: 400 20px/1 Georgia, serif;
+}
+.weak-trend-item > small {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.weak-trend-item > small.positive { color: #34835f; }
+.weak-trend-item > small.negative { color: #c36f52; }
+.weak-trend-item > small.neutral { color: #858d85; }
+
+@media (max-width: 640px) {
+  .weak-trend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

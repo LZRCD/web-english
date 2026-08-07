@@ -273,6 +273,37 @@ export default function HistoryView({
             </small>
           </div>
         </div>
+        {weeklyReport.weakTrend.length > 0 && (
+          <div className="weak-trend" aria-label="本周薄弱维度趋势">
+            <div className="weak-trend-head">
+              <strong>本周薄弱维度趋势</strong>
+              <small>本周出现该信号的不同单词数 · 较上周变化</small>
+            </div>
+            <div className="weak-trend-grid">
+              {weeklyReport.weakTrend.map((row) => (
+                <div className="weak-trend-item" key={row.key}>
+                  <span>{row.label}</span>
+                  <strong>{row.count}</strong>
+                  <small className={
+                    row.change === null
+                      ? "neutral"
+                      : row.change > 0
+                        ? "negative"
+                        : "positive"
+                  }>
+                    {row.change === null
+                      ? "累计"
+                      : row.change > 0
+                        ? `+${row.change}`
+                        : row.change === 0
+                          ? "持平"
+                          : `${row.change}`}
+                  </small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
           <span aria-hidden="true">↗</span>
           <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>

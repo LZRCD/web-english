@@ -115,6 +115,8 @@ export function buildSentenceIndex({
     const id = Number(wordId);
     const sourceWord = wordById.get(id)?.word ?? "词 " + id;
     for (const example of enrichment.senseExamples ?? []) {
+      // 语义二审确认不符的例句不进入反向索引，避免劣质例句传播复用
+      if (example.review?.status === "failed") continue;
       addSentence(example.sentence, example.translation, sourceWord, id);
     }
   }

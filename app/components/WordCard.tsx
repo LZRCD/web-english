@@ -11,7 +11,7 @@ import {
 import type { SenseFrequencyEntry, WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
 import type { ReusedSentence } from "../../lib/sentence-index";
 import { wordRetrievability } from "../../lib/learning";
-import type { Word } from "../../lib/study";
+import type { LookupStat, Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
 
@@ -49,6 +49,8 @@ type WordCardProps = {
   reusedSentences: ReusedSentence[];
   /** 该词在隐藏释义阶段猜错的累计次数 */
   guessMistakeCount: number;
+  /** 该词的划词查询统计（用于补漏提示） */
+  currentLookupStat?: LookupStat;
 
   // 上下文
   activeSession?: StudySession;
@@ -108,6 +110,7 @@ export default function WordCard({
   frequencyLoading,
   reusedSentences,
   guessMistakeCount,
+  currentLookupStat,
   activeSession,
   newCount,
   clock,
@@ -287,6 +290,13 @@ export default function WordCard({
       {/* 揭示后：释义面板 */}
       {revealed && redbookReady && reinforcementRating === null && (
         <div className="meaning-panel">
+          {/* 划词补漏提示：查过多少次、最近查于何时 */}
+          {currentLookupStat && currentLookupStat.count > 0 && (
+            <p className="lookup-hint">
+              你之前查过 {currentLookupStat.count} 次，最近查于{" "}
+              {new Date(currentLookupStat.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
           {hideSenses && !sensesExpanded && (
             <div className="meaning-hidden">
               {guessSentence ? (

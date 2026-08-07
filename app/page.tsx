@@ -58,6 +58,12 @@ import {
   buildReviewForecast,
   buildWeeklyLearningReport,
 } from "../lib/insights";
+import {
+  buildWeakProfiles,
+  lookupPriorityWordIds,
+  lookupStatForWordId,
+  type WeakSignalInput,
+} from "../lib/weak-signals";
 import { useAiCoach } from "./hooks/useAiCoach";
 import { useAudio } from "./hooks/useAudio";
 import { useClock } from "./hooks/useClock";
@@ -333,6 +339,49 @@ export default function Home() {
     }),
     [reviews, stubbornHistory, todayKey],
   );
+  // 薄弱画像信号源：全部来自现有 state，派生计算、不新增 schema
+  const weakSignalInput = useMemo<WeakSignalInput>(() => ({
+    lookupStats,
+    lookupWords,
+    guessMistakes,
+    quizAttempts,
+    reviews,
+    stubbornWords,
+    wordProgress,
+  }), [
+    guessMistakes,
+    lookupStats,
+    lookupWords,
+    quizAttempts,
+    reviews,
+    stubbornWords,
+    wordProgress,
+  ]);
+  const weakProfiles = useMemo(
+    () => buildWeakProfiles(weakSignalInput),
+    [weakSignalInput],
+  );
+  // 词本展示只需要标签数组
+  const weakSignalsByWordId = useMemo(
+    () => Object.fromEntries(
+      Object.entries(weakProfiles).map(([wordId, profile]) => [
+        Number(wordId),
+        profile.signals,
+      ]),
+    ) as Record<number, string[]>,
+    [weakProfiles],
+  );
+  // 划词补漏：查询 ≥3 次且未被近期答对覆盖的词插队今日任务
+  const lookupPriorityIds = useMemo(
+    () => lookupPriorityWordIds(weakSignalInput),
+    [weakSignalInput],
+  );
+  const currentLookupStat = useMemo(
+    () => current.id === undefined
+      ? undefined
+      : lookupStatForWordId(current.id, weakSignalInput),
+    [current.id, weakSignalInput],
+  );
   const effectiveNewGoal = adaptiveNewWordGoal({
     dailyGoal,
     minimumNewWords,
@@ -416,8 +465,9 @@ export default function Home() {
       now: new Date(`${todayKey}T12:00:00`),
       examPlan,
       dailyNewGoal: effectiveNewGoal,
+      weakSignals: weakSignalInput,
     }),
-    [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, wordProgress],
+    [effectiveNewGoal, examPlan, reviews, stubbornWords, todayKey, weakSignalInput, wordProgress],
   );
   const availableUnits = useMemo(() => {
     const values = redbookWords
@@ -1267,6 +1317,7 @@ export default function Home() {
         {
           familyKeyByWordId,
           reviewedTodayWordIds,
+          lookupPriorityIds,
         },
       ),
     );
@@ -1632,6 +1683,7 @@ export default function Home() {
                 guessMistakeCount={
                   current.id === undefined ? 0 : guessMistakes[current.id] ?? 0
                 }
+                currentLookupStat={currentLookupStat}
                 activeSession={activeSession}
                 newCount={stats.newCount}
                 clock={clock}
@@ -1707,6 +1759,7 @@ export default function Home() {
             stubbornWordList={stubbornWordList}
             lookupWords={lookupWords}
             lookupStats={lookupStats}
+            weakSignalsByWordId={weakSignalsByWordId}
             ratingLabels={ratingLabels}
             clock={clock}
             favorites={favorites}

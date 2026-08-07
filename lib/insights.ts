@@ -8,6 +8,11 @@ import {
   type WordProgress,
   type WordProgressMap,
 } from "./learning.ts";
+import {
+  buildWeakDimensionTrend,
+  type WeakDimensionTrend,
+  type WeakSignalInput,
+} from "./weak-signals.ts";
 
 export type LearningInsightReview = Pick<
   ReviewEvent,
@@ -51,6 +56,8 @@ export type WeeklyLearningReport = {
   nextWeekPeak?: ReviewForecastDay;
   paceStatus: "on-track" | "adjust" | "complete" | "unset";
   paceAdvice: string;
+  /** 本周各薄弱维度趋势（薄弱画像派生，见 lib/weak-signals.ts） */
+  weakTrend: WeakDimensionTrend[];
 };
 
 type TimedReview = LearningInsightReview & {
@@ -219,6 +226,8 @@ export function buildWeeklyLearningReport(input: {
   now: Date;
   examPlan: ExamPlan | null;
   dailyNewGoal: number;
+  /** 薄弱画像信号源（可选）：提供后周报追加「本周薄弱维度趋势」 */
+  weakSignals?: WeakSignalInput;
 }): WeeklyLearningReport {
   const now = Number.isFinite(input.now.getTime()) ? input.now : new Date();
   const weekStart = localWeekStart(now);
@@ -301,5 +310,8 @@ export function buildWeeklyLearningReport(input: {
     nextWeekPeak: nextWeekPeak?.count ? nextWeekPeak : undefined,
     paceStatus,
     paceAdvice,
+    weakTrend: input.weakSignals
+      ? buildWeakDimensionTrend(input.weakSignals, now)
+      : [],
   };
 }

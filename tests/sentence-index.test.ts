@@ -48,3 +48,38 @@ test("例句反向索引：查询词的变形可命中原形", () => {
   const forHarvested = reusedSentencesFor(index, "harvested");
   assert.equal(forHarvested.length, 1);
 });
+
+test("例句反向索引：语义二审 failed 的例句不参与复用，passed 例句正常收录", () => {
+  const reviewedEnrichments: Record<number, WordEnrichment> = {
+    1: {
+      source: "ai",
+      senseExamples: [
+        {
+          meaning: "adj. 丰富的",
+          sentence: "The abundant harvest surprised the whole village.",
+          translation: "丰收让整个村庄都感到惊讶。",
+          review: { status: "failed", reviewedAt: "2026-08-01T00:00:00.000Z" },
+        },
+        {
+          meaning: "adj. 丰富的",
+          sentence: "The harvest festival reflects local culture.",
+          translation: "丰收节反映了当地文化。",
+          review: { status: "passed", reviewedAt: "2026-08-01T00:00:00.000Z" },
+        },
+      ],
+    },
+  };
+  const index = buildSentenceIndex({
+    redbookWords,
+    enrichments: reviewedEnrichments,
+  });
+  // failed 例句被过滤：harvest 只命中 passed 例句，不再命中 failed 例句
+  const forHarvest = reusedSentencesFor(index, "harvest");
+  assert.equal(forHarvest.length, 1);
+  assert.match(forHarvest[0].sentence, /festival reflects/);
+  assert.doesNotMatch(forHarvest[0].sentence, /whole village/);
+  // passed 例句里的 reflects（reflect 变形）仍可复用
+  const forReflect = reusedSentencesFor(index, "reflects");
+  assert.equal(forReflect.length, 1);
+  assert.match(forReflect[0].sentence, /reflects local culture/);
+});

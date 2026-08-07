@@ -497,6 +497,8 @@ export function buildTodayQueue(
   options?: {
     familyKeyByWordId?: Record<number, string>;
     reviewedTodayWordIds?: number[];
+    /** 划词补漏：反复查询(≥3 次)的词 id，插在到期词之后、新词之前 */
+    lookupPriorityIds?: number[];
   },
 ) {
   const dueIds = dueWordIds(progress, now);
@@ -507,12 +509,25 @@ export function buildTodayQueue(
       .map((wordId) => familyKeys[canonicalWordId(wordId)])
       .filter((key): key is string => Boolean(key)),
   );
+  // 划词补漏：已到期词不重复进队，同词族当天错开逻辑与到期/新词保持一致
+  const priorityIds: number[] = [];
+  const prioritySet = new Set<number>();
+  for (const wordId of (options?.lookupPriorityIds ?? [])) {
+    const canonical = canonicalWordId(wordId);
+    if (dueSet.has(canonical) || prioritySet.has(canonical)) continue;
+    const familyKey = familyKeys[canonical];
+    if (familyKey && usedFamilyKeys.has(familyKey)) continue;
+    priorityIds.push(canonical);
+    prioritySet.add(canonical);
+    if (familyKey) usedFamilyKeys.add(familyKey);
+  }
   const newIds: number[] = [];
   const candidates = primaryWordIds
     .map(canonicalWordId)
     .filter((wordId, index, items) =>
       !progress[wordId]
       && !dueSet.has(wordId)
+      && !prioritySet.has(wordId)
       && items.indexOf(wordId) === index);
   for (const wordId of candidates) {
     const familyKey = familyKeys[wordId];
@@ -521,7 +536,7 @@ export function buildTodayQueue(
     if (familyKey) usedFamilyKeys.add(familyKey);
     if (newIds.length >= dailyNewGoal) break;
   }
-  return [...dueIds, ...newIds];
+  return [...dueIds, ...priorityIds, ...newIds];
 }
 
 export function adaptiveNewWordGoal(input: {
