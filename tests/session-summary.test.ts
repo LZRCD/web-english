@@ -8,9 +8,11 @@ import {
 } from "../lib/learning.ts";
 import {
   buildSessionCompletionSummary,
+  buildSprintCompletionSummary,
   reviewsForSession,
   selectReinforcementWords,
 } from "../lib/session-summary.ts";
+import type { WeakSignalInput } from "../lib/weak-signals.ts";
 import { parseStoredState } from "../lib/study.ts";
 
 function review(
@@ -215,4 +217,100 @@ test("sessionId 经评分创建与状态解析后保持不变", () => {
   assert.equal(state.reviews[0]?.sessionId, "today:2026-07-29");
   assert.equal(state.activeSession?.kind, "reinforcement");
   assert.equal(state.activeSession?.originKind, "lookups");
+});
+
+test("冲刺完成总结：统计已解决/仍需关注、回忆对比与薄弱维度分布", () => {
+  const session = {
+    ...createStudySession(
+      "sprint",
+      "考前薄弱冲刺",
+      [1, 2, 3],
+      new Date("2026-08-10T08:00:00.000Z"),
+    ),
+    id: "sprint:2026-08-10",
+    index: 3,
+  };
+  // 词 1 冲刺期间答对（已解决）；词 2 仍答错且 lapse；词 3 答对但查询次数仍高
+  const reviews = [
+    review(1, 2, "2026-08-10T08:05:00.000Z", {
+      sessionId: session.id,
+      recallMs: 8_000,
+    }),
+    review(2, 0, "2026-08-10T08:06:00.000Z", {
+      sessionId: session.id,
+      recallMs: 12_000,
+    }),
+    review(3, 2, "2026-08-10T08:07:00.000Z", {
+      sessionId: session.id,
+      recallMs: 16_000,
+    }),
+    // 冲刺前历史样本：词 1 曾 10s（不触发回忆偏慢）、词 2 曾 30s
+    review(1, 1, "2026-08-08T08:00:00.000Z", { recallMs: 10_000 }),
+    review(2, 0, "2026-08-08T08:00:00.000Z", { recallMs: 30_000 }),
+  ];
+  const weakSignals: WeakSignalInput = {
+    lookupStats: {
+      "word-3": { count: 4, firstAt: "2026-08-01T00:00:00.000Z", lastAt: "2026-08-10T00:00:00.000Z" },
+    },
+    lookupWords: [{
+      id: 9_000_000_001,
+      linkedWordId: 3,
+      query: "word-3",
+      kind: "word",
+      phonetic: "",
+      part: "n.",
+      meaning: "释义",
+      note: "",
+      source: "redbook",
+      addedAt: "2026-08-01T00:00:00.000Z",
+    }],
+    guessMistakes: {},
+    quizAttempts: [],
+    reviews,
+    stubbornWords: {
+      2: {
+        wordId: 2,
+        active: true,
+        reason: "again-3",
+        triggeredAt: "2026-08-05T00:00:00.000Z",
+        lastChangedAt: "2026-08-05T00:00:00.000Z",
+        triggerCount: 1,
+      },
+    },
+    wordProgress: {
+      2: {
+        wordId: 2,
+        lapseCount: 2,
+        lastRating: 0,
+        lastReviewedAt: "2026-08-10T08:06:00.000Z",
+      },
+    } as unknown as import("../lib/learning.ts").WordProgressMap,
+  };
+
+  const summary = buildSprintCompletionSummary({
+    session,
+    reviews,
+    weakSignals,
+  });
+
+  assert.equal(summary.sprintWordCount, 3);
+  assert.equal(summary.reviewedCount, 3);
+  assert.equal(summary.resolvedCount, 2); // 词 1、词 3 答对
+  // 冲刺后仍薄弱：词 2（顽固 + lapse）、词 3（查过 4 次）
+  assert.equal(summary.stillWeakCount, 2);
+  assert.deepEqual(
+    summary.stillWeakWords.map((item) => item.wordId).sort(),
+    [2, 3],
+  );
+  // 冲刺期间平均回忆：(8+12+16)/3 = 12s
+  assert.equal(summary.sprintAverageRecallMs, 12_000);
+  // 冲刺前历史平均：(10+30)/2 = 20s
+  assert.equal(summary.beforeAverageRecallMs, 20_000);
+  // 维度分布：lapse 词 2、顽固 词 2、反复查词 词 3
+  const lookup = summary.dimensionCounts.find((row) => row.key === "lookup");
+  assert.equal(lookup?.count, 1);
+  const lapse = summary.dimensionCounts.find((row) => row.key === "lapse");
+  assert.equal(lapse?.count, 1);
+  const stubborn = summary.dimensionCounts.find((row) => row.key === "stubborn");
+  assert.equal(stubborn?.count, 1);
 });

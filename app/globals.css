@@ -4854,3 +4854,82 @@ kbd {
 .sprint-copy:hover {
   background: #eaf2ed;
 }
+
+/* ---- 信号联动六轮：冲刺词卡原因 + 冲刺完成总结 ---- */
+.sprint-weak-reasons {
+  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.sprint-weak-reasons > span {
+  color: #b0643f;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sprint-completion {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid #ead3c6;
+  border-radius: 16px;
+  background: linear-gradient(90deg, rgba(238, 156, 123, 0.07), transparent 40%),
+    var(--surface);
+}
+.sprint-completion-head h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+.sprint-completion-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.sprint-completion-stats > div {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(250, 252, 249, 0.86);
+  display: grid;
+  gap: 4px;
+}
+.sprint-completion-stats span {
+  color: #858d85;
+  font-size: 9px;
+}
+.sprint-completion-stats strong {
+  font: 400 24px/1 Georgia, serif;
+  color: #27352e;
+}
+.sprint-completion-stats strong.negative {
+  color: #c36f52;
+}
+.sprint-still-weak {
+  margin-top: 14px;
+}
+.sprint-still-weak-title {
+  margin: 0 0 8px;
+  color: #6f7a72;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sprint-still-weak-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.sprint-still-weak-list .completion-candidate {
+  min-width: 0;
+}
+.sprint-still-weak-list .completion-candidate small {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .sprint-completion-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

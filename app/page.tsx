@@ -63,6 +63,7 @@ import {
   buildSprintWordIds,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
+  buildWordWeakSignals,
   lookupPriorityWordIds,
   lookupStatForWordId,
   type WeakSignalInput,
@@ -105,7 +106,10 @@ import {
   lookupIdentity,
   toLookupStudyWord,
 } from "../lib/selection-lookup";
-import { buildSessionCompletionSummary } from "../lib/session-summary";
+import {
+  buildSessionCompletionSummary,
+  buildSprintCompletionSummary,
+} from "../lib/session-summary";
 import {
   createPerformanceTrace,
   fetchJsonWithDiagnostics,
@@ -335,6 +339,7 @@ export default function Home() {
       : undefined,
     [activeSession, clock, reviews, sessionComplete, wordProgress],
   );
+
   // 展示用自动顽固词计算不进入写盘链路；按自然日更新即可。
   const stubbornWords = useMemo(
     () => ({
@@ -398,6 +403,17 @@ export default function Home() {
   const weakTrendSeries = useMemo(
     () => buildWeakDimensionTrendSeries(weakSignalInput, new Date(`${todayKey}T12:00:00`), 4),
     [todayKey, weakSignalInput],
+  );
+  // 冲刺会话专属总结：薄弱维度分布、回忆对比、已解决/仍需关注
+  const sprintCompletionSummary = useMemo(
+    () => activeSession?.kind === "sprint" && sessionComplete
+      ? buildSprintCompletionSummary({
+          session: activeSession,
+          reviews,
+          weakSignals: weakSignalInput,
+        })
+      : undefined,
+    [activeSession, reviews, sessionComplete, weakSignalInput],
   );
   // 考前薄弱冲刺：已学且命中任一薄弱信号的词
   const sprintWordIds = useMemo(
@@ -1719,6 +1735,7 @@ export default function Home() {
             {sessionComplete && sessionCompletionSummary && (
               <SessionCompleteView
                 summary={sessionCompletionSummary}
+                sprintSummary={sprintCompletionSummary}
                 onReinforce={(wordIds) => {
                   const originKind = activeSession?.kind === "reinforcement"
                     ? activeSession.originKind
@@ -1766,6 +1783,11 @@ export default function Home() {
                 currentLookupStat={currentLookupStat}
                 currentRecallStats={
                   current.id === undefined ? undefined : weakProfiles[current.id]?.recall
+                }
+                sprintWeakSignals={
+                  activeSession?.kind === "sprint" && current.id !== undefined
+                    ? buildWordWeakSignals(current.id, weakSignalInput)
+                    : undefined
                 }
                 onFocusSourceWord={focusSourceWord}
                 activeSession={activeSession}

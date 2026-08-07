@@ -5,6 +5,11 @@ import {
   type StudySession,
   type WordProgressMap,
 } from "./learning.ts";
+import {
+  buildWordWeakSignals,
+  type WeakSignalInput,
+  type WeakDimensionTrend,
+} from "./weak-signals.ts";
 
 const REINFORCEMENT_LIMIT = 5;
 
@@ -212,5 +217,136 @@ export function buildSessionCompletionSummary({
       wordProgress,
       now,
     ),
+  };
+}
+
+/** 冲刺完成总结：本次冲刺的薄弱维度分布、回忆对比、已解决/仍需关注 */
+export type SprintCompletionSummary = {
+  /** 本次冲刺完成的词数 */
+  sprintWordCount: number;
+  /** 冲刺期间评分词数 */
+  reviewedCount: number;
+  /** 冲刺期间顺利回忆（rating≥2）的词数 */
+  resolvedCount: number;
+  /** 冲刺后仍命中薄弱信号的词数（实时派生） */
+  stillWeakCount: number;
+  /** 冲刺期间平均回忆耗时（毫秒） */
+  sprintAverageRecallMs: number | null;
+  /** 冲刺前这些词的词级平均回忆耗时（毫秒） */
+  beforeAverageRecallMs: number | null;
+  /** 冲刺后仍薄弱的具体词（word + 薄弱标签） */
+  stillWeakWords: { wordId: number; word: string; signals: string[] }[];
+  /** 各薄弱维度词数分布（冲刺后仍命中） */
+  dimensionCounts: WeakDimensionTrend[];
+};
+
+type SprintSummaryInput = {
+  session: StudySession;
+  reviews: readonly ReviewEvent[];
+  weakSignals: WeakSignalInput;
+};
+
+/** 按薄弱标签前缀归类维度词数（buildWordWeakSignals 的标签为固定格式） */
+function sprintDimensionCounts(
+  stillWeakWords: SprintCompletionSummary["stillWeakWords"],
+): WeakDimensionTrend[] {
+  const rows: WeakDimensionTrend[] = [
+    { key: "lookup", label: "反复查词", count: 0, change: null },
+    { key: "guess", label: "猜词猜错", count: 0, change: null },
+    { key: "quiz-spelling", label: "拼写测验错", count: 0, change: null },
+    { key: "quiz-c2e", label: "中译英错", count: 0, change: null },
+    { key: "quiz-choice", label: "辨析错", count: 0, change: null },
+    { key: "slow-recall", label: "回忆偏慢", count: 0, change: null },
+    { key: "stubborn", label: "顽固词", count: 0, change: null },
+    { key: "lapse", label: "遗忘词", count: 0, change: null },
+  ];
+  const rowByKey = new Map(rows.map((row) => [row.key, row]));
+  for (const item of stillWeakWords) {
+    for (const signal of item.signals) {
+      const key: WeakDimensionTrend["key"] | undefined =
+        signal.startsWith("查过") ? "lookup"
+        : signal.startsWith("猜错") ? "guess"
+        : signal.startsWith("拼写测验错") ? "quiz-spelling"
+        : signal.startsWith("中译英错") ? "quiz-c2e"
+        : signal.startsWith("辨析错") ? "quiz-choice"
+        : signal.startsWith("回忆偏慢") ? "slow-recall"
+        : signal === "顽固词" ? "stubborn"
+        : signal.startsWith("FSRS lapse") ? "lapse"
+        : undefined;
+      if (key) rowByKey.get(key)!.count += 1;
+    }
+  }
+  return rows;
+}
+
+/** 冲刺前这些词的词级平均回忆耗时（仅早于冲刺开始的合法样本） */
+function beforeAverageRecallMs(
+  wordIds: ReadonlySet<number>,
+  weakSignals: WeakSignalInput,
+  beforeMs: number,
+) {
+  const samples: number[] = [];
+  for (const review of weakSignals.reviews) {
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (
+      review.wordId !== undefined
+      && wordIds.has(review.wordId)
+      && reviewedAtMs < beforeMs
+      && typeof review.recallMs === "number"
+      && Number.isFinite(review.recallMs)
+      && review.recallMs >= 0
+    ) {
+      samples.push(review.recallMs);
+    }
+  }
+  return samples.length
+    ? Math.round(samples.reduce((sum, ms) => sum + ms, 0) / samples.length)
+    : null;
+}
+
+/** 构建冲刺完成总结（仅 kind === "sprint" 时使用） */
+export function buildSprintCompletionSummary({
+  session,
+  reviews,
+  weakSignals,
+}: SprintSummaryInput): SprintCompletionSummary {
+  const sessionReviews = reviewsForSession(session, reviews);
+  const reviewedWordIds = new Set(
+    sessionReviews
+      .map((review) => review.wordId)
+      .filter((wordId): wordId is number => wordId !== undefined),
+  );
+  const resolvedCount = new Set(
+    sessionReviews
+      .filter((review) => review.rating >= 2)
+      .map((review) => review.wordId),
+  ).size;
+  const recallTimes = sessionReviews
+    .map((review) => review.recallMs)
+    .filter((value): value is number =>
+      value !== undefined && Number.isFinite(value) && value >= 0);
+  const startedAtMs = new Date(session.createdAt).getTime();
+  const beforeAverage = Number.isFinite(startedAtMs)
+    ? beforeAverageRecallMs(reviewedWordIds, weakSignals, startedAtMs)
+    : null;
+  // 冲刺后仍薄弱：实时派生（buildWordWeakSignals 标签非空）
+  const stillWeakWords = [...reviewedWordIds].flatMap((wordId) => {
+    const signals = buildWordWeakSignals(wordId, weakSignals);
+    if (!signals.length) return [];
+    const word = sessionReviews.find((review) => review.wordId === wordId)?.word
+      ?? `词 ${wordId}`;
+    return [{ wordId, word, signals }];
+  });
+  return {
+    sprintWordCount: session.wordIds.length,
+    reviewedCount: sessionReviews.length,
+    resolvedCount,
+    stillWeakCount: stillWeakWords.length,
+    sprintAverageRecallMs: recallTimes.length
+      ? Math.round(recallTimes.reduce((sum, ms) => sum + ms, 0) / recallTimes.length)
+      : null,
+    beforeAverageRecallMs: beforeAverage,
+    stillWeakWords,
+    dimensionCounts: sprintDimensionCounts(stillWeakWords),
   };
 }

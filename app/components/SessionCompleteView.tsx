@@ -8,6 +8,7 @@ import {
 import type {
   ReinforcementWord,
   SessionCompletionSummary,
+  SprintCompletionSummary,
 } from "../../lib/session-summary";
 
 type CompletionAction = {
@@ -17,6 +18,8 @@ type CompletionAction = {
 
 export type SessionCompleteViewProps = {
   summary: SessionCompletionSummary;
+  /** 冲刺会话专属总结（kind === "sprint" 时展示） */
+  sprintSummary?: SprintCompletionSummary;
   onReinforce: (wordIds: number[]) => void;
   onFreeStudy: () => void;
   primaryAction?: CompletionAction;
@@ -39,6 +42,7 @@ function candidateClassName(word: ReinforcementWord) {
 
 export default function SessionCompleteView({
   summary,
+  sprintSummary,
   onReinforce,
   onFreeStudy,
   primaryAction,
@@ -110,6 +114,49 @@ export default function SessionCompleteView({
           <dd>{summary.tomorrowDueCount}</dd>
         </div>
       </dl>
+
+      {sprintSummary && (
+        <section
+          className="sprint-completion"
+          aria-labelledby="sprint-completion-title"
+        >
+          <div className="sprint-completion-head">
+            <p className="eyebrow">SPRINT RESULT</p>
+            <h2 id="sprint-completion-title">本次冲刺小结</h2>
+          </div>
+          <div className="sprint-completion-stats">
+            <div><span>冲刺词数</span><strong>{sprintSummary.sprintWordCount}</strong></div>
+            <div><span>已解决</span><strong>{sprintSummary.resolvedCount}</strong></div>
+            <div>
+              <span>仍需关注</span>
+              <strong className={sprintSummary.stillWeakCount > 0 ? "negative" : ""}>
+                {sprintSummary.stillWeakCount}
+              </strong>
+            </div>
+            <div>
+              <span>平均回忆</span>
+              <strong>
+                {sprintSummary.sprintAverageRecallMs === null
+                  ? "—"
+                  : `${(sprintSummary.sprintAverageRecallMs / 1000).toFixed(1)}s`}
+              </strong>
+            </div>
+          </div>
+          {sprintSummary.stillWeakWords.length > 0 && (
+            <div className="sprint-still-weak">
+              <p className="sprint-still-weak-title">仍需关注：</p>
+              <div className="sprint-still-weak-list">
+                {sprintSummary.stillWeakWords.map((item) => (
+                  <span className="completion-candidate weak" key={item.wordId}>
+                    <strong>{item.word}</strong>
+                    <small>{item.signals.join("、")}</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section
         className="completion-reinforcement"

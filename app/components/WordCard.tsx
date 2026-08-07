@@ -54,6 +54,8 @@ type WordCardProps = {
   currentLookupStat?: LookupStat;
   /** 该词最近评分的回忆耗时统计 */
   currentRecallStats?: WordRecallStats;
+  /** 冲刺会话中展示：该词因哪些薄弱信号进入冲刺 */
+  sprintWeakSignals?: string[];
   /** 点击例句来源词跳转到该词学习卡；sourceId 缺失时降级为纯文本 */
   onFocusSourceWord?: (sourceId: number | undefined, sourceWord: string) => void;
 
@@ -117,6 +119,7 @@ export default function WordCard({
   guessMistakeCount,
   currentLookupStat,
   currentRecallStats,
+  sprintWeakSignals,
   onFocusSourceWord,
   activeSession,
   newCount,
@@ -310,6 +313,16 @@ export default function WordCard({
               {" · "}中位 {(currentRecallStats.medianMs / 1000).toFixed(1)}s
               {" · "}{currentRecallStats.sampleCount} 次评分
             </p>
+          )}
+          {sprintWeakSignals && sprintWeakSignals.length > 0 && (
+            <div className="sprint-weak-reasons">
+              <span>本词因以下信号进入冲刺：</span>
+              <div className="weak-signal-tags">
+                {sprintWeakSignals.map((signal) => (
+                  <span className="weak-signal-tag" key={signal}>{signal}</span>
+                ))}
+              </div>
+            </div>
           )}
           {hideSenses && !sensesExpanded && (
             <div className="meaning-hidden">
