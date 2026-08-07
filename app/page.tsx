@@ -60,6 +60,7 @@ import {
 } from "../lib/insights";
 import {
   buildSprintHistory,
+  buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakDimensionTrendSeries,
@@ -68,6 +69,7 @@ import {
   DEFAULT_WEAK_THRESHOLDS,
   lookupPriorityWordIds,
   lookupStatForWordId,
+  lookupWeakCandidateIds,
   type WeakSignalInput,
   type WeakThresholds,
   type WordRecallStats,
@@ -394,6 +396,11 @@ export default function Home() {
         profile.recall ? [[Number(wordId), profile.recall]] : []),
     ) as Record<number, WordRecallStats>,
     [weakProfiles],
+  );
+  // 划词薄弱候选：查询达到阈值的词（词本标注/过滤 + 设置页预览）
+  const weakLookupCandidateIds = useMemo(
+    () => lookupWeakCandidateIds(weakSignalInput, weakThresholds),
+    [weakSignalInput, weakThresholds],
   );
   // 划词补漏：查询达到阈值且未被近期答对覆盖的词插队今日任务
   const lookupPriorityIds = useMemo(
@@ -1440,6 +1447,12 @@ export default function Home() {
     startSession("sprint", "薄弱冲刺 · 补漏", stillWeakIds);
   }
 
+  // 从轨迹页冲刺记录再跑一次：复用该次冲刺的词集
+  function startSprintFromHistory(sessionId: string) {
+    const wordIds = buildSprintRecordWordIds(reviews, sessionId);
+    startSession("sprint", "薄弱冲刺 · 历史复跑", wordIds);
+  }
+
   // 复制薄弱冲刺清单：多行「词 — 信号1、信号2」文本
   function copySprintSummary() {
     const lines = sprintSummary.map((item) =>
@@ -1968,6 +1981,7 @@ export default function Home() {
             examProgress={examProgress}
             sprintHistory={sprintHistory}
             sprintCount={sprintWordIds.length}
+            onResprintHistory={startSprintFromHistory}
             onStartSprint={startSprintSession}
             onCopySprint={copySprintSummary}
             onStartTodaySession={startTodaySession}
@@ -2016,6 +2030,9 @@ export default function Home() {
             hideChineseMeaning={hideChineseMeaning}
             guessContextFirst={guessContextFirst}
             weakThresholds={weakThresholds}
+            weakLookupCandidateCount={weakLookupCandidateIds.length}
+            weakLookupPriorityCount={lookupPriorityIds.length}
+            weakSprintCount={sprintWordIds.length}
             studyMode={studyMode}
             studyScope={studyScope}
             learningItemCount={learningItemCount}

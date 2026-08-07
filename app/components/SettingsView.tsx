@@ -20,6 +20,12 @@ type SettingsViewProps = {
   guessContextFirst: boolean;
   /** 薄弱判定阈值（反复查词/插队/回忆偏慢） */
   weakThresholds: WeakThresholds;
+  /** 当前阈值下的薄弱候选词数（设置页即时预览） */
+  weakLookupCandidateCount: number;
+  /** 当前阈值下的插队词数（设置页即时预览） */
+  weakLookupPriorityCount: number;
+  /** 当前阈值下的冲刺词数（设置页即时预览） */
+  weakSprintCount: number;
   studyMode: StudyMode;
   studyScope: StudyScope;
   learningItemCount: number;
@@ -71,6 +77,9 @@ export default function SettingsView({
   hideChineseMeaning,
   guessContextFirst,
   weakThresholds,
+  weakLookupCandidateCount,
+  weakLookupPriorityCount,
+  weakSprintCount,
   studyMode,
   studyScope,
   learningItemCount,
@@ -237,6 +246,9 @@ export default function SettingsView({
           <span className="weak-thresholds-title">
             <strong>薄弱判定阈值</strong>
             <small>调整后词本薄弱标签、划词补漏插队、考前冲刺与周报趋势都会同步生效</small>
+            <em className="weak-thresholds-preview">
+              当前将影响：薄弱候选 {weakLookupCandidateCount} 词 · 插队 {weakLookupPriorityCount} 词 · 冲刺 {weakSprintCount} 词
+            </em>
           </span>
           <label>
             <span><strong>反复查词</strong><small>查过 ≥ 该次数的词标为薄弱候选并进入冲刺</small></span>

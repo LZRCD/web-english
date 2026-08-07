@@ -621,3 +621,23 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 117/117 通过，新增用例覆盖：冲刺历史分组/去重/倒序/空记录、阈值参数化（同数据不同阈值产出不同画像）、旧数据默认值兼容与非法值夹取。
 - 未启动或重启本地开发服务器。
+
+## 第二十八次迭代：信号联动九轮（阈值即时预览、冲刺历史复跑、跨链路 E2E）
+
+本次迭代：2026-08-15。
+
+### 新增
+
+- 阈值即时预览：设置页「薄弱判定阈值」区新增「当前将影响：薄弱候选 N 词 · 插队 N 词 · 冲刺 N 词」实时预览（复用 page.tsx 已有派生 `lookupWeakCandidateIds`/`lookupPriorityIds`/`sprintWordIds`，调阈值即时联动）。
+- 冲刺历史再跑一次：`lib/weak-signals.ts` 新增 `buildSprintRecordWordIds(reviews, sessionId)`（按 sessionId 提取该次冲刺去重词 id）；轨迹页冲刺记录每条新增「再跑一次」按钮，page.tsx `startSprintFromHistory` 用原词集起新冲刺会话。
+- 跨链路 E2E（`tests/e2e/signal-flow.spec.mjs`，3 条）：轨迹页冲刺记录出现 + 再跑一次按钮、设置页阈值预览随阈值联动（含「答对降级」插队语义）、词本划词集薄弱候选标注 + 「学习全部薄弱候选」入口。全部通过（复用固定端口 3000 dev server，健康检查后运行，结束后关闭记录 PID；未批量终止 node 进程）。
+
+### 修正
+
+- E2E seed 陷阱记录：手动构造 `wordProgress.fsrsCard` 会触发 ts-fsrs `Invalid date`；手写多步历史评分触发 `Invalid delta_t`；**评分日期晚于浏览器当前时间会触发负 delta**（当前 08-07 vs seed 08-10 → `-3`）。最终 seed 只用过去时间 + 每词 1 条普通评分 + 1 条冲刺评分，由应用自动重建 wordProgress，与既有 e2e 惯例一致。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功；单元测试 117/117 通过（新增 buildSprintRecordWordIds 提取/去重/异会话隔离用例）。
+- 新增 Playwright 跨链路 E2E 3/3 通过（4.6s）；运行前后固定端口 3000 无残留监听进程。
+- 本次启动/关闭 dev server 均记录并核对了 PID，未批量终止无关 node 进程。

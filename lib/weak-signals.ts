@@ -329,6 +329,19 @@ export function buildSprintHistory(
   };
 }
 
+/** 提取某次冲刺覆盖的去重词 id（供「再跑一次」复用） */
+export function buildSprintRecordWordIds(
+  reviews: readonly ReviewEvent[],
+  sessionId: string,
+): number[] {
+  const wordIds = new Set<number>();
+  for (const review of reviews) {
+    if (review.sessionId !== sessionId || review.wordId === undefined) continue;
+    wordIds.add(review.wordId);
+  }
+  return [...wordIds];
+}
+
 /** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,

@@ -49,6 +49,8 @@ type HistoryViewProps = {
   sprintHistory: SprintHistory;
   /** 考前薄弱冲刺词数（冲刺/临考期显示入口） */
   sprintCount: number;
+  /** 用历史冲刺的词集再跑一次 */
+  onResprintHistory?: (sessionId: string) => void;
   onStartSprint: () => void;
   onCopySprint: () => void;
   onStartTodaySession: () => void;
@@ -79,6 +81,7 @@ export default function HistoryView({
   examProgress,
   sprintHistory,
   sprintCount,
+  onResprintHistory,
   onStartSprint,
   onCopySprint,
   onStartTodaySession,
@@ -419,6 +422,15 @@ export default function HistoryView({
                       ? "—"
                       : `${(record.averageRecallMs / 1000).toFixed(1)}s`}
                   </span>
+                  {onResprintHistory && (
+                    <button
+                      type="button"
+                      className="sprint-history-rerun"
+                      onClick={() => onResprintHistory(record.sessionId)}
+                    >
+                      再跑一次
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -8,6 +8,7 @@ import type {
 import type { LookupWord } from "../lib/study.ts";
 import {
   buildSprintHistory,
+  buildSprintRecordWordIds,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakDimensionTrend,
@@ -308,6 +309,29 @@ test("冲刺历史：按 sessionId 分组、去重词数、时间倒序，无记
   assert.equal(history.records[1].averageRecallMs, 8_667); // (8+12+6)/3 取整
   assert.equal(buildSprintHistory([]).totalCount, 0);
   assert.deepEqual(buildSprintHistory([]).records, []);
+});
+
+test("冲刺历史再跑：按 sessionId 提取去重词 id，其他会话不混入", () => {
+  const reviews = [
+    makeReview(1, 2, "2026-08-11T08:05:00.000Z"),
+    makeReview(2, 0, "2026-08-11T08:06:00.000Z"),
+    makeReview(1, 3, "2026-08-11T08:07:00.000Z"),
+    makeReview(3, 2, "2026-08-12T09:00:00.000Z"),
+  ].map((review, index) => ({
+    ...review,
+    id: `s:${index}`,
+    sessionId: index < 3
+      ? "sprint:2026-08-11T08:00:00.000Z"
+      : "today:2026-08-12T09:00:00.000Z",
+  }));
+  const wordIds = buildSprintRecordWordIds(
+    reviews,
+    "sprint:2026-08-11T08:00:00.000Z",
+  );
+  assert.deepEqual(wordIds.sort((a, b) => a - b), [1, 2]);
+  // 非冲刺会话返回空
+  assert.deepEqual(buildSprintRecordWordIds(reviews, "today:2026-08-12T09:00:00.000Z"), [3]);
+  assert.deepEqual(buildSprintRecordWordIds(reviews, "sprint:missing"), []);
 });
 
 test("薄弱阈值参数化：不同阈值产出不同薄弱画像", () => {

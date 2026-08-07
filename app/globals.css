@@ -5080,3 +5080,33 @@ kbd {
     text-align: left;
   }
 }
+
+.weak-thresholds-preview {
+  display: block;
+  margin-top: 5px;
+  color: #34835f;
+  font: 600 10px/1.5 "Courier New", monospace;
+}
+
+.sprint-history-row {
+  grid-template-columns: 96px 1fr 1fr 1fr auto;
+}
+.sprint-history-rerun {
+  border: 1px solid #e7c9b8;
+  border-radius: 10px;
+  background: #fdf0e7;
+  color: #b0643f;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sprint-history-rerun:hover {
+  background: #fbe4d8;
+}
+@media (max-width: 480px) {
+  .sprint-history-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
