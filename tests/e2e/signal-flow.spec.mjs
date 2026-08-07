@@ -315,7 +315,6 @@ test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async
 function relapseSeedState() {
   const state = sprintSeedState();
   const lastWeekSessionId = `sprint:${daysAgo(8, 8, 0)}`;
-  const lastWeekAt = daysAgo(8, 8, 5);
   const solvedAt = daysAgo(8, 8, 7);
   // 把本周冲刺评分改为上周，且两词均 rating≥2（解决）；保留普通低评分（薄弱画像）
   state.reviews = state.reviews.map((review) => {
@@ -339,6 +338,35 @@ function relapseSeedState() {
     }
     return review;
   });
+  // 本周再各追加 1 条低评分（rating 1）：lastRating 回到 ≤1，词书 isWeakProgress 判薄弱；
+  // 同时不落入上周窗口（不复影响复发解决集），lookup 信号保持复发判定
+  const recentAt = daysAgo(2, 9, 0);
+  state.reviews.push(
+    {
+      id: "w1-relapse",
+      wordId: 1,
+      word: "radiate",
+      rating: 1,
+      kind: "review",
+      intervalMs: 600_000,
+      dueAt: new Date(new Date(recentAt).getTime() + 600_000).toISOString(),
+      reviewedAt: recentAt,
+      section: "必考词",
+      unit: 1,
+    },
+    {
+      id: "w2-relapse",
+      wordId: 2,
+      word: "objective",
+      rating: 1,
+      kind: "review",
+      intervalMs: 600_000,
+      dueAt: new Date(new Date(recentAt).getTime() + 720_000).toISOString(),
+      reviewedAt: new Date(new Date(recentAt).getTime() + 120_000).toISOString(),
+      section: "必考词",
+      unit: 1,
+    },
+  );
   return state;
 }
 
@@ -368,4 +396,51 @@ test("信号联动：词书薄弱分布与冲刺复发追踪", async ({ context,
   await expect(relapse).toContainText("上周解决 2 词");
   await expect(relapse).toContainText("复发 2 词");
   await expect(relapse).toContainText("复发率 100%");
+});
+
+test("信号联动：复发词一键再冲刺与词书薄弱单元", async ({ context, page }) => {
+  await installStateSeed(context, relapseSeedState());
+  await openApp(page);
+  // 轨迹页：复发栏出现「再冲刺复发词（2）」按钮
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "每一次回忆都算数" }),
+  ).toBeVisible();
+  const relapse = page.locator('[aria-label="冲刺复发追踪"]');
+  await expect(relapse).toBeVisible();
+  const resprintRelapse = relapse.getByRole("button", {
+    name: /再冲刺复发词（2）/,
+  });
+  await expect(resprintRelapse).toBeVisible();
+  await resprintRelapse.click();
+  // 学习卡：复发词冲刺会话 + 信号原因
+  await expect(
+    page.getByRole("button", { name: "显示单词释义" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.getByText("本词因以下信号进入冲刺")).toBeVisible();
+  // 逐词评分推进完成
+  for (let index = 0; index < 2; index += 1) {
+    if (index > 0) {
+      await page.getByRole("button", { name: "显示单词释义" }).click();
+    }
+    await page.getByRole("button", { name: /认识/ }).click();
+  }
+  await expect(
+    page.getByRole("heading", { name: "本次冲刺小结" }),
+  ).toBeVisible();
+  // 词书页：必考词卡片薄弱文案 + 薄弱单元小字
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /词书/ })
+    .click();
+  const requiredCard = page
+    .getByRole("button", { name: /必考词/ })
+    .filter({ has: page.getByRole("heading", { name: "必考词" }) });
+  await expect(requiredCard).toContainText("薄弱");
+  await expect(requiredCard.locator(".book-weak-units")).toBeVisible();
+  await expect(requiredCard.locator(".book-weak-units")).toContainText("薄弱集中");
 });

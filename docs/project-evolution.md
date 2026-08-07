@@ -742,3 +742,25 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 149/149 通过，新增 3 用例覆盖：上周冲刺解决词提取与复发过滤、上周无冲刺返回 null、全解决词无复发复发率 0。
 - Playwright E2E 6/6 通过（14.9s）：新增词书薄弱分布 + 复发追踪链路（relapseSeedState：上周冲刺解决 2 词且当前仍薄弱 → 词书「薄弱」文案 + 复发率 100%）；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 26316 + node 子 40136 均核对关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。
+
+## 第三十四次迭代：信号联动十五轮（复发词一键再冲刺、词书薄弱单元）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 复发词一键再冲刺：page.tsx 新增 `startSprintFromRelapse()`——`sprintRelapse?.relapsedIds` 非空时 `startSession("sprint", "薄弱冲刺 · 复发词", wordIds)`（复用通用会话入口，零新机制）；轨迹页「冲刺复发追踪」栏新增「再冲刺复发词（N）」按钮（复发数 0 时不显示）。复发了就立刻能再打，闭环从「发现」直接到「处置」。
+- 复发词词名明细：page.tsx 派生 `sprintRelapseWords`（relapsedIds → wordById 词名），复发栏悬停 title 列出复发词名（最多前 10 词）。
+- 词书薄弱单元小字：BooksView 词书卡片追加「薄弱集中：Unit X · N 词…」小字（isWeakProgress 口径按 unit 分组，与集中区六类信号口径区分），最多前 3 单元；新增 `book-weak-units` 样式。
+- E2E 第 7 条：复发词一键再冲刺 + 词书薄弱单元链路，7/7 通过（15.7s）。
+
+### 修正
+
+- E2E 第 7 条首跑失败定位：`relapseSeedState` 把 r1/r2 改成 rating 2（解决），replay 后 `lastRating=2` → 词书 isWeakProgress 判「0 薄弱」，而复发（lookup 信号）仍成立——两套薄弱口径在 seed 下不一致。修正：seed 追加本周各 1 条 rating 1 低评分，把 lastRating 拉回 ≤1（词书判薄弱），同时不落入上周窗口（不影响复发解决集）。
+- 清理上一轮 E2E 遗留的未使用变量 `lastWeekAt`（lint warning）。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 149/149 通过（本轮无新 lib 函数，未新增单测）。
+- Playwright E2E 7/7 通过（15.7s）：新增复发词再冲刺 + 词书薄弱单元链路；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 47504 + node 子 13592 均核对关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。

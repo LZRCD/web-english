@@ -59,6 +59,8 @@ type HistoryViewProps = {
   sprintEffectivenessSeries: SprintEffectivenessWeek[];
   /** 上周冲刺解决词复发追踪（无上周冲刺为 null） */
   sprintRelapse: SprintRelapse | null;
+  /** 复发词词名明细（wordId → 词名，供悬停展示） */
+  sprintRelapseWords: { wordId: number; word: string }[];
   /** 冲刺后维度清零与周报对照（冲刺完成页派生） */
   sprintDimensionTrend: SprintDimensionWithTrend[];
   /** 各分册/单元词本总词数（section → unit → 总数，供集中度占比） */
@@ -70,6 +72,8 @@ type HistoryViewProps = {
   onExportSprint: () => void;
   /** 集中区按分册/单元发起冲刺 */
   onScopedSprint?: (section: string, unit?: string) => void;
+  /** 复发词一键再冲刺 */
+  onSprintRelapse?: () => void;
   onStartTodaySession: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
@@ -101,6 +105,7 @@ export default function HistoryView({
   weakConcentration,
   sprintEffectivenessSeries,
   sprintRelapse,
+  sprintRelapseWords,
   sprintDimensionTrend,
   sectionUnitTotals,
   onResprintHistory,
@@ -108,6 +113,7 @@ export default function HistoryView({
   onCopySprint,
   onExportSprint,
   onScopedSprint,
+  onSprintRelapse,
   onStartTodaySession,
   onActivityRangeChange,
   onActivityNavigate,
@@ -505,13 +511,27 @@ export default function HistoryView({
               <strong>冲刺复发追踪</strong>
               <small>上周冲刺解决词中，当前仍薄弱的比例</small>
             </div>
-            <div className="sprint-relapse-row">
+            <div
+              className="sprint-relapse-row"
+              title={sprintRelapseWords.length
+                ? `复发词：${sprintRelapseWords.slice(0, 10).map((item) => item.word).join("、")}${sprintRelapseWords.length > 10 ? ` 等 ${sprintRelapseWords.length} 词` : ""}`
+                : undefined}
+            >
               <span>上周解决 <strong>{sprintRelapse.solvedCount}</strong> 词</span>
               <span>复发 <strong>{sprintRelapse.relapsedCount}</strong> 词</span>
               <span className={sprintRelapse.relapseRate === 0 ? "positive" : "negative"}>
                 复发率 <strong>{sprintRelapse.relapseRate}%</strong>
                 {sprintRelapse.relapseRate === 0 ? " · 无复发" : " · 需关注"}
               </span>
+              {onSprintRelapse && sprintRelapse.relapsedCount > 0 && (
+                <button
+                  type="button"
+                  className="concentration-sprint"
+                  onClick={onSprintRelapse}
+                >
+                  再冲刺复发词（{sprintRelapse.relapsedCount}）
+                </button>
+              )}
             </div>
           </div>
         )}

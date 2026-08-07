@@ -477,6 +477,13 @@ export default function Home() {
     () => buildSprintRelapse(reviews, weakSignalInput, new Date(clock), weakThresholds),
     [reviews, weakSignalInput, clock, weakThresholds],
   );
+  const sprintRelapseWords = useMemo(
+    () => (sprintRelapse?.relapsedIds ?? []).flatMap((wordId) => {
+      const word = wordById.get(wordId)?.word;
+      return word ? [{ wordId, word }] : [];
+    }),
+    [sprintRelapse, wordById],
+  );
   const sectionUnitTotals = useMemo(() => {
     const totals = new Map<string, Map<string, number>>();
     for (const [id, word] of wordById) {
@@ -1503,6 +1510,15 @@ export default function Home() {
     startSession("sprint", "薄弱冲刺 · 补漏", stillWeakIds);
   }
 
+  // 从轨迹页复发追踪一键再冲刺：只带复发词
+  function startSprintFromRelapse() {
+    const wordIds = sprintRelapse?.relapsedIds ?? [];
+    if (!wordIds.length) {
+      showToast("暂无复发词可冲刺", 1800);
+      return;
+    }
+    startSession("sprint", "薄弱冲刺 · 复发词", wordIds);
+  }
   // 从轨迹页冲刺记录再跑一次：复用该次冲刺的词集
   function startSprintFromHistory(sessionId: string) {
     const wordIds = buildSprintRecordWordIds(reviews, sessionId);
@@ -2091,6 +2107,8 @@ export default function Home() {
             weakConcentration={weakConcentration}
             sprintEffectivenessSeries={sprintEffectivenessSeries}
             sprintRelapse={sprintRelapse}
+            sprintRelapseWords={sprintRelapseWords}
+            onSprintRelapse={startSprintFromRelapse}
             sprintDimensionTrend={sprintDimensionTrend ?? []}
             sectionUnitTotals={sectionUnitTotals}
             onScopedSprint={startScopedSprint}

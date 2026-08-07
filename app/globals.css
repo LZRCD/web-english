@@ -1665,6 +1665,11 @@ select:focus-visible {
   color: #777e77;
   font-size: 11px;
 }
+.book-weak-units {
+  margin: 4px 0 0 !important;
+  color: #c36f52 !important;
+  font-size: 10px;
+}
 
 .book-line {
   position: absolute;
