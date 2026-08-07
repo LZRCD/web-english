@@ -1676,9 +1676,15 @@ select:focus-visible {
 }
 
 .book-line i {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: block;
   height: 100%;
   background: var(--mint);
+}
+.book-line i.book-line-weak {
+  background: rgba(195, 111, 82, 0.85);
 }
 
 .empty-book {
@@ -4742,6 +4748,21 @@ kbd {
   background: #cfd8d2;
   cursor: not-allowed;
 }
+/* ---- 信号联动十四轮：冲刺复发追踪 / 词书薄弱占比 ---- */
+.sprint-relapse-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  color: #6f7a72;
+  font-size: 11px;
+}
+.sprint-relapse-row strong {
+  color: #27352e;
+  font-size: 13px;
+}
+.sprint-relapse-row .positive strong { color: #34835f; }
+.sprint-relapse-row .negative strong { color: #c36f52; }
+
 /* ---- 信号联动十三轮：薄弱候选导出 / 集中区单元冲刺 ---- */
 .concentration-unit {
   border: 1px solid rgba(47, 125, 88, 0.35);

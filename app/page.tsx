@@ -64,6 +64,7 @@ import {
   buildWeakCandidateSummary,
   buildSprintHistory,
   buildSprintRecordWordIds,
+  buildSprintRelapse,
   buildSprintSummary,
   buildSprintWordIds,
   buildScopedSprintWordIds,
@@ -471,6 +472,10 @@ export default function Home() {
   const sprintEffectivenessSeries = useMemo(
     () => buildSprintEffectivenessSeries(reviews, new Date(clock)),
     [reviews, clock],
+  );
+  const sprintRelapse = useMemo(
+    () => buildSprintRelapse(reviews, weakSignalInput, new Date(clock), weakThresholds),
+    [reviews, weakSignalInput, clock, weakThresholds],
   );
   const sectionUnitTotals = useMemo(() => {
     const totals = new Map<string, Map<string, number>>();
@@ -2085,6 +2090,7 @@ export default function Home() {
             onExportSprint={exportSprintCsv}
             weakConcentration={weakConcentration}
             sprintEffectivenessSeries={sprintEffectivenessSeries}
+            sprintRelapse={sprintRelapse}
             sprintDimensionTrend={sprintDimensionTrend ?? []}
             sectionUnitTotals={sectionUnitTotals}
             onScopedSprint={startScopedSprint}

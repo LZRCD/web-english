@@ -12,6 +12,7 @@ import {
   buildSprintEffectivenessSeries,
   buildSprintHistory,
   buildSprintRecordWordIds,
+  buildSprintRelapse,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakCandidateSummary,
@@ -830,4 +831,67 @@ test("薄弱候选清单：与 buildSprintCsv 组合导出含 BOM 表头", () =>
   const csv = buildSprintCsv(buildWeakCandidateSummary(input, wordById));
   assert.ok(csv.startsWith("\uFEFF词,信号列表\n"));
   assert.ok(csv.includes("word-1,查过2次"));
+});
+
+test("冲刺复发：上周冲刺解决词中当前仍薄弱者计为复发", () => {
+  // 2026-08-10 周一（本周）；上周 = 08-03 ~ 08-10
+  const reviews = [
+    // 上周冲刺：词 1 解决（rating 2）、词 2 解决（rating 3）
+    { ...makeReview(1, 2, "2026-08-05T08:00:00.000Z"), sessionId: "sprint:2026-08-05" },
+    { ...makeReview(2, 3, "2026-08-06T08:00:00.000Z"), sessionId: "sprint:2026-08-05" },
+    // 本周冲刺：词 3 解决（不计入上周）
+    { ...makeReview(3, 2, "2026-08-11T08:00:00.000Z"), sessionId: "sprint:2026-08-11" },
+  ];
+  const input = baseInput({
+    reviews,
+    // 词 1 查词仍多 → 当前薄弱（复发）；词 2 无新薄弱信号 → 未复发
+    lookupStats: {
+      "word-1": { count: 4, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-08-07T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-11T08:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-06T08:00:00.000Z" },
+      3: { wordId: 3, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-08-11T08:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const result = buildSprintRelapse(
+    reviews,
+    input,
+    new Date("2026-08-14T12:00:00.000Z"),
+  );
+  assert.ok(result);
+  assert.equal(result.solvedCount, 2);
+  assert.equal(result.relapsedCount, 1);
+  assert.equal(result.relapseRate, 50);
+  assert.deepEqual(result.relapsedIds, [1]);
+});
+
+test("冲刺复发：上周无冲刺解决词返回 null", () => {
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-11T08:00:00.000Z"), sessionId: "sprint:2026-08-11" },
+  ];
+  const input = baseInput({ reviews });
+  assert.equal(
+    buildSprintRelapse(reviews, input, new Date("2026-08-14T12:00:00.000Z")),
+    null,
+  );
+});
+
+test("冲刺复发：全部解决词无复发则复发率 0", () => {
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-05T08:00:00.000Z"), sessionId: "sprint:2026-08-05" },
+  ];
+  // 词 1 无任何薄弱信号源
+  const input = baseInput({ reviews });
+  const result = buildSprintRelapse(
+    reviews,
+    input,
+    new Date("2026-08-14T12:00:00.000Z"),
+  );
+  assert.ok(result);
+  assert.equal(result.solvedCount, 1);
+  assert.equal(result.relapsedCount, 0);
+  assert.equal(result.relapseRate, 0);
+  assert.deepEqual(result.relapsedIds, []);
 });

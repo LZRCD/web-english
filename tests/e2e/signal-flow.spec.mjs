@@ -310,3 +310,62 @@ test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async
     page.getByRole("button", { name: /学习全部薄弱候选（2）/ }),
   ).toBeVisible();
 });
+
+/** 复发追踪 seed：上周（8 天前，必落上周窗口）冲刺解决 2 词，两词当前仍薄弱（查过 2+ 次） */
+function relapseSeedState() {
+  const state = sprintSeedState();
+  const lastWeekSessionId = `sprint:${daysAgo(8, 8, 0)}`;
+  const lastWeekAt = daysAgo(8, 8, 5);
+  const solvedAt = daysAgo(8, 8, 7);
+  // 把本周冲刺评分改为上周，且两词均 rating≥2（解决）；保留普通低评分（薄弱画像）
+  state.reviews = state.reviews.map((review) => {
+    if (review.id === "r1") {
+      return {
+        ...review,
+        sessionId: lastWeekSessionId,
+        reviewedAt: solvedAt,
+        dueAt: new Date(new Date(solvedAt).getTime() + 600_000).toISOString(),
+        rating: 2,
+      };
+    }
+    if (review.id === "r2") {
+      return {
+        ...review,
+        sessionId: lastWeekSessionId,
+        reviewedAt: new Date(new Date(solvedAt).getTime() + 120_000).toISOString(),
+        dueAt: new Date(new Date(solvedAt).getTime() + 720_000).toISOString(),
+        rating: 2,
+      };
+    }
+    return review;
+  });
+  return state;
+}
+
+test("信号联动：词书薄弱分布与冲刺复发追踪", async ({ context, page }) => {
+  await installStateSeed(context, relapseSeedState());
+  await openApp(page);
+  // 词书页：必考词卡片显示薄弱文案
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /词书/ })
+    .click();
+  const requiredCard = page
+    .getByRole("button", { name: /必考词/ })
+    .filter({ has: page.getByRole("heading", { name: "必考词" }) });
+  await expect(requiredCard).toBeVisible();
+  await expect(requiredCard).toContainText("薄弱");
+  // 轨迹页：复发追踪栏显示上周解决与复发词数
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "每一次回忆都算数" }),
+  ).toBeVisible();
+  const relapse = page.locator('[aria-label="冲刺复发追踪"]');
+  await expect(relapse).toBeVisible();
+  await expect(relapse).toContainText("上周解决 2 词");
+  await expect(relapse).toContainText("复发 2 词");
+  await expect(relapse).toContainText("复发率 100%");
+});

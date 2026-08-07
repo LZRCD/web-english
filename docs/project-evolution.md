@@ -723,3 +723,22 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 146/146 通过，新增 3 用例覆盖：薄弱候选清单映射词名与信号/仅含达标词、无候选返回空/未映射跳过/阈值生效、与 buildSprintCsv 组合含 BOM 表头。
 - Playwright E2E 5/5 通过（11.8s）：新增集中区按分册冲刺与导出入口断言；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 44688 + node 子 48336 均逐一核对并关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。
+
+## 第三十三次迭代：信号联动十四轮（词书薄弱分布、冲刺复发追踪）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- 词书薄弱分布：`app/components/BooksView.tsx` 词书卡片副标题追加「薄弱 N 词」（用 `isWeakProgress(wordProgress[wordId])` 判定，lastRating≤1 / lapse 未连续成功 / 未 resolve），进度条追加薄弱段（`book-line-weak` 红色小条，与已学习绿色条叠放）；零新 lib 派生，直接复用 learning.ts 的 isWeakProgress。
+- 冲刺复发追踪：`lib/weak-signals.ts` 新增 `buildSprintRelapse(reviews, input, now, thresholds?)`——取上周一至本周一之间、sessionId 为冲刺会话的 rating≥2 去重词集（解决词），再过滤当前 `buildWordWeakSignals` 非空的词（复发），输出 `{ solvedCount, relapsedCount, relapseRate, relapsedIds }`，无上周冲刺返回 null；周划分复用 localWeekStart/addLocalDays/inWindow。轨迹页「冲刺成效 4 周」栏下方新增「冲刺复发追踪」栏（复发率 0 标绿「无复发」，>0 标红「需关注」）。
+
+### 修正
+
+- E2E 流程一次失误记录：关闭 dev server 时 PowerShell 把监听 PID 赋给保留变量 `$pid` 导致赋值失败，首次清理提前退出并残留两个日志文件；改用 `$owner` 变量重新关闭并删除残留，确认 3000 无监听、无项目相关 node 进程残留。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；生产构建成功。
+- 单元测试 149/149 通过，新增 3 用例覆盖：上周冲刺解决词提取与复发过滤、上周无冲刺返回 null、全解决词无复发复发率 0。
+- Playwright E2E 6/6 通过（14.9s）：新增词书薄弱分布 + 复发追踪链路（relapseSeedState：上周冲刺解决 2 词且当前仍薄弱 → 词书「薄弱」文案 + 复发率 100%）；运行前后固定端口 3000 无残留监听（本次 dev server npm 父 26316 + node 子 40136 均核对关闭，日志与 PID 记录已清理，未批量终止无关 node 进程）。

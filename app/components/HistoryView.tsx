@@ -13,6 +13,7 @@ import {
   emphasizedWeakDimensions,
   type SprintEffectivenessWeek,
   type SprintHistory,
+  type SprintRelapse,
   type WeakDimensionTrendWeek,
   type WeakSectionConcentration,
 } from "../../lib/weak-signals";
@@ -56,6 +57,8 @@ type HistoryViewProps = {
   weakConcentration: WeakSectionConcentration[];
   /** 冲刺成效近 N 周序列（含本周，无冲刺周为 null） */
   sprintEffectivenessSeries: SprintEffectivenessWeek[];
+  /** 上周冲刺解决词复发追踪（无上周冲刺为 null） */
+  sprintRelapse: SprintRelapse | null;
   /** 冲刺后维度清零与周报对照（冲刺完成页派生） */
   sprintDimensionTrend: SprintDimensionWithTrend[];
   /** 各分册/单元词本总词数（section → unit → 总数，供集中度占比） */
@@ -97,6 +100,7 @@ export default function HistoryView({
   sprintCount,
   weakConcentration,
   sprintEffectivenessSeries,
+  sprintRelapse,
   sprintDimensionTrend,
   sectionUnitTotals,
   onResprintHistory,
@@ -492,6 +496,22 @@ export default function HistoryView({
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+        {sprintRelapse && (
+          <div className="weak-trend" aria-label="冲刺复发追踪">
+            <div className="weak-trend-head">
+              <strong>冲刺复发追踪</strong>
+              <small>上周冲刺解决词中，当前仍薄弱的比例</small>
+            </div>
+            <div className="sprint-relapse-row">
+              <span>上周解决 <strong>{sprintRelapse.solvedCount}</strong> 词</span>
+              <span>复发 <strong>{sprintRelapse.relapsedCount}</strong> 词</span>
+              <span className={sprintRelapse.relapseRate === 0 ? "positive" : "negative"}>
+                复发率 <strong>{sprintRelapse.relapseRate}%</strong>
+                {sprintRelapse.relapseRate === 0 ? " · 无复发" : " · 需关注"}
+              </span>
             </div>
           </div>
         )}

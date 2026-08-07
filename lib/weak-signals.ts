@@ -525,6 +525,58 @@ export function buildSprintEffectivenessSeries(
   return series;
 }
 
+/** 上周冲刺解决词的复发追踪：纯派生、不新增 schema */
+export type SprintRelapse = {
+  /** 上周冲刺解决（rating≥2 去重）词数 */
+  solvedCount: number;
+  /** 上周解决词中当前仍薄弱（buildWordWeakSignals 非空）的词数 */
+  relapsedCount: number;
+  /** 复发率（relapsedCount / solvedCount，0–100 取整） */
+  relapseRate: number;
+  /** 复发词 id（按当前薄弱信号数降序，便于定位） */
+  relapsedIds: number[];
+};
+
+/**
+ * 追踪上周冲刺解决词的复发情况：取上周一至本周一之间、
+ * 且 sessionId 为冲刺会话的 rating≥2 去重词集，再过滤当前仍薄弱的词。
+ * 周划分与 buildSprintEffectiveness 一致（本地周一）。
+ */
+export function buildSprintRelapse(
+  reviews: readonly ReviewEvent[],
+  input: WeakSignalInput,
+  now = new Date(),
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): SprintRelapse | null {
+  const weekStart = localWeekStart(now);
+  const lastWeekStartMs = addLocalDays(weekStart, -7).getTime();
+  const weekStartMs = weekStart.getTime();
+  const solvedIds = new Set<number>();
+  for (const review of reviews) {
+    if (
+      review.sessionId?.startsWith("sprint:")
+      && review.rating >= 2
+      && review.wordId !== undefined
+      && inWindow(review.reviewedAt, lastWeekStartMs, weekStartMs)
+    ) {
+      solvedIds.add(review.wordId);
+    }
+  }
+  if (!solvedIds.size) return null;
+  const relapsed = [...solvedIds]
+    .filter((wordId) =>
+      buildWordWeakSignals(wordId, input, undefined, thresholds).length > 0)
+    .sort((first, second) =>
+      buildWordWeakSignals(second, input, undefined, thresholds).length
+      - buildWordWeakSignals(first, input, undefined, thresholds).length);
+  return {
+    solvedCount: solvedIds.size,
+    relapsedCount: relapsed.length,
+    relapseRate: Math.round((relapsed.length / solvedIds.size) * 100),
+    relapsedIds: relapsed,
+  };
+}
+
 /** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,

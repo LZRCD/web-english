@@ -1,7 +1,7 @@
 "use client";
 
 import type { WordProgressMap } from "../../lib/learning";
-import { dueWordIds } from "../../lib/learning";
+import { dueWordIds, isWeakProgress } from "../../lib/learning";
 import { isPrimaryLearningWord } from "../../lib/redbook";
 import type { Word } from "../../lib/study";
 
@@ -52,6 +52,9 @@ export default function BooksView({
           const learned = bookWordIds.filter((wordId) => wordProgress[wordId]).length;
           const mastered = bookWordIds.filter((wordId) => wordProgress[wordId]?.status === "mastered").length;
           const dueCount = bookWordIds.filter((wordId) => due.has(wordId)).length;
+          // 薄弱词数：isWeakProgress 判定（lastRating≤1 / lapse 未连续成功 / 未 resolve）
+          const weakCount = bookWordIds.filter((wordId) =>
+            isWeakProgress(wordProgress[wordId])).length;
           return (
           <button className="book-card" key={book.name} onClick={() => {
             onSelectBook(book.name, book.name === "超纲词" ? "A" : 1);
@@ -60,9 +63,17 @@ export default function BooksView({
             <div>
               <small>{book.detail}</small>
               <h2>{book.name}</h2>
-              <p>{learned} 已学习 · {mastered} 已掌握 · {dueCount} 待复习</p>
+              <p>{learned} 已学习 · {mastered} 已掌握 · {dueCount} 待复习 · <span className={"book-weak-count"}>{weakCount} 薄弱</span></p>
             </div>
-            <div className="book-line"><i style={{ width: `${(learned / book.total) * 100}%` }} /></div>
+            <div className="book-line">
+              <i style={{ width: `${(learned / book.total) * 100}%` }} />
+              {weakCount > 0 && (
+                <i
+                  className="book-line-weak"
+                  style={{ width: `${Math.min(100, (weakCount / book.total) * 100)}%` }}
+                />
+              )}
+            </div>
           </button>
         )})}
         <button className="book-card empty-book all-book-card" onClick={onAllShuffle}>
