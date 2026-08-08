@@ -18,7 +18,10 @@ import {
   splitStoredState,
 } from "../lib/storage.ts";
 import type { QuizAttempt, QuizMode } from "../lib/quiz.ts";
-import { buildQuizQuestions } from "../lib/quiz.ts";
+import {
+  buildQuizQuestions,
+  restoreQuizQuestions,
+} from "../lib/quiz.ts";
 import {
   buildSprintCsv,
   buildSprintEffectiveness,
@@ -163,6 +166,139 @@ test("持久化收敛：分域往返保留薄弱阈值、猜错累计与既有�
   assert.deepEqual(restored.senseFrequency, state.senseFrequency);
   assert.equal(restored.hideChineseMeaning, true);
   assert.equal(restored.guessContextFirst, true);
+});
+
+test("activeQuiz题组快照：归一化清洗、限长、分域往返与旧会话兼容", () => {
+  const snapshotIds = [
+    3,
+    1,
+    3,
+    0,
+    -2,
+    "2",
+    ...Array.from({ length: 35 }, (_, index) => index + 4),
+  ];
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeQuiz: {
+      id: "sprint:2026-08-08T00:00:00.000Z",
+      mode: "meaning-choice",
+      seed: 33,
+      questionWordIds: snapshotIds,
+      index: 29,
+      correctCount: 7,
+      answers: {
+        "meaning-choice:3:33": { answer: "目标", correct: true },
+      },
+      complete: true,
+      startedAt: "2026-08-08T00:00:00.000Z",
+    },
+  }));
+
+  assert.equal(state.activeQuiz?.questionWordIds?.length, 30);
+  assert.deepEqual(state.activeQuiz?.questionWordIds?.slice(0, 4), [3, 1, 4, 5]);
+  assert.equal(state.activeQuiz?.questionWordIds?.at(-1), 31);
+  assert.equal(state.activeQuiz?.index, 29);
+  assert.equal(state.activeQuiz?.correctCount, 7);
+  assert.equal(state.activeQuiz?.complete, true);
+  assert.deepEqual(
+    combineStoredState(splitStoredState(state)).activeQuiz,
+    state.activeQuiz,
+  );
+
+  const legacy = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeQuiz: {
+      id: "quiz:legacy",
+      mode: "chinese-to-english",
+      seed: 34,
+      index: 0,
+      correctCount: 0,
+      answers: {},
+      complete: false,
+      startedAt: "2026-08-08T00:00:00.000Z",
+    },
+  }));
+  assert.equal(legacy.activeQuiz?.questionWordIds, undefined);
+
+  const invalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeQuiz: {
+      ...legacy.activeQuiz,
+      questionWordIds: { wordId: 1 },
+    },
+  }));
+  assert.equal(invalid.activeQuiz?.questionWordIds, undefined);
+});
+
+test("activeQuiz题组快照：实时画像变化后仍恢复原题序、答案和干扰项", () => {
+  const words: Word[] = [
+    { id: 1, word: "radiate", meaning: "v. 散发；辐射" },
+    { id: 2, word: "abandon", meaning: "v. 放弃；抛弃" },
+    { id: 3, word: "objective", meaning: "adj. 客观的；n. 目标" },
+    { id: 4, word: "derive", meaning: "v. 获得；源于" },
+    { id: 5, word: "stable", meaning: "adj. 稳定的；n. 马厩" },
+  ];
+  const progressItem = (
+    wordId: number,
+    lastRating: number,
+    consecutiveSuccesses: number,
+  ) => ({ wordId, lapseCount: 0, lastRating, consecutiveSuccesses });
+  const initialProgress = Object.fromEntries(words.map((word) => [
+    word.id,
+    progressItem(word.id!, word.id === 1 ? 0 : 2, 0),
+  ])) as unknown as WordProgressMap;
+  const changedProgress = {
+    ...initialProgress,
+    1: progressItem(1, 2, 1),
+    2: progressItem(2, 0, 0),
+  } as unknown as WordProgressMap;
+  const seed = 330_033;
+  const original = buildQuizQuestions({
+    words,
+    progress: initialProgress,
+    familiarMeanings: {},
+    mode: "meaning-choice",
+    count: 10,
+    seed,
+    candidateWordIds: [1, 2],
+  });
+  const questionWordIds = original.map((question) => question.wordId);
+  const restored = restoreQuizQuestions(
+    { mode: "meaning-choice", seed, questionWordIds },
+    words,
+    changedProgress,
+    {},
+    { candidateWordIds: [2] },
+  );
+
+  assert.deepEqual(restored.map((question) => question.id), original.map((question) => question.id));
+  assert.deepEqual(restored.map((question) => question.options), original.map((question) => question.options));
+
+  const withoutFirstWord = restoreQuizQuestions(
+    { mode: "meaning-choice", seed, questionWordIds },
+    words.filter((word) => word.id !== questionWordIds[0]),
+    Object.fromEntries(Object.entries(changedProgress).filter(
+      ([wordId]) => Number(wordId) !== questionWordIds[0],
+    )) as unknown as WordProgressMap,
+    {},
+  );
+  assert.deepEqual(
+    withoutFirstWord.map((question) => question.id),
+    original.slice(1).map((question) => question.id),
+  );
+  assert.equal(withoutFirstWord[0]?.options?.length, 4);
+  assert.equal(new Set(withoutFirstWord[0]?.options).size, 4);
+  assert.equal(withoutFirstWord[0]?.options?.includes(withoutFirstWord[0].answer), true);
+
+  const legacyFallback = restoreQuizQuestions(
+    { mode: "meaning-choice", seed },
+    words,
+    changedProgress,
+    {},
+    { candidateWordIds: [2] },
+  );
+  assert.deepEqual(legacyFallback.map((question) => question.wordId), [2]);
 });
 
 test("薄弱画像：聚合查词/猜错/各模式测验/回忆/顽固/lapse 六类信号", () => {

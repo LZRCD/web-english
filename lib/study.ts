@@ -18,7 +18,11 @@ import {
   type WordProgress,
   type WordProgressMap,
 } from "./learning.ts";
-import type { QuizAttempt, QuizSessionState } from "./quiz.ts";
+import {
+  normalizeQuizQuestionWordIds,
+  type QuizAttempt,
+  type QuizSessionState,
+} from "./quiz.ts";
 
 export type {
   Rating,
@@ -942,10 +946,12 @@ function normalizeQuizSession(value: unknown): QuizSessionState | undefined {
       }
     }
   }
+  const questionWordIds = normalizeQuizQuestionWordIds(session.questionWordIds);
   return {
     id: typeof session.id === "string" ? session.id : "quiz:restored",
     mode: session.mode as QuizSessionState["mode"],
     seed: Number(session.seed),
+    ...(questionWordIds !== undefined ? { questionWordIds } : {}),
     index: Math.max(0, Math.trunc(Number(session.index))),
     correctCount: Math.max(0, Math.trunc(Number(session.correctCount) || 0)),
     answers,

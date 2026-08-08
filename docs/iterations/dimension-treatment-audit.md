@@ -146,3 +146,23 @@
 完整矩阵见 `dimension-treatment-closure.md`。只读往返实测发现 settings 分域遗漏 `weakThresholds`、`guessMistakes`、`senseFrequency`、`hideChineseMeaning`、`guessContextFirst`：前两者会直接造成统一画像事实和判定口径刷新后丢失。本轮只补齐这一组既有字段的分域投影，不新增 schema/version；真实浏览器完成“写盘 → 刷新 hydrate → 改阈值再写盘 → 再刷新”验证。
 
 结论 C：字段丢失已修复；普通专项 activeQuiz 作答后刷新仍可能按当前推荐重算出不同候选，下一轮单独处理。猜错继续为“➖ 当前约束下不可闭环：只有累计次数，无真实事件时间、恢复或复发数据源”。
+
+## 第 33 轮 activeQuiz 题组快照审计
+
+> 只读基线：`84f627e`。分支仅有用户文件 `1.txt` 未跟踪，固定端口 3000 无监听、无 PID/本轮日志；以下漂移证据均在修改前取得。
+
+| 核对项 | 修改前真实数据流 | 断链 | 修复后 |
+|---|---|---|---|
+| mode / seed / startedAt | `QuizSessionState` 与 normalize 已保留 | 无 | 保持 |
+| index / answers / correctCount | 保存旧题进度 | 题组变化后可指向另一题或孤立 questionId | 与原题组共同恢复 |
+| 普通 Quiz | 同 seed + 当前全部已学词与 progress | 作答改变优先级后换序 | 按实际题目 ID 快照 |
+| sprint 专项 | 同 seed + 当前 `sprintTreatment.wordIds` | 首题恢复后当前候选缩减或切换维度 | 快照优先于当前推荐 |
+| 顽固专项 | startedAt 重建阶段候选 + 当前 progress 排序 | 候选仍可能换序，meaning-choice 选项随 index 漂移 | 保留原目标顺序和 seed 偏移 |
+| 旧/非法会话 | 无启动题组证据 | 无法精确逆推 | 无快照安全回退；非法 ID 清洗；正常写盘自愈 |
+| meaning-choice | 目标和干扰项都由当前已学词构建 | 不得把快照误作干扰项池 | 仅目标受快照限制，干扰项仍来自全部已学词 |
+
+同 seed `330033` 的修改前实测：普通中译英 `[1,3,2,5,4] → [1,2,3,5,4]`；sprint `[1,2] → [2]`；顽固辨析 `[1,2] → [2,1]` 且同词选项顺序变化。现有字段不能精确恢复，因此本轮唯一方案是在 `QuizSessionState` 增加向后兼容可选 `questionWordIds`，只保存实际题目目标 ID 有序快照。
+
+修复后普通、sprint、顽固共用同一恢复路径；快照去重、限长并过滤非法/未学习/删除 ID，剩余题保留原 seed 偏移。新会话与“再来一组”生成独立快照；旧会话回退后由正常写盘补齐。未保存完整题目、答案或选项，未新增 IndexedDB store/domain，未提升 schema/version，未改评分、FSRS、每日门禁、恢复规则、备份或猜错。
+
+结论 A：七个可实现薄弱维度、分域持久化及未完成会话刷新均已收敛。项目进入稳定维护和真实学习成效验证阶段；猜错继续为“➖ 当前约束下不可闭环：只有累计次数，无真实事件时间、恢复或复发数据源”。

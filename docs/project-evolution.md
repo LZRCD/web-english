@@ -1087,3 +1087,22 @@
 - 新增分域往返单测与真实浏览器两次刷新/再次写盘 E2E；不修改既有 13 条 E2E 语义。
 - 评分、FSRS、每日 Quiz 门禁、恢复规则、备份和 package scripts 均未改变。
 - 定向 72/72、`npm test` 189/189、signal-flow 14/14；lint 与 typecheck 通过。固定端口 3000 验证后已释放，本轮 PID/日志已清理。
+
+## 第五十二次迭代：信号联动三十三轮（activeQuiz 题组快照刷新恢复）
+
+本次迭代：2026-08-08。
+
+### 审计与修正
+
+- 修改前用同一 seed 真实复现三类漂移：普通 Quiz 因 progress 改变换序，sprint 因首题恢复退出实时推荐而缩减候选，顽固辨析因当前优先级改变换序并改变基于 `seed + index` 的选项；seed 不能固定已经变化的输入。
+- `QuizSessionState` 仅增加向后兼容可选 `questionWordIds`，由 `QuizView` 从实际生成题目提取有序目标 ID 并随 activeQuiz 写盘；没有保存完整 Word、题干、答案、选项或原始候选池。
+- normalize 过滤非数字、非正安全整数与重复 ID，最多保留 30 项；恢复时快照优先于实时推荐和 progress，未学习/删除目标安全过滤，剩余目标保留原 seed 偏移。
+- meaning-choice 只按快照固定目标，干扰项仍来自全部当前已学词；旧会话无快照沿用既有安全回退，并在正常写盘后自愈。新会话与“再来一组”生成独立快照。
+- 未新增 IndexedDB store/domain，未提升 schema/version；未改评分、FSRS、每日 Quiz 门禁、薄弱恢复/复发、备份、猜错或 package scripts。
+
+### 验证与阶段结论
+
+- `tests/weak-signals.test.ts` 新增 2 个用例，定向 74/74；覆盖清洗/限长/分域往返/旧会话兼容，以及画像、候选和优先级变化后的题序、答案、干扰项与删除目标处理。
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，191/191 通过。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 15/15：既有 14 条语义保持；新增链路证明首题作答令当前中译英推荐缩减后，刷新仍保持原 sprint id、seed、startedAt、两题快照、第 2/2 题、已答映射与正确数，并证明“再来一组”生成新快照。
+- 结论 A：七个可实现维度、分域持久化往返及未完成会话刷新均已收敛，项目进入稳定维护和真实学习成效验证阶段。猜错仍只有累计次数，不伪造事件时间、恢复或复发。

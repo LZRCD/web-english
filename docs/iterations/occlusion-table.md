@@ -1,7 +1,7 @@
 # 咬合验证表（occlusion table）
 
-> 以第 0 轮对前 18 轮的核对为基线，并持续记录第 19~32 轮修复。状态：✅ 已验证咬合 / ❌ 断链 / ⚠️ 存疑。
-> 既有联动检查 18 项全部为 ✅；维度化处置审计另见 `dimension-treatment-audit.md`，其中“猜错”仍没有可靠事件时间源。只读子代理产出初版，后续轮次仅更新状态与修复证据。
+> 以第 0 轮对前 18 轮的核对为基线，并持续记录第 19~33 轮修复。状态：✅ 已验证咬合 / ❌ 断链 / ⚠️ 存疑。
+> 当前 21 项全部为 ✅；维度化处置审计另见 `dimension-treatment-audit.md`，其中“猜错”仍没有可靠事件时间源。只读子代理产出初版，后续轮次仅更新状态与修复证据。
 
 | # | 联动检查项 | 关键代码位置 | 状态 | 断链说明（在哪一步断：数据流/UI/判定） | 修复轮次 |
 |---|---|---|---|---|---|
@@ -30,6 +30,7 @@
 | 18 | 查词薄弱 → 主动回忆 → 同维恢复与真实查词复发 | `lookupStats` / `isLookupDemoted` → `lookup-recall` → WordCard review / `recordLookup` | ✅ 已验证咬合 | 三类 Quiz 恢复后，稳定进度的未降级查词词进入现有主动回忆卡；评分写真实 review、耗时和 sprint sessionId，成功后查词维度淡出，后续真实划词更新 lastAt 后复发。FSRS 弱进度继续走通用排程。 | 30 |
 | 19 | 顽固词 → 多模式强化 → 真实 review 恢复与低评复发 | `rebuildStubbornWords` → 结构化顽固推荐 → WordCard / QuizView → reviews | ✅ 已验证咬合 | 前四级恢复后顽固词接管统一冲刺，词本入口复用同一推荐；按真实 review 阶段分组进入主动回忆、听音拼写、中译英。同日仅 attempt 不推进，三条成功 review 淡出，低评分重置并按既有窗口复发；结构化 sprint session 进入历史与成效。 | 31 |
 | 20 | 维度事实/阈值 → 分域持久化 → 刷新后画像与推荐保持 | `persistedState` → `splitStoredState` / `combineStoredState` → `normalizeStoredState` → hydrate | ✅ 已验证咬合 | settings 分域补齐既有阈值、猜错累计、义项频率和两项显示设置；真实刷新与再次写盘后不丢失，不新增 schema/version。 | 32 |
+| 21 | activeQuiz 启动题组 → 作答改变画像 → 刷新后原题组与进度保持 | `QuizView` 实际 questions → `questionWordIds` → `normalizeQuizSession` → `restoreQuizQuestions` | ✅ 已验证咬合 | 有序目标 ID 快照优先于刷新后的实时推荐和优先级；普通、sprint、顽固会话保持模式、题序、位置、答案、正确数和 sessionId，meaning-choice 干扰项仍来自全部已学词；旧会话安全回退后自愈。 | 33 |
 
 ## 缺口清单（从第 0 轮报告 ⑥ 同步，后续轮次目标池）
 
@@ -48,4 +49,4 @@
 - [x] 查词频繁已在三类 Quiz 恢复后进入 `lookup-recall` 主动回忆，结果回到既有查词降级规则，真实再次划词可复发。（第 30 轮）
 - [x] 顽固词已按真实 review 阶段进入主动回忆、听音拼写和中译英；连续三次成功淡出，低评分重置并按既有窗口复发。（第 31 轮）
 - [x] `weakThresholds`、`guessMistakes` 等既有 settings 字段已完成 IndexedDB 分域往返，刷新和再次写盘不再丢失。（第 32 轮）
-- [ ] 普通维度 activeQuiz 在作答导致当前推荐变化后刷新，候选可能漂移；下一轮按会话启动时证据恢复，不新增候选 schema。
+- [x] 普通、sprint 与顽固 activeQuiz 已持久化实际题目目标 ID 有序快照；作答改变推荐后刷新仍恢复原题组、位置、答案与归因，旧会话安全回退后自愈。（第 33 轮）

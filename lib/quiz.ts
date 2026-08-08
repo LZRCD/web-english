@@ -83,11 +83,32 @@ export type QuizAttempt = {
   appliedToSchedule: boolean;
 };
 
-/** 未完成测验的持久化进度：按 seed 重建同一组题目，避免刷新丢失。 */
+export const MAX_QUIZ_QUESTION_WORD_IDS = 30;
+
+/** 清洗持久化题组快照：只保留有序、唯一的有效学习项 id。 */
+export function normalizeQuizQuestionWordIds(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<number>();
+  const wordIds: number[] = [];
+  for (const item of value) {
+    if (typeof item !== "number" || !Number.isSafeInteger(item) || item <= 0) {
+      continue;
+    }
+    if (seen.has(item)) continue;
+    seen.add(item);
+    wordIds.push(item);
+    if (wordIds.length >= MAX_QUIZ_QUESTION_WORD_IDS) break;
+  }
+  return wordIds;
+}
+
+/** 未完成测验的持久化进度：按题组快照与 seed 精确恢复。 */
 export type QuizSessionState = {
   id: string;
   mode: QuizMode;
   seed: number;
+  /** 实际生成题目的目标词 id，有序快照；旧会话可缺省。 */
+  questionWordIds?: number[];
   index: number;
   correctCount: number;
   answers: Record<string, { answer: string; correct: boolean }>;
@@ -114,7 +135,7 @@ export function createQuizSession(
 
 /** 用已保存的 seed 重建同一组题目（选项与顺序均与当时一致）。 */
 export function restoreQuizQuestions(
-  session: Pick<QuizSessionState, "mode" | "seed">,
+  session: Pick<QuizSessionState, "mode" | "seed" | "questionWordIds">,
   words: Word[],
   progress: WordProgressMap,
   familiarMeanings: FamiliarMeaningMap,
@@ -133,6 +154,7 @@ export function restoreQuizQuestions(
     count: 10,
     seed: session.seed,
     ...signals,
+    questionWordIds: session.questionWordIds,
   });
 }
 
@@ -333,8 +355,13 @@ export function buildQuizQuestions(input: {
   stubbornWords?: StubbornWordMap;
   /** 维度化处置限定词集；干扰项仍可复用全部已学词。 */
   candidateWordIds?: readonly number[];
+  /** 恢复时使用的实际题目目标词有序快照；优先于实时候选与优先级。 */
+  questionWordIds?: readonly number[];
 }) {
-  const count = Math.max(1, Math.min(30, Math.trunc(input.count ?? 10)));
+  const count = Math.max(1, Math.min(
+    MAX_QUIZ_QUESTION_WORD_IDS,
+    Math.trunc(input.count ?? 10),
+  ));
   const seed = Number.isFinite(input.seed) ? Math.trunc(input.seed!) : Date.now();
   const learnedWords = input.words.filter(wordId).filter((word) =>
     Boolean(input.progress[word.id]));
@@ -346,18 +373,26 @@ export function buildQuizQuestions(input: {
   const candidateWordIds = input.candidateWordIds
     ? new Set(input.candidateWordIds)
     : undefined;
-  const candidates = shuffled(
-    candidateWordIds
-      ? learnedWords.filter((word) => candidateWordIds.has(word.id))
-      : learnedWords,
-    seed,
-    (word) => String(word.id),
-  )
-    .sort((first, second) =>
-      candidatePriority(second, input.progress, signals)
-      - candidatePriority(first, input.progress, signals));
+  const snapshotWordIds = normalizeQuizQuestionWordIds(input.questionWordIds);
+  const learnedWordById = new Map(learnedWords.map((word) => [word.id, word]));
+  const candidates = snapshotWordIds === undefined
+    ? shuffled(
+      candidateWordIds
+        ? learnedWords.filter((word) => candidateWordIds.has(word.id))
+        : learnedWords,
+      seed,
+      (word) => String(word.id),
+    )
+      .sort((first, second) =>
+        candidatePriority(second, input.progress, signals)
+        - candidatePriority(first, input.progress, signals))
+      .map((word, index) => ({ word, seedOffset: index }))
+    : snapshotWordIds.flatMap((id, seedOffset) => {
+      const word = learnedWordById.get(id);
+      return word ? [{ word, seedOffset }] : [];
+    });
 
-  return candidates.flatMap<QuizQuestion>((word, index) => {
+  return candidates.flatMap<QuizQuestion>(({ word, seedOffset }) => {
     if (input.mode === "listening-spelling") {
       return [{
         id: `${input.mode}:${word.id}:${seed}`,
@@ -386,7 +421,7 @@ export function buildQuizQuestions(input: {
       word,
       learnedWords,
       input.familiarMeanings ?? {},
-      seed + index,
+      seed + seedOffset,
     );
     return question ? [question] : [];
   }).slice(0, count);

@@ -120,6 +120,34 @@ async function readStubbornTreatmentSnapshot(page) {
   }));
 }
 
+async function readActiveQuizSnapshot(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const settingsRequest = transaction.objectStore("state-domains").get("settings");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const activeQuiz = settingsRequest.result?.value?.activeQuiz;
+        database.close();
+        resolve(activeQuiz && {
+          id: activeQuiz.id,
+          mode: activeQuiz.mode,
+          seed: activeQuiz.seed,
+          questionWordIds: activeQuiz.questionWordIds,
+          index: activeQuiz.index,
+          correctCount: activeQuiz.correctCount,
+          answerIds: Object.keys(activeQuiz.answers ?? {}),
+          complete: activeQuiz.complete,
+          startedAt: activeQuiz.startedAt,
+        });
+      };
+    };
+  }));
+}
+
 function sprintSeedState() {
   const examDate = new Date(Date.now() + 5 * 86_400_000)
     .toISOString().slice(0, 10);
@@ -356,6 +384,51 @@ function chineseToEnglishTreatmentSeedState() {
         appliedToSchedule: false,
       },
     ],
+    started: true,
+  });
+}
+
+function activeQuizSnapshotSeedState() {
+  const examDate = new Date(Date.now() + 5 * 86_400_000)
+    .toISOString().slice(0, 10);
+  const learnedAt = daysAgo(5, 8, 0);
+  return createState({
+    examDate,
+    reviews: [
+      { wordId: 1, word: "radiate" },
+      { wordId: 5, word: "objective" },
+    ].map((item, index) => ({
+      id: `snapshot-learned-${item.wordId}`,
+      ...item,
+      rating: 2,
+      kind: "new",
+      intervalMs: 86_400_000,
+      dueAt: daysAgo(4, 8, index),
+      reviewedAt: new Date(new Date(learnedAt).getTime() + index * 60_000).toISOString(),
+      recallMs: 4_000,
+      section: "必考词",
+      unit: 1,
+    })),
+    quizAttempts: [1, 5].flatMap((wordId, index) => [
+      {
+        id: `snapshot-c2e-wrong-${wordId}`,
+        wordId,
+        mode: "chinese-to-english",
+        correct: false,
+        recallMs: 7_000,
+        answeredAt: daysAgo(3, 8, index),
+        appliedToSchedule: false,
+      },
+      {
+        id: `snapshot-c2e-correct-${wordId}`,
+        wordId,
+        mode: "chinese-to-english",
+        correct: true,
+        recallMs: 5_000,
+        answeredAt: daysAgo(2, 8, index),
+        appliedToSchedule: false,
+      },
+    ]),
     started: true,
   });
 }
@@ -613,6 +686,93 @@ test("信号联动：拼写恢复后中译英接管冲刺并完成同维回流",
     .click();
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
+});
+
+test("信号联动：中译英专项作答改变候选后刷新仍恢复启动题组", async ({ context, page }) => {
+  await installStateSeed(context, activeQuizSnapshotSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（2 词）/ }).click();
+  await expect(page.getByText("中译英", { exact: true })).toBeVisible();
+  await expect.poll(async () => (await readActiveQuizSnapshot(page))?.questionWordIds?.length)
+    .toBe(2);
+  const started = await readActiveQuizSnapshot(page);
+  expect(started).toMatchObject({
+    mode: "chinese-to-english",
+    index: 0,
+    correctCount: 0,
+    answerIds: [],
+    complete: false,
+  });
+  expect(started.id).toMatch(/^sprint:/);
+  const answers = { 1: "radiate", 5: "objective" };
+  const [firstWordId, secondWordId] = started.questionWordIds;
+
+  await page.getByRole("textbox", { name: "你的答案" }).fill(answers[firstWordId]);
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("回答正确");
+  await page.getByRole("button", { name: "下一题 →" }).click();
+  await expect.poll(async () => {
+    const snapshot = await readActiveQuizSnapshot(page);
+    return {
+      questionWordIds: snapshot?.questionWordIds,
+      index: snapshot?.index,
+      correctCount: snapshot?.correctCount,
+      answerCount: snapshot?.answerIds?.length,
+    };
+  }).toEqual({
+    questionWordIds: started.questionWordIds,
+    index: 1,
+    correctCount: 1,
+    answerCount: 1,
+  });
+
+  await page.reload();
+  await waitForApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /测验/ })
+    .click();
+  await expect(page.locator(".quiz-session-head")).toContainText("2 / 2");
+  await expect(page.locator(".quiz-session-head")).toContainText("答对 1");
+  await expect(page.locator(".quiz-question-card h1"))
+    .toContainText(secondWordId === 1 ? "散发" : "目标");
+  const restored = await readActiveQuizSnapshot(page);
+  expect(restored).toMatchObject({
+    id: started.id,
+    mode: started.mode,
+    seed: started.seed,
+    questionWordIds: started.questionWordIds,
+    index: 1,
+    correctCount: 1,
+    complete: false,
+  });
+  expect(restored.startedAt).toBe(started.startedAt);
+
+  await page.getByRole("textbox", { name: "你的答案" }).fill(answers[secondWordId]);
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("回答正确");
+  await page.getByRole("button", { name: "查看结果" }).click();
+  await expect(page.locator(".quiz-complete-score")).toHaveText("100%");
+  await expect.poll(async () => (await readActiveQuizSnapshot(page))?.complete).toBe(true);
+
+  await page.getByRole("button", { name: "再来一组" }).click();
+  await expect.poll(async () => (await readActiveQuizSnapshot(page))?.id === started.id)
+    .toBe(false);
+  const restarted = await readActiveQuizSnapshot(page);
+  expect(restarted).toMatchObject({
+    mode: "chinese-to-english",
+    index: 0,
+    correctCount: 0,
+    answerIds: [],
+    complete: false,
+  });
+  expect(restarted.seed).not.toBe(started.seed);
+  expect(restarted.questionWordIds).toHaveLength(2);
 });
 
 test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同维回流", async ({ context, page }) => {

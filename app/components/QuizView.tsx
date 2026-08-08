@@ -138,13 +138,14 @@ export default function QuizView({
       id: sessionId || `quiz:${mode}:${seed}`,
       mode,
       seed,
+      questionWordIds: questions.map((question) => question.wordId),
       startedAt: quizStartedAtRef.current,
       index: questionIndex,
       correctCount,
       answers,
       complete,
     });
-  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions.length, seed, sessionId]);
+  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions, seed, sessionId]);
 
   const startQuiz = (nextMode: QuizMode) => {
     const nextSeed = new Date().getTime();
