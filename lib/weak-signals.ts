@@ -80,6 +80,12 @@ export type SprintTreatmentRecommendation =
       mode: "meaning-choice";
       label: "释义辨析";
       wordIds: number[];
+    }
+  | {
+      dimension: "lookup";
+      mode: "lookup-recall";
+      label: "词义主动回忆";
+      wordIds: number[];
     };
 
 /** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
@@ -888,7 +894,7 @@ export function buildSprintWordIds(
 
 /**
  * 为统一冲刺入口选择当前已实现的最高优先级专项。
- * 只读取结构化测验记录，不通过标签文案反推维度；已连续答对恢复的词自动退出。
+ * 只读取结构化测验/查词状态，不通过标签文案反推维度；已恢复的词自动退出。
  */
 export function buildSprintTreatmentRecommendation(
   input: WeakSignalInput,
@@ -919,6 +925,25 @@ export function buildSprintTreatmentRecommendation(
         && !isQuizModeRecovered(input.quizAttempts, wordId, treatment.mode);
     });
     if (wordIds.length) return { ...treatment, wordIds };
+  }
+  const lookupById = lookupStatByWordId(input);
+  const lookupWordIds = sprintWordIds.filter((wordId) => {
+    const stat = lookupById.get(wordId);
+    const progress = input.wordProgress[wordId];
+    return Boolean(
+      stat
+      && stat.count >= thresholds.lookupWeak
+      && !isLookupDemoted(wordId, stat, input)
+      && !isWeakProgress(progress),
+    );
+  });
+  if (lookupWordIds.length) {
+    return {
+      dimension: "lookup",
+      mode: "lookup-recall",
+      label: "词义主动回忆",
+      wordIds: lookupWordIds,
+    };
   }
   return null;
 }

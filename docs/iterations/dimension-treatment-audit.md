@@ -89,3 +89,27 @@
 | 辨析错 | 结构化读取未恢复的 `meaning-choice` 错误；不解析标签或按钮文案 | 考前薄弱冲刺；拼写、中译英恢复后辨析接管 | 只限定当前辨析薄弱目标词，直达现有释义选择；干扰项仍来自全部已学词 | 每次作答写 `quizAttempts.mode=meaning-choice`；首次有效作答按既有门禁写 `reviews/wordProgress` 并沿用 `sprint:*` | 最近两次同模式正确后退出辨析建议与统一画像；其他维度保持 | 再次同模式答错后，辨析标签、建议与入口重现；高优先级复发可重新抢占 | ✅ 已形成维度闭环 |
 
 专项 review 继续被冲刺时间线、历史、成效与复发统计感知。本轮未新增 schema，未修改答案判定、干扰项、评分、FSRS 排程、备份或普通测验语义。
+
+## 第 30 轮只读复核
+
+> 复核基线：`2c9c466`。分支仅有用户文件 `1.txt` 未跟踪，固定端口 3000 无监听；以下结论在修改前取得。
+
+| 核对项 | 当前实现 | 代码证据 | 是否闭环 |
+|---|---|---|---|
+| 查词信号与关联 | `lookupStats.count/firstAt/lastAt` 经 `lookupWords.query` 和 `learningWordId` 关联学习项 | `lookupStatByWordId` / `useSelectionLookup#recordLookup` | ✅ 信号真实 |
+| 当前处置入口 | 三类 Quiz 专项之后回退通用冲刺，没有查词结构化模式 | `buildSprintTreatmentRecommendation` / `startSprintSession` | ❌ 处置未分型 |
+| 主动回忆训练 | `WordCard` 初始隐藏释义，点击揭示后才开放四档评分 | `startSession` / `WordCard` / `RatingBar` | ✅ 组件可复用 |
+| 结果与降级 | `rateWord` 写真实 `reviews/wordProgress/recallMs/sessionId`；`lastRating≥2 && lastReviewedAt≥lastAt` 时降级 | `rateWord` / `isLookupDemoted` | ✅ 已具备 |
+| 失败与复发 | 未揭示不产生评分；0/1 不降级；真实再次划词才增加 `count` 并刷新 `lastAt` | `rateWord` / `recordLookup` | ✅ 已具备 |
+| 会话刷新 | `activeSession` 已持久化，但归一化允许列表遗漏 `sprint`；分域 settings 也遗漏既有 `lookupStats` | `normalizeSession` / `splitStoredState` | ❌ 刷新断链 |
+| 多维优先级 | 拼写 → 中译英 → 辨析 → 通用；FSRS 弱进度应继续走排程型通用复习 | 推荐优先级 / `isWeakProgress` | ❌ 缺查词层 |
+
+只读结论：现有 WordCard、评分、降级与真实查词源足以闭环；断点是推荐路由和两个既有字段的持久化/归一化映射。第 30 轮只处理稳定进度中的查词薄弱，FSRS 弱进度继续走通用排程，避免查词专项改变 lapse 处置。
+
+## 第 30 轮实施后目标行
+
+| 薄弱维度 | 信号来源 | 当前入口 | 实际训练方式 | 结果写入位置 | 降级规则 | 复发规则 | 状态 |
+|---|---|---|---|---|---|---|---|
+| 查词频繁 | 结构化读取达到阈值、未被 `isLookupDemoted` 覆盖且无 FSRS 弱进度的查词词；不解析文案 | 考前薄弱冲刺；三类 Quiz 恢复后由 `lookup-recall` 接管 | 仅限本维候选，启动现有 `sprint` WordCard；初始隐藏释义，揭示后四档评分 | `rateWord` 写真实 `reviews/wordProgress/recallMs` 并保留 `sprint:*`；训练不写 `lookupStats` | 既有 `lastRating≥2 && lastReviewedAt≥lastAt` 后仅查词维度淡出 | 后续真实划词增加 count、更新 lastAt，标签与专项重新出现 | ✅ 已形成维度闭环 |
+
+本轮同时让既有 `lookupStats` 随 settings 分域持久化，并让 `sprint` 会话通过既有 `StudySession` 归一化，未新增 schema/version。冲刺 review 继续进入时间线、历史与成效统计；评分、FSRS、备份和普通入口未改。

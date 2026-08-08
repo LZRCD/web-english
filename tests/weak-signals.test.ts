@@ -1912,3 +1912,90 @@ test("维度化处置：辨析只限定目标弱词，干扰项仍来自全部�
   );
   assert.deepEqual(new Set(questions[0]?.options), new Set(["目的", "其他", "示例", "对照"]));
 });
+
+test("维度化处置：三类测验恢复后查词主动回忆接管，真实评分后淡出、再查后复发", () => {
+  const recoveredQuiz = ([
+    "listening-spelling",
+    "chinese-to-english",
+    "meaning-choice",
+  ] as QuizMode[]).flatMap((mode, index) => [
+    makeQuizAttempt(`${mode}-wrong`, mode, false, `2026-07-${20 + index}T00:00:00.000Z`),
+    makeQuizAttempt(`${mode}-correct-1`, mode, true, `2026-07-${23 + index}T00:00:00.000Z`),
+    makeQuizAttempt(`${mode}-correct-2`, mode, true, `2026-07-${26 + index}T00:00:00.000Z`),
+  ]);
+  const lookupStats = {
+    "word-10": {
+      count: 3,
+      firstAt: "2026-07-01T00:00:00.000Z",
+      lastAt: "2026-07-29T00:00:00.000Z",
+    },
+  };
+  const pending = baseInput({
+    lookupStats,
+    lookupWords: [lookupWord("word-10", 10)],
+    guessMistakes: { 10: 2 },
+    quizAttempts: recoveredQuiz,
+    wordProgress: {
+      10: { wordId: 10, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.deepEqual(buildSprintTreatmentRecommendation(pending), {
+    dimension: "lookup",
+    mode: "lookup-recall",
+    label: "词义主动回忆",
+    wordIds: [10],
+  });
+
+  const recovered = baseInput({
+    ...pending,
+    wordProgress: {
+      10: { wordId: 10, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-31T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildWordWeakSignals(10, recovered), ["猜错2次"]);
+  assert.deepEqual(buildSprintWordIds(recovered), [10]);
+
+  const relapsed = baseInput({
+    ...recovered,
+    lookupStats: {
+      "word-10": { ...lookupStats["word-10"], count: 4, lastAt: "2026-08-01T00:00:00.000Z" },
+    },
+  });
+  assert.equal(buildSprintTreatmentRecommendation(relapsed)?.mode, "lookup-recall");
+  assert.deepEqual(buildWordWeakSignals(10, relapsed), ["查过4次", "猜错2次"]);
+
+  const higherPriorityRelapse = baseInput({
+    ...relapsed,
+    quizAttempts: [
+      ...relapsed.quizAttempts,
+      makeQuizAttempt("spelling-relapsed", "listening-spelling", false, "2026-08-02T00:00:00.000Z"),
+    ],
+  });
+  assert.equal(buildSprintTreatmentRecommendation(higherPriorityRelapse)?.mode, "listening-spelling");
+});
+
+test("维度化处置：查词专项只含已学、未降级且无FSRS弱项的词", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-10": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+      "word-11": { count: 4, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+      "word-12": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+    },
+    lookupWords: [
+      lookupWord("word-10", 10),
+      lookupWord("word-11", 11),
+      lookupWord("word-12", 12),
+    ],
+    guessMistakes: { 11: 1 },
+    wordProgress: {
+      10: { wordId: 10, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-21T00:00:00.000Z" },
+      11: { wordId: 11, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-21T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.deepEqual(lookupWeakCandidateIds(input), [10, 11, 12]);
+  assert.equal(buildSprintTreatmentRecommendation(input), null);
+  assert.deepEqual(buildWordWeakSignals(11, input), ["猜错1次"]);
+});

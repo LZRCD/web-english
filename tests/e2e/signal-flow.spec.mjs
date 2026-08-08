@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 import { existsSync } from "node:fs";
 import {
   createState,
+  RADIATE_ENRICHMENT,
 } from "./fixtures.mjs";
 import {
   installStateSeed,
   openApp,
   openSettings,
   openWordbook,
+  selectText,
+  waitForApp,
 } from "./helpers.mjs";
 
 // CI 干净检出无私有红宝书数据（public/data/redbook.json 被 gitignore），
@@ -27,6 +30,48 @@ function daysAgo(days, hour = 8, minute = 0) {
   const date = new Date(Date.now() - days * 86_400_000);
   date.setHours(hour, minute, 0, 0);
   return date.toISOString();
+}
+
+async function readLookupTreatmentSnapshot(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const store = transaction.objectStore("state-domains");
+      const reviewsRequest = store.get("reviews");
+      const progressRequest = store.get("word-progress");
+      const settingsRequest = store.get("settings");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const review = reviewsRequest.result?.value?.at(-1);
+        const progress = progressRequest.result?.value
+          ?.find((item) => item.wordId === 1);
+        const settings = settingsRequest.result?.value;
+        database.close();
+        resolve({
+          review: review && {
+            rating: review.rating,
+            recallTimed: Number.isFinite(review.recallMs)
+              && review.recallMs >= 0
+              && review.recallMs < 60_000,
+            sprintAttributed: review.sessionId?.startsWith("sprint:") ?? false,
+          },
+          progress: progress && {
+            lastRating: progress.lastRating,
+            lastReviewedAt: progress.lastReviewedAt,
+          },
+          lookupCount: settings?.lookupStats?.radiate?.count,
+          lookupLastAt: settings?.lookupStats?.radiate?.lastAt,
+          activeSession: settings?.activeSession && {
+            title: settings.activeSession.title,
+            wordIds: settings.activeSession.wordIds,
+          },
+        });
+      };
+    };
+  }));
 }
 
 function sprintSeedState() {
@@ -323,6 +368,48 @@ function meaningChoiceTreatmentSeedState() {
   });
 }
 
+function lookupRecallTreatmentSeedState() {
+  const examDate = new Date(Date.now() + 5 * 86_400_000)
+    .toISOString().slice(0, 10);
+  return createState({
+    examDate,
+    enrichments: RADIATE_ENRICHMENT,
+    lookupWords: [{
+      id: 9_000_000_001,
+      linkedWordId: 1,
+      query: "radiate",
+      kind: "word",
+      phonetic: "/ˈreɪdieɪt/",
+      part: "v.",
+      meaning: "散发",
+      note: "",
+      source: "redbook",
+      addedAt: daysAgo(10, 8, 0),
+    }],
+    lookupStats: {
+      radiate: {
+        count: 3,
+        firstAt: daysAgo(10, 8, 0),
+        lastAt: daysAgo(2, 8, 0),
+      },
+    },
+    reviews: [{
+      id: "lookup-learned",
+      wordId: 1,
+      word: "radiate",
+      rating: 2,
+      kind: "new",
+      intervalMs: 86_400_000,
+      dueAt: daysAgo(4, 8, 0),
+      reviewedAt: daysAgo(5, 8, 0),
+      recallMs: 4_000,
+      section: "必考词",
+      unit: 1,
+    }],
+    started: true,
+  });
+}
+
 test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结果", async ({ context, page }) => {
   await installStateSeed(context, spellingTreatmentSeedState());
   await openApp(page);
@@ -535,6 +622,65 @@ test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同�
   await expect(page.locator(".sprint-history")).toContainText("覆盖 1 个不同单词");
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("熟词僻义", { exact: true })).toBeVisible();
+});
+
+test("信号联动：查词薄弱进入主动回忆，真实评分淡出并在再次查词后复发", async ({ context, page }) => {
+  const seededState = lookupRecallTreatmentSeedState();
+  const initialLookupLastAt = seededState.lookupStats.radiate.lastAt;
+  await installStateSeed(context, seededState);
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "radiate" })).toBeVisible();
+  await expect(page.locator(".meaning-panel")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /认识/ })).toBeHidden();
+
+  await expect.poll(async () => (await readLookupTreatmentSnapshot(page)).activeSession)
+    .toEqual({ title: "考前薄弱冲刺 · 词义主动回忆", wordIds: [1] });
+  await page.reload();
+  await waitForApp(page);
+  await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
+  await expect(page.locator(".meaning-panel")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await expect(page.locator(".meaning-panel")).toContainText("散发");
+  await page.getByRole("button", { name: /认识/ }).click();
+
+  await expect.poll(async () => readLookupTreatmentSnapshot(page)).toMatchObject({
+    review: { rating: 2, recallTimed: true, sprintAttributed: true },
+    progress: { lastRating: 2 },
+    lookupCount: 3,
+    lookupLastAt: initialLookupLastAt,
+  });
+  await page.getByRole("button", { name: "返回轨迹页" }).click();
+  await expect(page.getByRole("button", { name: /开始考前薄弱冲刺/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "词环首页" }).click();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await selectText(
+    page.getByText("Stars radiate energy into space.", { exact: true }),
+    "radiate",
+  );
+  const popup = page.getByRole("dialog", { name: "划词查询：radiate" });
+  await expect(popup).toContainText("已加入划词集");
+  await expect.poll(async () => (await readLookupTreatmentSnapshot(page)).lookupCount).toBe(4);
+  await expect.poll(async () => (await readLookupTreatmentSnapshot(page)).lookupLastAt)
+    .not.toBe(initialLookupLastAt);
+  await popup.getByRole("button", { name: "关闭划词查询" }).click();
+
+  await page.reload();
+  await waitForApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
 });
 
 test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({ context, page }) => {

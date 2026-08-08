@@ -78,6 +78,7 @@ type StateSettings = Pick<
   | "schemaVersion"
   | "activeSession"
   | "lookupWords"
+  | "lookupStats"
   | "familiarMeanings"
   | "started"
   | "dailyGoal"
@@ -202,6 +203,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       schemaVersion: state.schemaVersion,
       activeSession: state.activeSession,
       lookupWords: state.lookupWords,
+      lookupStats: state.lookupStats,
       familiarMeanings: state.familiarMeanings,
       started: state.started,
       dailyGoal: state.dailyGoal,

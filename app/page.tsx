@@ -1516,6 +1516,14 @@ export default function Home() {
   function startSprintSession() {
     if (sprintTreatment) {
       const now = new Date();
+      if (sprintTreatment.mode === "lookup-recall") {
+        startSession(
+          "sprint",
+          "考前薄弱冲刺 · 词义主动回忆",
+          sprintTreatment.wordIds,
+        );
+        return;
+      }
       setActiveQuiz({
         ...createQuizSession(sprintTreatment.mode, now.getTime(), now),
         id: `sprint:${now.toISOString()}`,

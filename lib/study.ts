@@ -662,6 +662,7 @@ function normalizeSession(value: unknown): StudySession | undefined {
       "stubborn",
       "search",
       "lookups",
+      "sprint",
       "reinforcement",
     ].includes(String(item.kind))
     || !Array.isArray(item.wordIds)
@@ -680,6 +681,7 @@ function normalizeSession(value: unknown): StudySession | undefined {
     "stubborn",
     "search",
     "lookups",
+    "sprint",
   ].includes(String(item.originKind))
     ? item.originKind as StudySession["originKind"]
     : undefined;
