@@ -61,6 +61,19 @@ export type WeakWordProfile = {
   recall?: WordRecallStats;
 };
 
+/** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
+export type StabilizedDimension = {
+  key:
+    | "lookup"
+    | "lapse"
+    | "slow-recall"
+    | "quiz-spelling"
+    | "quiz-c2e"
+    | "quiz-choice";
+  /** 学习卡合并展示用的简短名称。 */
+  label: string;
+};
+
 /** 按词聚合回忆耗时：取最近 sampleCount 次合法评分的平均/中位数/最新值 */
 export function wordRecallStats(
   reviews: readonly ReviewEvent[],
@@ -403,17 +416,70 @@ export function isLookupDemoted(
 }
 
 /**
- * 查词薄弱已稳定：查询次数达到当前薄弱阈值，随后满足降级条件，且无其他当前薄弱信号。
+ * 已稳定维度：必须有当前阈值下的真实历史弱点证据、满足该维度既有恢复条件，
+ * 且统一画像已无任何当前薄弱信号。猜错没有恢复规则，因此不参与派生。
  */
+export function buildWordStabilizedDimensions(
+  wordId: number,
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): StabilizedDimension[] {
+  if (buildWordWeakSignals(wordId, input, undefined, thresholds).length > 0) {
+    return [];
+  }
+
+  const dimensions: StabilizedDimension[] = [];
+  const stat = lookupStatForWordId(wordId, input);
+  if (
+    stat
+    && stat.count >= thresholds.lookupWeak
+    && isLookupDemoted(wordId, stat, input)
+  ) {
+    dimensions.push({ key: "lookup", label: "查词" });
+  }
+
+  const progress = input.wordProgress[wordId];
+  if ((progress?.lapseCount ?? 0) > 0 && !isWeakProgress(progress)) {
+    dimensions.push({ key: "lapse", label: "遗忘" });
+  }
+
+  if (
+    slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs) > 0
+    && isSlowRecallRecovered(input.reviews, wordId, thresholds.slowRecallMs)
+  ) {
+    dimensions.push({ key: "slow-recall", label: "慢回忆" });
+  }
+
+  const quizErrors = quizErrorCounts(input.quizAttempts, wordId);
+  if (
+    (quizErrors["listening-spelling"] ?? 0) > 0
+    && isQuizModeRecovered(input.quizAttempts, wordId, "listening-spelling")
+  ) {
+    dimensions.push({ key: "quiz-spelling", label: "拼写" });
+  }
+  if (
+    (quizErrors["chinese-to-english"] ?? 0) > 0
+    && isQuizModeRecovered(input.quizAttempts, wordId, "chinese-to-english")
+  ) {
+    dimensions.push({ key: "quiz-c2e", label: "中译英" });
+  }
+  if (
+    (quizErrors["meaning-choice"] ?? 0) > 0
+    && isQuizModeRecovered(input.quizAttempts, wordId, "meaning-choice")
+  ) {
+    dimensions.push({ key: "quiz-choice", label: "辨析" });
+  }
+  return dimensions;
+}
+
+/** 查词维度已稳定；保留既有布尔接口，判定统一委托给多维派生。 */
 export function isLookupStabilized(
   wordId: number,
   input: WeakSignalInput,
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ) {
-  const stat = lookupStatForWordId(wordId, input);
-  if (!stat || stat.count < thresholds.lookupWeak) return false;
-  if (!isLookupDemoted(wordId, stat, input)) return false;
-  return buildWordWeakSignals(wordId, input, undefined, thresholds).length === 0;
+  return buildWordStabilizedDimensions(wordId, input, thresholds)
+    .some((dimension) => dimension.key === "lookup");
 }
 
 /** 单次冲刺记录（由评分日志按 sessionId 分组派生） */

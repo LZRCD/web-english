@@ -24,6 +24,7 @@ import {
   buildWeakDimensionTrend,
   buildWeakDimensionTrendSeries,
   buildWeakProfiles,
+  buildWordStabilizedDimensions,
   buildWordSignalTimeline,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
@@ -1326,4 +1327,145 @@ test("查词已稳定：实时使用当前查询薄弱阈值", () => {
 
   assert.equal(isLookupStabilized(1, input, thresholdThree), true);
   assert.equal(isLookupStabilized(1, input, thresholdFour), false);
+});
+
+test("统一已稳定维度：查词、lapse、慢回忆与三类测验分别复用既有恢复条件", () => {
+  const recoveredQuiz = (mode: QuizMode) => [
+    makeQuizAttempt(`${mode}-wrong`, mode, false, "2026-07-20T00:00:00.000Z"),
+    makeQuizAttempt(`${mode}-correct-1`, mode, true, "2026-07-21T00:00:00.000Z"),
+    makeQuizAttempt(`${mode}-correct-2`, mode, true, "2026-07-22T00:00:00.000Z"),
+  ];
+  const cases: Array<[WeakSignalInput, string]> = [
+    [baseInput({
+      lookupStats: {
+        "word-10": { count: 2, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-20T00:00:00.000Z" },
+      },
+      lookupWords: [lookupWord("word-10", 10)],
+      wordProgress: {
+        10: { wordId: 10, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-23T00:00:00.000Z" },
+      } as unknown as WordProgressMap,
+    }), "lookup"],
+    [baseInput({
+      wordProgress: {
+        10: {
+          wordId: 10,
+          lapseCount: 1,
+          lastRating: 2,
+          lastReviewedAt: "2026-07-23T00:00:00.000Z",
+          consecutiveSuccesses: 2,
+        },
+      } as unknown as WordProgressMap,
+    }), "lapse"],
+    [baseInput({
+      reviews: [
+        makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000),
+        makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000),
+        makeReview(10, 3, "2026-07-22T00:00:00.000Z", 7_000),
+      ],
+    }), "slow-recall"],
+    [baseInput({ quizAttempts: recoveredQuiz("listening-spelling") }), "quiz-spelling"],
+    [baseInput({ quizAttempts: recoveredQuiz("chinese-to-english") }), "quiz-c2e"],
+    [baseInput({ quizAttempts: recoveredQuiz("meaning-choice") }), "quiz-choice"],
+  ];
+
+  for (const [input, key] of cases) {
+    assert.deepEqual(
+      buildWordStabilizedDimensions(10, input).map((dimension) => dimension.key),
+      [key],
+    );
+  }
+});
+
+test("统一已稳定维度：多维恢复按固定顺序合并输出", () => {
+  const quizAttempts = ([
+    "listening-spelling",
+    "chinese-to-english",
+    "meaning-choice",
+  ] as QuizMode[]).flatMap((mode, index) => [
+    makeQuizAttempt(`${mode}-wrong`, mode, false, `2026-07-${20 + index}T00:00:00.000Z`),
+    makeQuizAttempt(`${mode}-correct-1`, mode, true, `2026-07-${23 + index}T00:00:00.000Z`),
+    makeQuizAttempt(`${mode}-correct-2`, mode, true, `2026-07-${26 + index}T00:00:00.000Z`),
+  ]);
+  const input = baseInput({
+    lookupStats: {
+      "word-10": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-19T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-10", 10)],
+    reviews: [
+      makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000),
+      makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000),
+      makeReview(10, 3, "2026-07-22T00:00:00.000Z", 7_000),
+    ],
+    quizAttempts,
+    wordProgress: {
+      10: {
+        wordId: 10,
+        lapseCount: 1,
+        lastRating: 3,
+        lastReviewedAt: "2026-07-23T00:00:00.000Z",
+        consecutiveSuccesses: 2,
+      },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.deepEqual(buildWordStabilizedDimensions(10, input), [
+    { key: "lookup", label: "查词" },
+    { key: "lapse", label: "遗忘" },
+    { key: "slow-recall", label: "慢回忆" },
+    { key: "quiz-spelling", label: "拼写" },
+    { key: "quiz-c2e", label: "中译英" },
+    { key: "quiz-choice", label: "辨析" },
+  ]);
+});
+
+test("统一已稳定维度：当前仍有任一弱点、从未薄弱或只有猜错时不显示", () => {
+  const recoveredSlowInput = baseInput({
+    reviews: [
+      makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000),
+      makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000),
+      makeReview(10, 3, "2026-07-22T00:00:00.000Z", 7_000),
+    ],
+  });
+
+  assert.deepEqual(buildWordStabilizedDimensions(10, baseInput()), []);
+  assert.deepEqual(buildWordStabilizedDimensions(10, baseInput({
+    reviews: [
+      makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000),
+      makeReview(10, 3, "2026-07-22T00:00:00.000Z", 7_000),
+    ],
+  })), []);
+  assert.deepEqual(buildWordStabilizedDimensions(10, baseInput({
+    guessMistakes: { 10: 1 },
+  })), []);
+  assert.deepEqual(buildWordStabilizedDimensions(10, {
+    ...recoveredSlowInput,
+    guessMistakes: { 10: 1 },
+  }), []);
+});
+
+test("统一已稳定维度：阈值变化不制造历史弱点，复发后立即撤回提示", () => {
+  const recovered = baseInput({
+    reviews: [
+      makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000),
+      makeReview(10, 2, "2026-07-21T00:00:00.000Z", 12_000),
+      makeReview(10, 3, "2026-07-22T00:00:00.000Z", 11_000),
+    ],
+  });
+  const threshold15 = { ...DEFAULT_WEAK_THRESHOLDS, slowRecallMs: 15_000 };
+  const threshold20 = { ...DEFAULT_WEAK_THRESHOLDS, slowRecallMs: 20_000 };
+  const threshold10 = { ...DEFAULT_WEAK_THRESHOLDS, slowRecallMs: 10_000 };
+
+  assert.deepEqual(buildWordStabilizedDimensions(10, recovered, threshold15)
+    .map((dimension) => dimension.key), ["slow-recall"]);
+  assert.deepEqual(buildWordStabilizedDimensions(10, recovered, threshold20), []);
+  assert.deepEqual(buildWordStabilizedDimensions(10, recovered, threshold10), []);
+
+  const relapsed = {
+    ...recovered,
+    reviews: [
+      ...recovered.reviews,
+      makeReview(10, 2, "2026-07-23T00:00:00.000Z", 20_000),
+    ],
+  };
+  assert.deepEqual(buildWordStabilizedDimensions(10, relapsed, threshold15), []);
 });

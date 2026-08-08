@@ -70,15 +70,16 @@ import {
   buildScopedSprintWordIds,
   buildWeakConcentration,
   buildWeakDimensionTrendSeries,
+  buildWordStabilizedDimensions,
   buildWordSignalTimeline,
   buildWeakProfiles,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
-  isLookupStabilized,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
   type WeakSignalInput,
+  type StabilizedDimension,
   type WeakThresholds,
   type WordRecallStats,
 } from "../lib/weak-signals";
@@ -428,10 +429,11 @@ export default function Home() {
       : lookupStatForWordId(current.id, weakSignalInput),
     [current.id, weakSignalInput],
   );
-  // 学习卡「已稳定」正向反馈：曾因查词被标记薄弱，现已降级稳定且无其他信号
-  const currentLookupStabilized = useMemo(
-    () => current.id !== undefined
-      && isLookupStabilized(current.id, weakSignalInput, weakThresholds),
+  // 学习卡「已稳定」正向反馈：历史弱点满足各自恢复条件，且当前画像已清零
+  const currentStabilizedDimensions = useMemo<StabilizedDimension[]>(
+    () => current.id === undefined
+      ? []
+      : buildWordStabilizedDimensions(current.id, weakSignalInput, weakThresholds),
     [current.id, weakSignalInput, weakThresholds],
   );
   // 薄弱维度近 4 周趋势（轨迹页周报下方）
@@ -1984,7 +1986,7 @@ export default function Home() {
                         .map((event) => `${new Date(event.at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} ${event.detail}`)
                         .join("\n") || undefined
                 }
-                lookupStabilized={currentLookupStabilized || undefined}
+                stabilizedDimensions={currentStabilizedDimensions}
                 onFocusSourceWord={focusSourceWord}
                 activeSession={activeSession}
                 newCount={stats.newCount}
