@@ -31,6 +31,7 @@ import {
   buildSprintRecordWordIds,
   buildSprintRelapse,
   buildSprintRelapseSeries,
+  buildSprintRetentionSeries,
   buildSprintSummary,
   buildSprintTreatmentRecommendation,
   buildStubbornTreatmentRecommendation,
@@ -1503,6 +1504,162 @@ test("冲刺后当前仍薄弱 4 周：空周语义明确，当前画像更新�
   assert.deepEqual(existingSingleWeek?.relapsedIds, [1]);
   assert.equal(recoveredSeries.at(-1)?.relapse?.relapsedCount, 0);
   assert.deepEqual(recoveredSeries.at(-1)?.relapse?.relapsedIds, []);
+});
+
+function retentionReview(
+  wordId: number,
+  rating: 0 | 1 | 2 | 3,
+  reviewedAt: string,
+  id: string,
+  sessionId?: string,
+  recallMs?: number,
+) {
+  return {
+    ...makeReview(wordId, rating, reviewedAt, recallMs),
+    id,
+    ...(sessionId === undefined ? {} : { sessionId }),
+  };
+}
+
+test("首次正常复习保持：保持成功/失败、未观察、下一冲刺截断与双分母独立", () => {
+  const reviews = [
+    retentionReview(1, 2, "2026-07-14T08:00:00+08:00", "w1-anchor", "sprint:a", 10_000),
+    retentionReview(1, 2, "2026-07-15T08:00:00+08:00", "w1-follow", undefined, 6_000),
+    retentionReview(2, 3, "2026-07-14T08:00:00+08:00", "w2-anchor", "sprint:a", 8_000),
+    retentionReview(2, 1, "2026-07-16T08:00:00+08:00", "w2-follow", "today:b"),
+    retentionReview(3, 2, "2026-07-14T08:00:00+08:00", "w3-anchor", "sprint:a", 7_000),
+    retentionReview(4, 2, "2026-07-14T08:00:00+08:00", "w4-anchor", "sprint:a", 9_000),
+    retentionReview(4, 1, "2026-07-15T12:00:00+08:00", "w4-next", "sprint:next", 11_000),
+    retentionReview(4, 3, "2026-07-16T12:00:00+08:00", "w4-too-late", undefined, 5_000),
+    retentionReview(5, 1, "2026-07-14T08:00:00+08:00", "w5-failed", "sprint:a", 9_000),
+  ];
+  const retention = buildSprintRetentionSeries(
+    reviews,
+    new Date("2026-08-10T12:00:00+08:00"),
+  )[0].retention;
+
+  assert.ok(retention);
+  assert.deepEqual(retention, {
+    cohortWordCount: 4,
+    followedUpCount: 2,
+    unobservedCount: 2,
+    truncatedCount: 1,
+    coverageRate: 50,
+    retainedCount: 1,
+    retentionRate: 50,
+    followUpDelayMs: 36 * 60 * 60 * 1000,
+    pairedRecall: {
+      sampleCount: 1,
+      sprintAverageRecallMs: 10_000,
+      followUpAverageRecallMs: 6_000,
+      changeMs: -4_000,
+    },
+  });
+});
+
+test("首次正常复习保持：最近成功锚点只归一次，同毫秒按 id 总序且输入乱序", () => {
+  const sameMs = "2026-08-05T08:00:00+08:00";
+  const currentWeekTieMs = "2026-08-10T08:00:00+08:00";
+  const reviews = [
+    // word 10 跨周只归最近锚点；quiz:* review 是有效随访。
+    retentionReview(10, 2, "2026-07-15T08:00:00+08:00", "old", "sprint:old", 20_000),
+    retentionReview(10, 3, "2026-07-22T08:00:00+08:00", "new", "sprint:new", 12_000),
+    retentionReview(10, 2, "2026-07-23T08:00:00+08:00", "quiz-follow", "quiz:choice", 8_000),
+    // word 11 同一 session 多条成功；总序最大 m-anchor 才是锚点，z-follow 严格在后。
+    retentionReview(11, 2, sameMs, "z-follow", "quiz:spelling", 4_000),
+    retentionReview(11, 2, sameMs, "a-anchor", "sprint:same", 10_000),
+    retentionReview(11, 3, sameMs, "m-anchor", "sprint:same", 8_000),
+    // word 12 同毫秒下一 sprint 的 id 更小，先截断，后续 quiz review 不得跨越。
+    retentionReview(12, 2, "2026-08-04T08:00:00+08:00", "w12-anchor", "sprint:base", 9_000),
+    retentionReview(12, 3, currentWeekTieMs, "m-next-sprint", "sprint:next", 7_000),
+    retentionReview(12, 2, currentWeekTieMs, "z-quiz", "quiz:choice", 5_000),
+    // word 13 quiz review 先发生，之后同毫秒 sprint 不影响已观察结果。
+    retentionReview(13, 2, "2026-08-04T08:00:00+08:00", "w13-anchor", "sprint:base", 9_000),
+    retentionReview(13, 1, currentWeekTieMs, "a-quiz", "quiz:choice", 6_000),
+    retentionReview(13, 1, currentWeekTieMs, "z-next-sprint", "sprint:next", 7_000),
+  ].reverse();
+  const series = buildSprintRetentionSeries(
+    reviews,
+    new Date("2026-08-10T12:00:00+08:00"),
+  );
+
+  assert.deepEqual(series.map((week) => week.retention?.cohortWordCount ?? null), [null, 1, null, 3]);
+  assert.equal(series[1].retention?.followedUpCount, 1);
+  assert.equal(series[1].retention?.retentionRate, 100);
+  assert.equal(series[3].retention?.followedUpCount, 2);
+  assert.equal(series[3].retention?.retainedCount, 1);
+  assert.equal(series[3].retention?.truncatedCount, 1);
+  assert.equal(series[3].retention?.retentionRate, 50);
+  assert.equal(series[3].retention?.pairedRecall.sampleCount, 2);
+});
+
+test("首次正常复习保持：无效/未来事件排除，quizAttempt 不充当 review，合法 0 测时保留", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const reviews = [
+    retentionReview(20, 2, "2026-08-04T08:00:00+08:00", "w20-anchor", "sprint:base", 1_000),
+    retentionReview(20, 2, "invalid", "w20-invalid", "quiz:choice", 500),
+    retentionReview(20, 2, "2026-08-11T08:00:00+08:00", "w20-future", undefined, 500),
+    retentionReview(21, 2, "2026-08-04T08:00:00+08:00", "w21-anchor", "sprint:base", -1),
+    retentionReview(21, 2, "2026-08-05T08:00:00+08:00", "w21-follow", undefined, Number.POSITIVE_INFINITY),
+    retentionReview(22, 2, "2026-08-04T08:00:00+08:00", "w22-anchor", "sprint:base", 0),
+    retentionReview(22, 3, "2026-08-05T08:00:00+08:00", "w22-follow", "quiz:c2e", 0),
+    retentionReview(23, 2, "2026-08-04T08:00:00+08:00", "w23-anchor", "sprint:base", 4_000),
+    retentionReview(24, 2, "invalid", "invalid-anchor", "sprint:bad", 1_000),
+    retentionReview(25, 2, "2026-08-11T08:00:00+08:00", "future-anchor", "sprint:future", 1_000),
+  ];
+  const input = baseInput({
+    reviews,
+    quizAttempts: [{
+      id: "attempt-only",
+      wordId: 23,
+      mode: "meaning-choice",
+      correct: true,
+      answeredAt: "2026-08-05T08:00:00+08:00",
+    } as QuizAttempt],
+  });
+  const retention = buildSprintRetentionSeries(input.reviews, now).at(-1)?.retention;
+
+  assert.ok(retention);
+  assert.equal(retention.cohortWordCount, 4);
+  assert.equal(retention.followedUpCount, 2);
+  assert.equal(retention.unobservedCount, 2);
+  assert.equal(retention.retentionRate, 100);
+  assert.deepEqual(retention.pairedRecall, {
+    sampleCount: 1,
+    sprintAverageRecallMs: 0,
+    followUpAverageRecallMs: 0,
+    changeMs: 0,
+  });
+});
+
+test("首次正常复习保持：空 cohort 与零观察保持 null，不伪造 0", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  assert.deepEqual(
+    buildSprintRetentionSeries([], now).map((week) => week.retention),
+    [null, null, null, null],
+  );
+  const onlyAnchor = [
+    retentionReview(1, 2, "2026-08-04T08:00:00+08:00", "anchor", "sprint:only", 2_000),
+  ];
+  const retention = buildSprintRetentionSeries(onlyAnchor, now).at(-1)?.retention;
+  assert.ok(retention);
+  assert.equal(retention.coverageRate, 0);
+  assert.equal(retention.retentionRate, null);
+  assert.equal(retention.followUpDelayMs, null);
+  assert.deepEqual(retention.pairedRecall, {
+    sampleCount: 0,
+    sprintAverageRecallMs: null,
+    followUpAverageRecallMs: null,
+    changeMs: null,
+  });
+
+  const failedFollowUp = [
+    retentionReview(2, 2, "2026-08-04T08:00:00+08:00", "failed-anchor", "sprint:only"),
+    retentionReview(2, 1, "2026-08-05T08:00:00+08:00", "failed-follow"),
+  ];
+  const failedRetention = buildSprintRetentionSeries(failedFollowUp, now).at(-1)?.retention;
+  assert.ok(failedRetention);
+  assert.equal(failedRetention.retentionRate, 0);
 });
 
 test("薄弱降级贯通：答对且查询不再增长 → 查词标签消失，其他信号保留", () => {

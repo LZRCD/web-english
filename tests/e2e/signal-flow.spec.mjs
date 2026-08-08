@@ -33,6 +33,15 @@ function daysAgo(days, hour = 8, minute = 0) {
   return date.toISOString();
 }
 
+/** 以当前本地周一为基准生成周内时刻；weeksBefore=1 是最近完整周。 */
+function localWeekTime(weeksBefore, dayOffset, hour = 8, minute = 0) {
+  const date = new Date();
+  const mondayOffset = date.getDay() === 0 ? 6 : date.getDay() - 1;
+  date.setDate(date.getDate() - mondayOffset - weeksBefore * 7 + dayOffset);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
 async function readLookupTreatmentSnapshot(page) {
   return page.evaluate(() => new Promise((resolve, reject) => {
     const request = globalThis.indexedDB.open("wordloop-local");
@@ -1472,4 +1481,79 @@ test("信号联动：学习卡非冲刺态薄弱提示与一键补漏", async ({
   await expect(page.getByText("本词存在薄弱信号：")).toBeVisible();
   // 会话名应为「今日任务 · 补漏」
   await expect(page.getByText(/今日任务 · 补漏/).first()).toBeVisible();
+});
+
+function sprintRetentionSeedState() {
+  const review = ({
+    id,
+    wordId,
+    rating,
+    reviewedAt,
+    sessionId,
+    recallMs,
+  }) => ({
+    id,
+    wordId,
+    word: `word-${wordId}`,
+    rating,
+    kind: "review",
+    intervalMs: 600_000,
+    dueAt: new Date(new Date(reviewedAt).getTime() + 600_000).toISOString(),
+    reviewedAt,
+    ...(sessionId ? { sessionId } : {}),
+    ...(recallMs === undefined ? {} : { recallMs }),
+    section: "必考词",
+    unit: 1,
+  });
+  const anchorAt = localWeekTime(1, 1, 8, 0);
+  const currentWeekSprintAt = localWeekTime(0, 0, 0, 1);
+  return createState({
+    reviews: [
+      review({ id: "retained-anchor", wordId: 1, rating: 2, reviewedAt: anchorAt, sessionId: "sprint:retention", recallMs: 10_000 }),
+      review({ id: "retained-follow", wordId: 1, rating: 2, reviewedAt: localWeekTime(1, 2, 8, 0), sessionId: "quiz:meaning-choice", recallMs: 6_000 }),
+      review({ id: "failed-anchor", wordId: 2, rating: 3, reviewedAt: anchorAt, sessionId: "sprint:retention", recallMs: 8_000 }),
+      review({ id: "failed-follow", wordId: 2, rating: 1, reviewedAt: localWeekTime(1, 3, 8, 0) }),
+      review({ id: "unobserved-anchor", wordId: 3, rating: 2, reviewedAt: anchorAt, sessionId: "sprint:retention", recallMs: 7_000 }),
+      review({ id: "truncated-anchor", wordId: 4, rating: 2, reviewedAt: anchorAt, sessionId: "sprint:retention", recallMs: 9_000 }),
+      review({ id: "truncated-next-sprint", wordId: 4, rating: 2, reviewedAt: currentWeekSprintAt, sessionId: "sprint:next", recallMs: 7_000 }),
+      review({ id: "truncated-too-late", wordId: 4, rating: 3, reviewedAt: localWeekTime(0, 0, 1, 0), recallMs: 5_000 }),
+      review({ id: "null-anchor", wordId: 5, rating: 2, reviewedAt: localWeekTime(4, 1, 8, 0), sessionId: "sprint:null", recallMs: 4_000 }),
+    ],
+    quizAttempts: [{
+      id: "attempt-must-not-follow",
+      wordId: 3,
+      mode: "meaning-choice",
+      correct: true,
+      recallMs: 3_000,
+      answeredAt: localWeekTime(1, 2, 9, 0),
+      appliedToSchedule: false,
+    }],
+    wordProgress: {},
+  });
+}
+
+test("信号联动：冲刺后首次正常复习保持披露覆盖、截断与配对测时", async ({ context, page }) => {
+  await installStateSeed(context, sprintRetentionSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "每一次回忆都算数" }),
+  ).toBeVisible();
+
+  const retention = page.locator('[aria-label="冲刺后首次正常复习保持 4 周"]');
+  await expect(retention).toBeVisible();
+  await expect(retention).toContainText("未观察不计为失败");
+  await expect(retention).toContainText("覆盖 50% · 保持 50%");
+  await expect(retention).toContainText("cohort 4 · 已观察 2 · 保持 1");
+  await expect(retention).toContainText("未观察 2 · 截断 1 · 平均间隔 1.5天");
+  await expect(retention).toContainText("配对测时 1 词");
+  await expect(retention).toContainText("冲刺 10.0s → 随访 6.0s");
+  await expect(retention).toContainText("随访较冲刺快 4.0s");
+  await expect(retention).toContainText("覆盖 0% · 保持 —");
+  await expect(retention).toContainText("cohort 1 · 已观察 0 · 保持 0");
+  await expect(retention).toContainText("未观察 1 · 截断 0 · 平均间隔 —");
+  await expect(retention).toContainText("配对测时 0 词 · 无配对样本");
 });

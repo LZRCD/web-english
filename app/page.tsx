@@ -65,6 +65,7 @@ import {
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintRelapseSeries,
+  buildSprintRetentionSeries,
   buildSprintSummary,
   buildSprintTreatmentRecommendation,
   buildStubbornTreatmentRecommendation,
@@ -496,6 +497,10 @@ export default function Home() {
       weakThresholds,
     ),
     [reviews, weakSignalInput, clock, weakThresholds],
+  );
+  const sprintRetentionSeries = useMemo(
+    () => buildSprintRetentionSeries(reviews, new Date(clock)),
+    [reviews, clock],
   );
   const sprintTreatment = useMemo(
     () => buildSprintTreatmentRecommendation(weakSignalInput, weakThresholds),
@@ -2217,6 +2222,7 @@ export default function Home() {
             weakConcentration={weakConcentration}
             sprintEffectivenessSeries={sprintEffectivenessSeries}
             sprintRelapseSeries={sprintRelapseSeries}
+            sprintRetentionSeries={sprintRetentionSeries}
             sprintRelapse={sprintRelapse}
             sprintRelapseWords={sprintRelapseWords}
             onSprintRelapse={startSprintFromRelapse}

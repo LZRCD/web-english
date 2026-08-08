@@ -1,71 +1,72 @@
-# 下一轮执行 Prompt：第 38 轮冲刺后首次正常复习保持
+# 下一轮执行 Prompt：第 39 轮阶段 C 未来处置维度归因只读审计
 
 ## 当前现场
 
-- 分支：`codex/follow-up-hardening`
-- 第 37 轮提交前 HEAD：`b189ab9`；第 37 轮处于待提交状态，最终 HEAD 以包含本文件的最新 Git 提交为准。
-- 最新验证：定向 insights 8/8；lint、typecheck 通过；`npm test` 197/197；signal-flow E2E 16/16。
-- 工作区交接目标：第 37 轮提交后仅保留用户未跟踪 `1.txt`；固定端口 3000 已释放。
+- 分支：`codex/follow-up-hardening`。
+- 第 38 轮提交前 HEAD：`2059922`；第 38 轮处于待提交状态，最终 HEAD 以包含本文件的最新中文提交为准。
+- 最新自动验证：`tests/weak-signals.test.ts` 81/81；lint、typecheck 通过；`npm test` 201/201，含生产构建。
+- signal-flow E2E 17/17（42.8s）：既有 16 条语义保持，第 38 轮新增 1 条稳定完整周 seed，覆盖保持成功/失败、未观察、成功下一 sprint 截断、覆盖/保持/间隔/null/paired recall、`quiz:*` review 与 quizAttempt 不干扰。
+- 工作区交接：用户未跟踪 `1.txt` 与并发文件 `docs/architecture-analysis-2026-08-09.md` 绝不修改或暂存；固定端口 3000/3001 无 LISTENING，本轮 PID 已精确清理。审批限制导致 `.codex-round38-20260809-010645.err.log` 与 `.out.log` 无法删除，两者保留为未跟踪且不得暂存。
 
-## 阶段 A 结论与阶段 B 入口
+## 已完成阶段与数据边界
 
-- 阶段 A 已完成：冲刺活动量、当场达标、同词配对回忆观察、截至当前仍薄弱和近 7 天全局评分事件占比均已明确分子、分母、窗口、权重、空样本及不能证明的结论。
-- 猜错仍只有累计次数，无真实事件时间、恢复或复发数据源；禁止无 schema 伪造，但不阻止进入阶段 B。
-- 第 38 轮只建立阶段 B 的“冲刺后首次正常复习保持”观察链。必须先只读审计 B1/B2/B3 的现有数据可行性；只有 `reviews[].wordId/reviewedAt/rating/sessionId/recallMs` 足以完整证明规则时才实现，不新增 schema。
+- 阶段 A 已完成：冲刺活动量、当场达标、同词配对回忆观察、截至当前仍薄弱和近 7 天全局评分事件占比，均已明确分子、分母、窗口、权重、空样本与不能证明的结论。
+- 阶段 B 已完成：`buildSprintRetentionSeries` 在最近 4 个完整处置周内按每词窗口内最近成功 sprint review 建 cohort；下一 sprint 截断，首条非 sprint review（含 `quiz:*` review、无 sessionId 旧 review）是随访；覆盖/保持/未观察/截断/实际间隔与 paired recall 分母独立披露，quizAttempt 不参与。
+- 猜错仍只有累计次数，无真实事件时间、恢复或复发源；禁止伪造，但不阻止阶段 A/B 完成。
+- 第 39 轮只进入阶段 C 的“未来处置维度归因”只读审计，不预设现有 sessionId 一定足够，不实现分维度指标、自适应或 schema。
 
 ## 唯一目标
 
-对每个在冲刺中当场达标的词，寻找该次成功冲刺之后、下一次冲刺之前的首条非 sprint review，诚实报告保持结果、随访覆盖和实际间隔；有合法测时的配对样本另报告回忆耗时变化。未随访必须保持“未观察”，不得进入失败分母。
+只读判断现有结构化 `sprint:*` sessionId 能否对“未来新发生的处置”无歧义标识处置维度，并与第 38 轮首次正常 review 链安全连接；形成逐模式证据矩阵和一个明确的实现/停止结论。除审计文档与下一轮 prompt 外不改业务代码。
 
 ## 只读审计顺序
 
-1. 核对 Git 状态、分支、HEAD、最近历史、端口 3000、历史 PID，确认只有 `1.txt` 未跟踪。
-2. 追踪 `ReviewEvent`、`sessionId`、冲刺识别、历史去重/排序和现有周报/轨迹消费者；确认普通 review 能由“非 `sprint:*`”稳定识别，`quizAttempts` 不参与。
-3. 用最小反例逐项证明 B1/B2/B3：同词多条冲刺、同一冲刺多次达标、冲刺后先有普通 review、先有下一次冲刺、没有后续、乱序、同毫秒、非法时间、缺失/非法 `recallMs`。
-4. 若现有字段不能无歧义建立链，立即停止实现，只提交审计证据和所缺真实字段；禁止推断、补写或伪造事件。
+1. 核对 Git 状态、分支、HEAD、最近历史、保护文件、端口 3000/3001、历史 PID/日志；确认第 38 轮提交与实际测试证据。
+2. 从所有创建入口追踪 sprint sessionId：通用冲刺、历史再跑、当前仍薄弱再冲刺、分册/单元冲刺、三类 Quiz 专项、查词主动回忆、顽固词三阶段；列出创建函数、编码格式、解析函数、刷新恢复、ReviewEvent 写入与历史消费者。
+3. 对每种未来处置模式验证：sessionId 是否显式编码维度、是否可稳定解析、是否会被旧通用 `sprint:<ISO>` 混淆、是否跨刷新保持、首次有效 review 是否沿用相同 id、同一 session 是否可能混入多个维度。
+4. 将可解析处置维度与 `buildSprintRetentionSeries` 的锚点/截断/随访规则逐项对照：最近成功锚点是否保留维度；下一 sprint 是否仍应无条件截断；`quiz:*` follow-up 是否只代表随访而不能倒推锚点维度；quizAttempt 是否仍不得替代 review。
+5. 用最小反例审计：旧通用 sprint、结构化顽固三阶段、三类专项、查词专项、历史再跑、同词跨模式/跨 session、同 session 多 review、同毫秒 id tie-break、刷新恢复、非法/未知模式、缺失 sessionId。
+6. 明确历史覆盖：只能讨论采用结构化 id 后未来产生的样本；禁止给旧通用 sprint 猜维度、禁止从词的当前薄弱标签/quizAttempt/题型反推历史处置、禁止回填或迁移历史 reviews。
 
-## B1：cohort 与随访配对边界
+## 必须产出的证据矩阵
 
-- 起点必须是可识别 `sprint:*` session 中 `rating≥2` 的成功冲刺 review；`rating<2` 不进入 cohort。
-- 同一成功冲刺 cohort 内同一 wordId 只计一次；必须审计并明确多条达标 review 的锚点选择与稳定 tie-break，不能让输入顺序决定结果。
-- 对每个 cohort 词，只找锚点之后首条非 sprint review；该 review 是真实后续观察，不是 quizAttempt。
-- 锚点之后若先发生同词下一次 `sprint:*` review，则旧 cohort 被截断，不能跨新冲刺配对后续普通 review。
-- 只有实际找到后续非 sprint review 的 cohort 词才进入保持率分母；没有后续是“未观察”，不是失败。
-- 同一 wordId 在本轮报告 cohort 中只归一次；必须先审计采用哪次成功冲刺并与“再次冲刺截断”一致，禁止跨 cohort 重复计数。
+每行至少包含：处置入口、未来 sessionId 示例、创建函数、解析函数、是否显式唯一维度、review 写入路径、刷新后是否保持、能否连接首次正常 review、历史旧记录能否归因、冲突/歧义、结论。
 
-## B2：保持结果与覆盖披露
+至少覆盖：
 
-- 后续首条非 sprint review 的 `rating≥2` 才记为保持成功；`rating<2` 记为已观察未保持。
-- 保持率分子是已观察且后续 `rating≥2` 的去重 cohort 词数；分母是已有后续首条非 sprint review 的去重 cohort 词数。
-- 同时报告：成功冲刺 cohort 词数、已有后续的观察词数、未观察词数、随访覆盖率、保持率，以及从成功冲刺锚点到后续 review 的实际间隔。
-- cohort 为空、观察词为 0 时对应比率必须为 `null`；不能填 0。覆盖率只有 cohort 非空时存在；保持率只有观察词非空时存在。
-- 不把结果写成冲刺导致的提升、恢复或掌握；两次事件之间可能存在其他学习行为，全部文案必须标注观察性。
+- 通用冲刺与限定范围冲刺；
+- 历史再跑、当前仍薄弱词再冲刺；
+- 听音拼写、中译英、释义辨析专项；
+- 查词主动回忆；
+- 顽固词主动回忆/听音拼写/中译英三个阶段；
+- 无 sessionId 与旧 `sprint:<ISO>` 记录。
 
-## B3：配对回忆耗时
+## 判定门槛
 
-- 只在同一 cohort 词的成功冲刺锚点和已配对首条非 sprint review 两侧都有合法 `recallMs` 时进入测时配对分母。
-- 测时必须沿用真实记录；`recallMs` 缺失、负数、NaN 或无穷值均不进入测时样本，也不影响该词已观察的评分保持结果。
-- 报告配对测时词数、冲刺侧均值、后续正常复习侧均值和“后续 − 冲刺”的变化；无配对测时返回 `null`，不填 0。
-- 保持率与 paired recall 是两个分母，必须分别披露；不能用有测时子样本代替全部已观察词，也不能把 quizAttempt 的测时混入 review 配对。
+- 只有未来所有拟报告维度都有显式、稳定、唯一、可往返解析的 sessionId，且同一 session 不混维度、review 写入不丢 id，才可判定进入下一轮最小“未来处置维度 cohort”实现。
+- 若只有部分模式可辨识，必须列出可辨识/不可辨识集合；不得先实现偏样本报告并把它写成全维度结论。下一 prompt 的唯一目标应是最小统一 sessionId 编码方案的只读设计审计，仍不得直接新增 schema。
+- 若完整链需要新增持久化 schema/version/store/domain、回填历史、从当前画像/quizAttempt 推断维度、改变第 38 轮锚点/截断规则，立即停止实现并只提交审计结论。
 
-## 实现边界
+## 严格边界
 
-- 优先新增/复用纯函数，确保 cohort、截断、首条后续、去重和排序在一个权威实现中完成；不得在多个 UI 分别复制规则。
-- 本轮只建立总 Prompt 规定的 B1/B2/B3 链，不同时进入维度归因、分维度报告、自适应推荐或阶段 C。
-- 不改近 7 天评分事件占比、现有冲刺活动/当场达标/同词配对回忆/当前仍薄弱指标。
-- 不新增 schema/version/store/domain；不改评分、FSRS、每日 Quiz 门禁、备份、package scripts、历史 reviews/quizAttempts、薄弱画像、恢复/复发或再冲刺。
+- 复用现有 `sessionId` 字符串承载能力；本轮不新增 schema/version/store/domain，不修改或回填历史 reviews/quizAttempts。
+- 不改评分、FSRS、每日 Quiz 门禁、备份、package scripts、冲刺写入、阶段 A 指标、第 38 轮 cohort/覆盖/保持/间隔/paired recall、当前仍薄弱、再冲刺或薄弱画像。
+- 不实现分维度保持率、维度排行、维度好坏判断、推荐权重、自适应排程或因果结论。
+- 不把 quizAttempt 当 ReviewEvent，不把 `quiz:*` follow-up 的 mode 倒推为先前 sprint 处置维度，不跨下一 sprint，不把未观察算失败。
+- 文案不得使用“某模式导致提升/恢复/掌握”或比较样本稀少的维度优劣。
 
 ## 验收标准
 
-- 纯函数单测覆盖：成功/失败冲刺、同词多事件与去重、首条非 sprint、下一次冲刺截断、无后续未观察、同词只归一次、乱序和同毫秒稳定性、未来/无效时间、保持率/覆盖率空样本、合法/非法配对测时及两个分母独立。
-- 用户入口/E2E 至少覆盖：有随访保持、有随访未保持、无后续未观察、下一次冲刺截断、覆盖率/保持率/实际间隔、无样本 `null` 和 paired recall 合法/无样本；既有 signal-flow 16 条语义不减少。
-- E2E seed 必须依据待验证的 cohort/截断边界生成明确本地时间；若复用周报入口，不得用可能在本地周一落入上周的通用 `daysAgo(1)` 代替本周事件。
-- 更新 `learning-effectiveness-audit.md`，创建 `round-38.md`，更新 `project-evolution.md` 和 `next-round-prompt.md`；仅在咬合状态变化时更新 `occlusion-table.md`。
-- 必须实际执行并报告定向测试、lint、typecheck、`npm test` 和 signal-flow E2E。
+- 新建 `docs/iterations/round-39.md`，完整记录现场、sessionId 全链、反例矩阵、历史覆盖、判定和停止门槛。
+- 更新 `docs/iterations/dimension-treatment-audit.md` 与 `learning-effectiveness-audit.md` 的未来归因边界；更新 `project-evolution.md` 和覆盖 `next-round-prompt.md`。
+- 只有咬合状态或关键证据发生变化才更新 `occlusion-table.md`；纯审计若没有新闭环不得虚增 ✅。
+- 审计为只读业务代码轮：执行至少 `npm run lint`、`npm run typecheck` 与审计涉及的现有定向测试；若文档外无代码变更，不为追数字重跑无关 E2E。若需要浏览器验证，仍必须固定 3000、HTTP 200、唯一 PID/日志、两次失败停止并精确清理。
+- 提交前把实际 diff、测试数字、保护文件、端口、边界和判定交回同一 `opencode/zen-v4-flash` 任务只读复核；处理意见后精确暂存。
 
-## 提交与停止门槛
+## 文档、提交与停止门槛
 
-- 固定端口 3000，健康检查成功后才跑浏览器；只清理确认属于本轮的 PID 和唯一日志。浏览器连续两次失败则停止重试，改报自动检查证据。
-- 完成验证与清理后，先请求同一个 `opencode/zen-v4-flash` 任务做提交前只读复核；处理意见后显式暂存本轮文件。
-- 一个中文 commit，不 push；禁止 `git add .`、`git add -A`、`git commit -am`，不修改或暂存 `1.txt`。
-- 若完整链必须新增 schema/version、推断 session kind、把 quizAttempt 当 review、跨新冲刺、把未观察算失败、伪造历史样本或进入维度归因/自适应，立即停止实现并只提交审计结论。
+- 一个中文 commit，不 push；禁止 `git add .`、`git add -A`、`git commit -am`，不得暂存 `1.txt` 或 `docs/architecture-analysis-2026-08-09.md`。
+- 若审计证明现有编码完整且无歧义：下一轮唯一目标才是纯派生未来维度 cohort，不同时做 UI 排行/自适应。
+- 若证明部分或全部模式有歧义：下一轮唯一目标改为统一未来 sessionId 编码的最小设计/实现边界，旧记录继续“未知维度”，不得回填。
+- 若必须新增 schema、推断/伪造历史、改变评分排程或跨新冲刺才能成立，停止阶段 C 实现并提交阻断证据。
+- 第 38 轮未触发停止门槛：阶段 B 完成后可自动串行进入本轮只读审计；仍须先做现场核对，不得把只读审计扩成实现。

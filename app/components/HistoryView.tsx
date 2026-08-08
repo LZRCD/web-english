@@ -15,6 +15,7 @@ import {
   type SprintHistory,
   type SprintRelapse,
   type SprintRelapseWeek,
+  type SprintRetentionWeek,
   type WeakDimensionTrendWeek,
   type WeakSectionConcentration,
 } from "../../lib/weak-signals";
@@ -68,6 +69,8 @@ type HistoryViewProps = {
   sprintEffectivenessSeries: SprintEffectivenessWeek[];
   /** 最近 4 个已完成冲刺周截至当前仍薄弱率回溯（旧类型名仅为兼容） */
   sprintRelapseSeries: SprintRelapseWeek[];
+  /** 最近 4 个完整处置周的首次正常复习保持观察。 */
+  sprintRetentionSeries: SprintRetentionWeek[];
   /** 上周冲刺当场达标词截至当前仍薄弱追踪（无上周冲刺为 null） */
   sprintRelapse: SprintRelapse | null;
   /** 当前仍薄弱词词名明细（wordId → 词名，供悬停展示） */
@@ -116,6 +119,7 @@ export default function HistoryView({
   weakConcentration,
   sprintEffectivenessSeries,
   sprintRelapseSeries,
+  sprintRetentionSeries,
   sprintRelapse,
   sprintRelapseWords,
   sprintDimensionTrend,
@@ -141,6 +145,19 @@ export default function HistoryView({
     if (changeMs < 0) return `较此前快 ${(-changeMs / 1000).toFixed(1)}s`;
     if (changeMs > 0) return `较此前慢 ${(changeMs / 1000).toFixed(1)}s`;
     return "与此前持平";
+  };
+  const formatFollowUpDelay = (ms: number | null) => {
+    if (ms === null) return "—";
+    const dayMs = 86_400_000;
+    const hourMs = 3_600_000;
+    if (ms >= dayMs) return `${(ms / dayMs).toFixed(1)}天`;
+    if (ms >= hourMs) return `${(ms / hourMs).toFixed(1)}小时`;
+    return `${Math.round(ms / 60_000)}分钟`;
+  };
+  const formatRetentionRecallChange = (changeMs: number) => {
+    if (changeMs < 0) return `随访较冲刺快 ${(-changeMs / 1000).toFixed(1)}s`;
+    if (changeMs > 0) return `随访较冲刺慢 ${(changeMs / 1000).toFixed(1)}s`;
+    return "随访与冲刺持平";
   };
   const maxConcentrationTotal = Math.max(
     1,
@@ -578,6 +595,49 @@ export default function HistoryView({
                   再冲刺当前仍薄弱词（{sprintRelapse.relapsedCount}）
                 </button>
               )}
+            </div>
+          </div>
+        )}
+        {sprintRetentionSeries.length > 0 && (
+          <div className="weak-trend" aria-label="冲刺后首次正常复习保持 4 周">
+            <div className="weak-trend-head">
+              <strong>冲刺后首次正常复习保持 4 周</strong>
+              <small>观察成功冲刺后、下一次冲刺前的首条非冲刺评分；未观察不计为失败</small>
+            </div>
+            <div className="sprint-effectiveness-series">
+              {sprintRetentionSeries.map((week) => (
+                <div className="sprint-effectiveness-week" key={week.weekStart}>
+                  <span>{week.weekStart.slice(5)}</span>
+                  {week.retention ? (
+                    <>
+                      <strong>
+                        覆盖 {week.retention.coverageRate}% · 保持 {week.retention.retentionRate === null ? "—" : `${week.retention.retentionRate}%`}
+                      </strong>
+                      <small>
+                        cohort {week.retention.cohortWordCount} · 已观察 {week.retention.followedUpCount} · 保持 {week.retention.retainedCount}
+                      </small>
+                      <small className="neutral">
+                        未观察 {week.retention.unobservedCount} · 截断 {week.retention.truncatedCount} · 平均间隔 {formatFollowUpDelay(week.retention.followUpDelayMs)}
+                      </small>
+                      <small className={
+                        week.retention.pairedRecall.changeMs === null
+                          ? "neutral"
+                          : week.retention.pairedRecall.changeMs < 0
+                            ? "positive"
+                            : week.retention.pairedRecall.changeMs > 0
+                              ? "negative"
+                              : "neutral"
+                      }>
+                        {week.retention.pairedRecall.changeMs === null
+                          ? "配对测时 0 词 · 无配对样本"
+                          : `配对测时 ${week.retention.pairedRecall.sampleCount} 词 · 冲刺 ${formatRecall(week.retention.pairedRecall.sprintAverageRecallMs)} → 随访 ${formatRecall(week.retention.pairedRecall.followUpAverageRecallMs)} · ${formatRetentionRecallChange(week.retention.pairedRecall.changeMs)}`}
+                      </small>
+                    </>
+                  ) : (
+                    <small className="neutral">无成功冲刺 cohort</small>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

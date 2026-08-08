@@ -985,6 +985,187 @@ export function buildSprintRelapseSeries(
   });
 }
 
+/** 冲刺后首次正常复习保持中的同词测时配对；变化为随访 − 冲刺。 */
+export type SprintRetentionPairedRecall = {
+  sampleCount: number;
+  sprintAverageRecallMs: number | null;
+  followUpAverageRecallMs: number | null;
+  changeMs: number | null;
+};
+
+/** 一个完整处置周的首次正常复习保持观察。 */
+export type SprintRetention = {
+  /** 窗口内最近一次成功冲刺锚点的去重词数。 */
+  cohortWordCount: number;
+  /** 锚点后、下一次冲刺前已有首条非冲刺 review 的词数。 */
+  followedUpCount: number;
+  /** 尚无可观察随访的词数；包含已被下一次冲刺截断的词。 */
+  unobservedCount: number;
+  /** 首条后续事件是下一次冲刺、因而不能跨冲刺观察的词数。 */
+  truncatedCount: number;
+  /** 随访覆盖率（0–100）；cohort 为空时为 null。 */
+  coverageRate: number | null;
+  /** 首条非冲刺 review 评分 rating≥2 的词数。 */
+  retainedCount: number;
+  /** 保持率（0–100）；没有已观察词时为 null。 */
+  retentionRate: number | null;
+  /** 已观察词从锚点到首次非冲刺 review 的词等权平均间隔。 */
+  followUpDelayMs: number | null;
+  pairedRecall: SprintRetentionPairedRecall;
+};
+
+/** 最近完整处置周的保持观察；空 cohort 周保持为 null。 */
+export type SprintRetentionWeek = {
+  weekStart: string;
+  retention: SprintRetention | null;
+};
+
+type OrderedReview = {
+  review: ReviewEvent;
+  reviewedAtMs: number;
+};
+
+function compareOrderedReview(first: OrderedReview, second: OrderedReview) {
+  return first.reviewedAtMs - second.reviewedAtMs
+    || first.review.id.localeCompare(second.review.id);
+}
+
+function isStrictlyAfterReview(first: OrderedReview, second: OrderedReview) {
+  return compareOrderedReview(first, second) > 0;
+}
+
+/**
+ * 最近 N 个完整本地周的“成功冲刺 → 下一次冲刺前首条非冲刺 review”观察。
+ *
+ * 每个 wordId 只取窗口内时间总序上最近一次 rating≥2 冲刺为锚点，
+ * 再按 (reviewedAtMs, id) 扫描真实 review；下一次冲刺会截断旧锚点。
+ * quiz:* review 和无 sessionId 的旧 review 都是正常随访，quizAttempts 不在输入中。
+ */
+export function buildSprintRetentionSeries(
+  reviews: readonly ReviewEvent[],
+  now = new Date(),
+  weeks = 4,
+): SprintRetentionWeek[] {
+  const nowMs = now.getTime();
+  const thisWeekStart = localWeekStart(now);
+  const count = Math.max(1, Math.trunc(weeks));
+  const weekStarts: Date[] = [];
+  for (let offset = count; offset >= 1; offset -= 1) {
+    weekStarts.push(addLocalDays(thisWeekStart, -offset * 7));
+  }
+  const series = weekStarts.map((start) => ({
+    weekStart: localDateKey(start),
+    retention: null as SprintRetention | null,
+  }));
+  if (!Number.isFinite(nowMs)) return series;
+
+  const windowStartMs = weekStarts[0]!.getTime();
+  const windowEndMs = thisWeekStart.getTime();
+  const orderedByWordId = new Map<number, OrderedReview[]>();
+  const latestAnchorByWordId = new Map<number, OrderedReview>();
+
+  for (const review of reviews) {
+    if (review.wordId === undefined) continue;
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (!Number.isFinite(reviewedAtMs) || reviewedAtMs > nowMs) continue;
+    const ordered = { review, reviewedAtMs };
+    const wordReviews = orderedByWordId.get(review.wordId) ?? [];
+    wordReviews.push(ordered);
+    orderedByWordId.set(review.wordId, wordReviews);
+    if (
+      reviewedAtMs < windowStartMs
+      || reviewedAtMs >= windowEndMs
+      || !review.sessionId?.startsWith("sprint:")
+      || review.rating < 2
+    ) continue;
+    const previous = latestAnchorByWordId.get(review.wordId);
+    if (!previous || compareOrderedReview(ordered, previous) > 0) {
+      latestAnchorByWordId.set(review.wordId, ordered);
+    }
+  }
+
+  for (const wordReviews of orderedByWordId.values()) {
+    wordReviews.sort(compareOrderedReview);
+  }
+
+  const anchorsByWeek = new Map<string, OrderedReview[]>();
+  for (const anchor of latestAnchorByWordId.values()) {
+    const weekKey = localDateKey(localWeekStart(new Date(anchor.reviewedAtMs)));
+    const anchors = anchorsByWeek.get(weekKey) ?? [];
+    anchors.push(anchor);
+    anchorsByWeek.set(weekKey, anchors);
+  }
+
+  return series.map(({ weekStart }) => {
+    const anchors = anchorsByWeek.get(weekStart);
+    if (!anchors?.length) return { weekStart, retention: null };
+
+    let followedUpCount = 0;
+    let truncatedCount = 0;
+    let retainedCount = 0;
+    let delayTotalMs = 0;
+    let pairedSampleCount = 0;
+    let sprintRecallTotalMs = 0;
+    let followUpRecallTotalMs = 0;
+
+    for (const anchor of anchors) {
+      const wordId = anchor.review.wordId!;
+      const next = orderedByWordId.get(wordId)
+        ?.find((candidate) => isStrictlyAfterReview(candidate, anchor));
+      if (!next) continue;
+      if (next.review.sessionId?.startsWith("sprint:")) {
+        truncatedCount += 1;
+        continue;
+      }
+      followedUpCount += 1;
+      delayTotalMs += next.reviewedAtMs - anchor.reviewedAtMs;
+      if (next.review.rating >= 2) retainedCount += 1;
+      if (
+        isValidRecallMs(anchor.review.recallMs)
+        && isValidRecallMs(next.review.recallMs)
+      ) {
+        pairedSampleCount += 1;
+        sprintRecallTotalMs += anchor.review.recallMs;
+        followUpRecallTotalMs += next.review.recallMs;
+      }
+    }
+
+    const cohortWordCount = anchors.length;
+    const unobservedCount = cohortWordCount - followedUpCount;
+    const sprintAverageRecallMs = pairedSampleCount
+      ? Math.round(sprintRecallTotalMs / pairedSampleCount)
+      : null;
+    const followUpAverageRecallMs = pairedSampleCount
+      ? Math.round(followUpRecallTotalMs / pairedSampleCount)
+      : null;
+    return {
+      weekStart,
+      retention: {
+        cohortWordCount,
+        followedUpCount,
+        unobservedCount,
+        truncatedCount,
+        coverageRate: Math.round((followedUpCount / cohortWordCount) * 100),
+        retainedCount,
+        retentionRate: followedUpCount
+          ? Math.round((retainedCount / followedUpCount) * 100)
+          : null,
+        followUpDelayMs: followedUpCount
+          ? Math.round(delayTotalMs / followedUpCount)
+          : null,
+        pairedRecall: {
+          sampleCount: pairedSampleCount,
+          sprintAverageRecallMs,
+          followUpAverageRecallMs,
+          changeMs: pairedSampleCount
+            ? followUpAverageRecallMs! - sprintAverageRecallMs!
+            : null,
+        },
+      },
+    };
+  });
+}
+
 /** 考前薄弱冲刺候选：已学且统一薄弱画像非空的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,
