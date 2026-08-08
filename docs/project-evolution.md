@@ -21,6 +21,7 @@
 | 2026-08-08 | 第 29 轮（本提交） | 在拼写、中译英恢复后接通辨析专项，复用释义选择、同维结果和冲刺归因。 |
 | 2026-08-08 | 第 30 轮（本提交） | 将稳定进度的查词频繁词路由到现有主动回忆卡，贯通真实评分淡出、真实查词复发及刷新恢复。 |
 | 2026-08-08 | 第 31 轮（本提交） | 让活跃顽固词按真实 review 跨主动回忆、听音拼写和中译英推进，三次成功淡出、低评分重置并保留冲刺归因。 |
+| 2026-08-08 | 第 32 轮（本提交） | 审计维度闭环持久化往返，补齐 settings 分域已有字段，确保阈值、猜错累计和学习设置刷新后保持。 |
 
 ## 原始理念
 
@@ -1069,3 +1070,20 @@
 - `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，184/184 通过。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 11/11 通过：既有 10 条语义保持；新增 1 条覆盖辨析接管、四选一、正确/错误真实回流、冲刺 review 归因、历史感知与复发再进入。
 - 固定端口 3000 单实例启动并健康检查 200；验证后精确关闭监听 PID，清理本轮 PID 和日志，不批量终止 Node。
+
+## 第五十一次迭代：信号联动三十二轮（维度闭环持久化收敛）
+
+本次迭代：2026-08-08。
+
+### 审计与修正
+
+- 从页面 `persistedState` 追踪到 IndexedDB 分域、读取合并、normalize、hydrate、画像推荐及会话恢复，确认 reviews、quizAttempts、lookupStats、wordProgress、顽固阶段、activeSession 和 sprint sessionId 往返保持。
+- 直接 split/combine 实测发现 settings 投影遗漏五个 `StoredState` 既有字段；本轮补齐 `weakThresholds`、`guessMistakes`、`senseFrequency`、`hideChineseMeaning`、`guessContextFirst`，不新增 schema/version。
+- 备份链路只读确认直接封装完整状态，未修改。普通专项 activeQuiz 作答后刷新仍有候选漂移风险，留作下一轮单独处理。
+- 猜错累计事实现在能持久化，但仍无真实事件时间、恢复或复发源，不伪造闭环。
+
+### 验证
+
+- 新增分域往返单测与真实浏览器两次刷新/再次写盘 E2E；不修改既有 13 条 E2E 语义。
+- 评分、FSRS、每日 Quiz 门禁、恢复规则、备份和 package scripts 均未改变。
+- 定向 72/72、`npm test` 189/189、signal-flow 14/14；lint 与 typecheck 通过。固定端口 3000 验证后已释放，本轮 PID/日志已清理。

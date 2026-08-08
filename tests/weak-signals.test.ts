@@ -8,7 +8,15 @@ import {
   type WordProgress,
   type WordProgressMap,
 } from "../lib/learning.ts";
-import type { LookupWord, Word } from "../lib/study.ts";
+import {
+  parseStoredState,
+  type LookupWord,
+  type Word,
+} from "../lib/study.ts";
+import {
+  combineStoredState,
+  splitStoredState,
+} from "../lib/storage.ts";
 import type { QuizAttempt, QuizMode } from "../lib/quiz.ts";
 import { buildQuizQuestions } from "../lib/quiz.ts";
 import {
@@ -131,6 +139,31 @@ function assertQuizModeLifecycle(mode: QuizMode, label: string, otherMode: QuizM
     [`${label}2次`],
   );
 }
+
+test("持久化收敛：分域往返保留薄弱阈值、猜错累计与既有学习设置", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    weakThresholds: {
+      lookupWeak: 7,
+      lookupPriority: 8,
+      slowRecallMs: 22_000,
+    },
+    guessMistakes: { 1: 3 },
+    senseFrequency: {
+      1: [{ meaning: "散发", level: "high", note: "核心义" }],
+    },
+    hideChineseMeaning: true,
+    guessContextFirst: true,
+  }));
+
+  const restored = combineStoredState(splitStoredState(state));
+
+  assert.deepEqual(restored.weakThresholds, state.weakThresholds);
+  assert.deepEqual(restored.guessMistakes, state.guessMistakes);
+  assert.deepEqual(restored.senseFrequency, state.senseFrequency);
+  assert.equal(restored.hideChineseMeaning, true);
+  assert.equal(restored.guessContextFirst, true);
+});
 
 test("薄弱画像：聚合查词/猜错/各模式测验/回忆/顽固/lapse 六类信号", () => {
   const input = baseInput({

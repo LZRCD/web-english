@@ -140,3 +140,9 @@
 | 顽固词 | 继续由 `rebuildStubbornWords(reviews)` 触发；阶段按触发后尾部真实成功 review 数纯派生，不解析文案 | 前四级恢复后接管统一冲刺；词本顽固专项复用同一结构化推荐 | 阶段 0 主动回忆 WordCard，阶段 1 听音拼写，阶段 2 中译英；不同阶段词分组，本次只训练一组 | WordCard 写 `reviews/wordProgress/recallMs`；Quiz 每次写 `quizAttempts`，仅既有门禁允许时写 review；均用 `sprint:stubborn:<mode>:<ISO>` | 只有真实 review 推进；连续 3 条 ≥2 后由既有重建规则淡出，同日被门禁拦截的 attempt 不推进 | 任一低评分重置阶段并保持 active；恢复后按既有 30 天低评分窗口重新激活 | ✅ 已形成维度闭环 |
 
 结构化 sessionId 未改变 ReviewEvent schema，旧/非法记录安全回退起始阶段；历史解析兼容内嵌模式后的 ISO，时间线与成效仍按 `sprint:*` 感知。刷新时用 session 开始时刻重建原候选组。评分、FSRS、每日门禁、备份、package scripts 和前三类 Quiz/查词处置均未修改。
+
+## 第 32 轮持久化收敛审计
+
+完整矩阵见 `dimension-treatment-closure.md`。只读往返实测发现 settings 分域遗漏 `weakThresholds`、`guessMistakes`、`senseFrequency`、`hideChineseMeaning`、`guessContextFirst`：前两者会直接造成统一画像事实和判定口径刷新后丢失。本轮只补齐这一组既有字段的分域投影，不新增 schema/version；真实浏览器完成“写盘 → 刷新 hydrate → 改阈值再写盘 → 再刷新”验证。
+
+结论 C：字段丢失已修复；普通专项 activeQuiz 作答后刷新仍可能按当前推荐重算出不同候选，下一轮单独处理。猜错继续为“➖ 当前约束下不可闭环：只有累计次数，无真实事件时间、恢复或复发数据源”。

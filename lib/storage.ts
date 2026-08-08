@@ -79,6 +79,8 @@ type StateSettings = Pick<
   | "activeSession"
   | "lookupWords"
   | "lookupStats"
+  | "guessMistakes"
+  | "senseFrequency"
   | "familiarMeanings"
   | "started"
   | "dailyGoal"
@@ -86,6 +88,9 @@ type StateSettings = Pick<
   | "minimumNewWords"
   | "examDate"
   | "soundOn"
+  | "hideChineseMeaning"
+  | "guessContextFirst"
+  | "weakThresholds"
   | "studyMode"
   | "studyScope"
   | "shuffleSeed"
@@ -204,6 +209,8 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       activeSession: state.activeSession,
       lookupWords: state.lookupWords,
       lookupStats: state.lookupStats,
+      guessMistakes: state.guessMistakes,
+      senseFrequency: state.senseFrequency,
       familiarMeanings: state.familiarMeanings,
       started: state.started,
       dailyGoal: state.dailyGoal,
@@ -211,6 +218,9 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       minimumNewWords: state.minimumNewWords,
       examDate: state.examDate,
       soundOn: state.soundOn,
+      hideChineseMeaning: state.hideChineseMeaning,
+      guessContextFirst: state.guessContextFirst,
+      weakThresholds: state.weakThresholds,
       studyMode: state.studyMode,
       studyScope: state.studyScope,
       shuffleSeed: state.shuffleSeed,

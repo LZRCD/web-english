@@ -9,6 +9,7 @@ import {
   openApp,
   openSettings,
   openWordbook,
+  readStoreRecord,
   selectText,
   waitForApp,
 } from "./helpers.mjs";
@@ -861,6 +862,79 @@ test("信号联动：设置页阈值预览随阈值变化", async ({ context, pa
     .getByRole("spinbutton", { name: /插队复习/ });
   await lookupPriorityInput.fill("10");
   await expect(preview).toContainText("插队 0 词");
+});
+
+test("信号联动：薄弱阈值与猜错累计经分域写盘和完整刷新保持", async ({ context, page }) => {
+  await installStateSeed(context, {
+    ...lookupRecallTreatmentSeedState(),
+    weakThresholds: {
+      lookupWeak: 7,
+      lookupPriority: 8,
+      slowRecallMs: 22_000,
+    },
+    guessMistakes: { 1: 3 },
+    senseFrequency: {
+      1: [{ meaning: "散发", level: "high", note: "核心义" }],
+    },
+    hideChineseMeaning: true,
+    guessContextFirst: true,
+  });
+  await openApp(page);
+
+  const readSettings = async () => {
+    const settings = await readStoreRecord(page, "settings", "current");
+    return {
+      weakThresholds: settings?.weakThresholds,
+      guessMistakes: settings?.guessMistakes,
+      senseFrequency: settings?.senseFrequency,
+      hideChineseMeaning: settings?.hideChineseMeaning,
+      guessContextFirst: settings?.guessContextFirst,
+    };
+  };
+  await expect.poll(readSettings).toEqual({
+    weakThresholds: {
+      lookupWeak: 7,
+      lookupPriority: 8,
+      slowRecallMs: 22_000,
+    },
+    guessMistakes: { 1: 3 },
+    senseFrequency: {
+      1: [{ meaning: "散发", level: "high", note: "核心义" }],
+    },
+    hideChineseMeaning: true,
+    guessContextFirst: true,
+  });
+
+  await page.reload();
+  await waitForApp(page);
+  await openSettings(page);
+  const thresholds = page.locator(".weak-thresholds-settings");
+  await expect(thresholds.getByRole("spinbutton", { name: /反复查词/ })).toHaveValue("7");
+  await expect(thresholds.getByRole("spinbutton", { name: /插队复习/ })).toHaveValue("8");
+  await expect(thresholds.getByRole("spinbutton", { name: /回忆偏慢/ })).toHaveValue("22");
+
+  await thresholds.getByRole("spinbutton", { name: /反复查词/ }).fill("6");
+  await expect.poll(readSettings).toEqual({
+    weakThresholds: {
+      lookupWeak: 6,
+      lookupPriority: 8,
+      slowRecallMs: 22_000,
+    },
+    guessMistakes: { 1: 3 },
+    senseFrequency: {
+      1: [{ meaning: "散发", level: "high", note: "核心义" }],
+    },
+    hideChineseMeaning: true,
+    guessContextFirst: true,
+  });
+
+  await page.reload();
+  await waitForApp(page);
+  await openSettings(page);
+  await expect(
+    page.locator(".weak-thresholds-settings")
+      .getByRole("spinbutton", { name: /反复查词/ }),
+  ).toHaveValue("6");
 });
 
 test("信号联动：词本划词集展示薄弱候选与一键学习入口", async ({ context, page }) => {
