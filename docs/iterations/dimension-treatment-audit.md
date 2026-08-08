@@ -36,3 +36,30 @@
 | 拼写测验错 | 结构化读取未恢复的 `listening-spelling` 错误；不解析标签文案 | 考前薄弱冲刺；多维词中拼写专项优先于通用冲刺 | 限定当前拼写薄弱词集，直接恢复/启动 `QuizView` 听音拼写 | 每次作答写 `quizAttempts`；当日首次有效作答按既有门禁写 `reviews/wordProgress`，并沿用 `sprint:*` sessionId | 最近两次同模式正确后，拼写维度退出建议与统一画像 | 再次同模式答错后，拼写标签、推荐与入口立即重现 | ✅ 已形成维度闭环 |
 
 专项 review 的冲刺 `sessionId` 继续被 `buildSprintHistory`、`buildSprintEffectiveness(Series)` 与 `buildSprintRelapse(Series)` 感知；FSRS 仍由 `shouldApplyQuizToSchedule` 和 `applyRating` 控制。本轮未新增 schema，未修改评分、排程或备份。
+
+## 第 28 轮只读复核
+
+> 复核基线：`a33e345`。分支仅有用户文件 `1.txt` 未跟踪，固定端口 3000 无监听、无 PID 文件；以下结论在修改前取得。
+
+| 核对项 | 当前实现 | 证据位置 | 是否闭环 |
+|---|---|---|---|
+| 中译英信号来源 | `quizAttempts` 中同词 `mode=chinese-to-english && !correct` 的历史累计，恢复只看同模式有效时间序列 | `quizErrorCounts` / `isQuizModeRecovered` / `buildWordWeakSignals` | ✅ 信号真实 |
+| 结构化处置建议 | 推荐联合类型仅含 `quiz-spelling → listening-spelling` | `SprintTreatmentRecommendation` / `buildSprintTreatmentRecommendation` | ❌ 未接中译英 |
+| 冲刺入口路由 | 有拼写建议时直达 Quiz；否则回退通用 `startSession("sprint")` | `page.tsx#startSprintSession` | ❌ 中译英回退通用卡 |
+| 实际训练模式 | 现有 Quiz 已支持 `chinese-to-english`，以 `word.meaning` 为提示、`word.word` 为答案 | `buildQuizQuestions` / `QuizView` 文本输入分支 | ✅ 组件可复用 |
+| 候选词限定 | `candidateWordIds` 能贯穿恢复出题和新建出题，但上游只提供拼写候选 | `QuizView` / `restoreQuizQuestions` / `buildQuizQuestions` | ❌ 中译英无上游候选 |
+| `quizAttempts` 回流 | 每次作答写入题目真实 `mode/correct/recallMs/answeredAt` | `QuizView#submitAnswer` → `recordQuizResult` | ✅ 已具备 |
+| `reviews/sessionId` 归因 | 每日首次有效作答才调 `applyRating`；`sprint:*` 原样写入 review | `shouldApplyQuizToSchedule` / `recordQuizResult` | ✅ 已具备 |
+| 连续正确淡出 | 最近两次同模式正确后中译英标签淡出 | `isQuizModeRecovered` | ✅ 已具备 |
+| 再错复发 | 新同模式错误中断恢复，中译英标签重现 | `isQuizModeRecovered` / `buildWordWeakSignals` | ✅ 已具备 |
+| 多维优先级 | 仅定义拼写专项；拼写恢复后未让仍弱中译英接管 | `buildSprintTreatmentRecommendation` | ❌ 优先级断在第二级 |
+
+只读结论：不是缺训练组件、结果数据源或恢复规则，而是结构化推荐只实现了第一优先级。第 28 轮唯一目标因此选择“拼写优先 → 中译英接管”这一处最小路由断链。
+
+## 第 28 轮实施后目标行
+
+| 薄弱维度 | 信号来源 | 当前入口 | 实际训练方式 | 结果写入位置 | 降级规则 | 复发规则 | 状态 |
+|---|---|---|---|---|---|---|---|
+| 中译英错 | 结构化读取未恢复的 `chinese-to-english` 错误；不解析标签文案 | 考前薄弱冲刺；拼写专项优先，拼写恢复后中译英接管 | 限定当前中译英薄弱词集，以中文释义提示并输入英文 | 每次作答写 `quizAttempts`；首次有效作答按既有门禁写 `reviews/wordProgress`，并沿用 `sprint:*` sessionId | 最近两次同模式正确后退出建议与统一画像；其他维度保持 | 再次同模式答错后，中译英标签、建议和入口重现 | ✅ 已形成维度闭环 |
+
+第 28 轮没有新增 schema，也没有修改答案判定、评分、FSRS 排程、备份或普通测验语义。拼写和中译英的结构化优先级固定为前者优先；辨析仍回退通用冲刺，是下一条最高价值断链。

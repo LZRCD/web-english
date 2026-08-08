@@ -1573,7 +1573,7 @@ test("统一已稳定维度：阈值变化不制造历史弱点，复发后立�
   assert.deepEqual(buildWordStabilizedDimensions(10, relapsed, threshold15), []);
 });
 
-test("维度化处置：未恢复的拼写错误推荐听音拼写，恢复后退出且再错后重现", () => {
+test("维度化处置：拼写优先，恢复后由中译英接管，再错后重新抢占", () => {
   const progress = {
     10: {
       wordId: 10,
@@ -1638,7 +1638,12 @@ test("维度化处置：未恢复的拼写错误推荐听音拼写，恢复后�
     spellingCorrect1,
     spellingCorrect2,
   ]);
-  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildSprintTreatmentRecommendation(recovered), {
+    dimension: "quiz-c2e",
+    mode: "chinese-to-english",
+    label: "中译英",
+    wordIds: [10],
+  });
   assert.deepEqual(buildWordWeakSignals(10, recovered), ["中译英错1次"]);
 
   const relapsed = inputFor([
@@ -1678,4 +1683,110 @@ test("维度化处置：听音拼写只从推荐词集出题", () => {
 
   assert.deepEqual(questions.map((question) => question.wordId), [10]);
   assert.equal(questions[0]?.mode, "listening-spelling");
+});
+
+test("维度化处置：中译英同模式回流后淡出，其他维度保留且再错后复发", () => {
+  const progress = {
+    10: {
+      wordId: 10,
+      lapseCount: 0,
+      lastRating: 2,
+      lastReviewedAt: "2026-07-20T00:00:00.000Z",
+      consecutiveSuccesses: 1,
+    },
+  } as unknown as WordProgressMap;
+  const c2eWrong = makeQuizAttempt(
+    "c2e-wrong-1",
+    "chinese-to-english",
+    false,
+    "2026-07-20T00:00:00.000Z",
+  );
+  const choiceWrong = makeQuizAttempt(
+    "choice-wrong-1",
+    "meaning-choice",
+    false,
+    "2026-07-20T01:00:00.000Z",
+  );
+  const c2eCorrect1 = makeQuizAttempt(
+    "c2e-correct-1",
+    "chinese-to-english",
+    true,
+    "2026-07-21T00:00:00.000Z",
+  );
+  const c2eCorrect2 = makeQuizAttempt(
+    "c2e-correct-2",
+    "chinese-to-english",
+    true,
+    "2026-07-22T00:00:00.000Z",
+  );
+  const c2eWrongAgain = makeQuizAttempt(
+    "c2e-wrong-2",
+    "chinese-to-english",
+    false,
+    "2026-07-23T00:00:00.000Z",
+  );
+  const inputFor = (quizAttempts: QuizAttempt[]) => baseInput({
+    quizAttempts,
+    wordProgress: progress,
+  });
+
+  assert.deepEqual(buildSprintTreatmentRecommendation(inputFor([
+    c2eWrong,
+    choiceWrong,
+    c2eCorrect1,
+  ])), {
+    dimension: "quiz-c2e",
+    mode: "chinese-to-english",
+    label: "中译英",
+    wordIds: [10],
+  });
+
+  const recovered = inputFor([
+    c2eWrong,
+    choiceWrong,
+    c2eCorrect1,
+    c2eCorrect2,
+  ]);
+  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildWordWeakSignals(10, recovered), ["辨析错1次"]);
+
+  const relapsed = inputFor([
+    c2eWrong,
+    choiceWrong,
+    c2eCorrect1,
+    c2eCorrect2,
+    c2eWrongAgain,
+  ]);
+  assert.equal(
+    buildSprintTreatmentRecommendation(relapsed)?.mode,
+    "chinese-to-english",
+  );
+  assert.deepEqual(buildWordWeakSignals(10, relapsed), [
+    "中译英错2次",
+    "辨析错1次",
+  ]);
+});
+
+test("维度化处置：中译英只从推荐词集出题并使用中文提示", () => {
+  const words: Word[] = [
+    { id: 10, word: "target", meaning: "目标" },
+    { id: 11, word: "other", meaning: "其他" },
+  ];
+  const progress = {
+    10: { wordId: 10 },
+    11: { wordId: 11 },
+  } as unknown as WordProgressMap;
+  const questions = buildQuizQuestions({
+    words,
+    progress,
+    mode: "chinese-to-english",
+    candidateWordIds: [10],
+    count: 10,
+    seed: 1,
+  });
+
+  assert.deepEqual(questions.map((question) => question.wordId), [10]);
+  assert.equal(questions[0]?.mode, "chinese-to-english");
+  assert.equal(questions[0]?.prompt, "目标");
+  assert.equal(questions[0]?.answer, "target");
 });

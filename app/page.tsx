@@ -1522,7 +1522,7 @@ export default function Home() {
       });
       clearSession();
       setActiveView("quiz");
-      showToast(`已按拼写弱点推荐${sprintTreatment.label} · ${sprintTreatment.wordIds.length} 词`, 1800);
+      showToast(`已按薄弱维度推荐${sprintTreatment.label} · ${sprintTreatment.wordIds.length} 词`, 1800);
       return;
     }
     startSession("sprint", "考前薄弱冲刺", sprintWordIds);
