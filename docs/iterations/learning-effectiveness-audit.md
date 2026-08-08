@@ -79,6 +79,15 @@
 
 审计确认 `ReviewEvent.sessionId`、activeSession/activeQuiz 和现有分域足以承载未来字符串，不需要 schema/version。当前仍缺统一编码器、解析器与 startedAt 提取；`buildSprintHistory` 会把拟议的新格式后缀整体当日期并过滤，因此阶段 C 尚未完成。
 
+## 第 40 轮未来维度记录边界
+
+- 新 treatment、旧普通和顽固 session 都继续以 `startsWith("sprint:")` 进入现有活动量、当场达标、同词配对、当前仍薄弱 cohort 与首次正常复习保持；本轮没有按维度重算或改变任何指标。
+- 新维度只是锚点 session 的启动事实，不改变 word cohort、评分阈值、时间窗、词级去重、随访覆盖、保持分母、未观察、实际间隔或配对测时分母。
+- 任一下一 sprint 即截断的规则保持；不同 treatment 维度同样截断。`quiz:*` review 和无 sessionId review 仍可作为普通随访，quizAttempt 仍不进入保持链。
+- 旧普通 sprint 永远是 `unknown`；未来明确混合处置是 `generic-sprint`。后续阶段 D 必须把二者分开并显示样本数，不能把旧历史分摊到已知维度。
+- slow-recall/lapse 暂无不复制画像规则的可靠启动级唯一判定；本轮仅保留枚举能力，所有 fallback 写 generic，不形成虚假可归因样本。
+- 单测与全量测试证明新格式不改变 A/B 数字；固定 3000 的 signal-flow 17/17 进一步证明真实入口、刷新、写入、历史与 generic 复跑闭环，阶段 C 完成。首次 16/17 失败来自旧 lookup 信号被成功 review 正确降级，修正版用真实再次划词触发复发，不改变任何指标或门槛。
+
 下一轮的证据纪律：
 
 - 旧 `sprint:<ISO>` 在数据层一律是 `unknown`；不得因用户文案写“未标注/通用冲刺”就把它并入未来 `generic-sprint`。

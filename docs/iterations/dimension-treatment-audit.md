@@ -2,6 +2,16 @@
 
 > 审计日期：2026-08-08 ｜ 只读基线：`6a4f725` ｜ 分支：`codex/follow-up-hardening`
 
+## 第 40 轮：未来结构化 sessionId 已实现
+
+- 唯一新格式为 `sprint:treatment:<dimension>:<ISO>`；可写维度为 `listening-spelling`、`chinese-to-english`、`meaning-choice`、`lookup-recall`、`stubborn`、`slow-recall`、`lapse`、`generic-sprint`。`unknown` 仅是解析结果，编码器不能写入。
+- `parseSprintSessionId` 是新旧格式的唯一权威解析器：旧普通 sprint 返回 `unknown + legacy + startedAt`；合法顽固返回 `stubborn + submode + startedAt`；未知 treatment/非法顽固 mode 在尾部时间合法时仍保留 startedAt；非法时间不伪造日期。
+- 三类 Quiz 与查词主动回忆直接消费启动时已有的结构化 mode；顽固格式保持；通用、限定、补漏、当前仍薄弱与历史复跑固定写 generic。slow/lapse 本轮不复制画像判定，fallback 仍为 generic。
+- `buildSprintHistory` 已改走统一 startedAt；精确词集再跑、时间线、成效、当前仍薄弱 cohort 与保持链继续按完整 id 或 `startsWith("sprint:")` 工作，不拆维度、不改分母。
+- activeSession、activeQuiz 和 review 的分域往返测试证明新 id 原样保持，不需要 schema/version/store/domain。
+- 自动证据为定向 85/85、全量 205/205、lint/typecheck/build 通过；固定 3000 的 signal-flow 17/17。复合 E2E 证明真实中译英与 lookup 启动、写盘刷新、review 同 id、历史和 generic 原词集复跑，既有旧格式链也保持。
+- 首次 E2E 暴露 Quiz 成功 review 会使旧 lookup 信号降级；测试改为在成功 review 后真实再次划词触发复发，产品规则未放宽。阶段 C 已完成。
+
 ## 第 39 轮：阶段 C 未来 sessionId 归因审计
 
 > 审计日期：2026-08-09 ｜ 只读基线：`54ab960`。本节审计未来编码可行性；示例是第 40 轮拟写格式，不代表已经存在或允许回填的历史事实。

@@ -157,6 +157,24 @@ async function readActiveQuizSnapshot(page) {
   }));
 }
 
+async function readLatestReviewSessionIds(page, count) {
+  return page.evaluate((limit) => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const reviewsRequest = transaction.objectStore("state-domains").get("reviews");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const reviews = reviewsRequest.result?.value ?? [];
+        database.close();
+        resolve(reviews.slice(-limit).map((review) => review.sessionId));
+      };
+    };
+  }), count);
+}
+
 function sprintSeedState() {
   const examDate = new Date(Date.now() + 5 * 86_400_000)
     .toISOString().slice(0, 10);
@@ -405,6 +423,26 @@ function activeQuizSnapshotSeedState() {
   const learnedAt = daysAgo(5, 8, 0);
   return createState({
     examDate,
+    enrichments: RADIATE_ENRICHMENT,
+    lookupWords: [{
+      id: 9_000_000_001,
+      linkedWordId: 1,
+      query: "radiate",
+      kind: "word",
+      phonetic: "/ˈreɪdieɪt/",
+      part: "v.",
+      meaning: "散发",
+      note: "",
+      source: "redbook",
+      addedAt: daysAgo(10, 8, 0),
+    }],
+    lookupStats: {
+      radiate: {
+        count: 3,
+        firstAt: daysAgo(10, 8, 0),
+        lastAt: daysAgo(2, 7, 0),
+      },
+    },
     reviews: [
       { wordId: 1, word: "radiate" },
       { wordId: 5, word: "objective" },
@@ -771,7 +809,7 @@ test("信号联动：拼写恢复后中译英接管冲刺并完成同维回流",
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
 });
 
-test("信号联动：中译英专项作答改变候选后刷新仍恢复启动题组", async ({ context, page }) => {
+test("信号联动：维度化 Quiz、主动回忆、刷新、历史与 generic 复跑纵向贯通", async ({ context, page }) => {
   await installStateSeed(context, activeQuizSnapshotSeedState());
   await openApp(page);
   await page
@@ -791,7 +829,7 @@ test("信号联动：中译英专项作答改变候选后刷新仍恢复启动�
     answerIds: [],
     complete: false,
   });
-  expect(started.id).toMatch(/^sprint:/);
+  expect(started.id).toMatch(/^sprint:treatment:chinese-to-english:/);
   const answers = { 1: "radiate", 5: "objective" };
   const [firstWordId, secondWordId] = started.questionWordIds;
 
@@ -842,20 +880,58 @@ test("信号联动：中译英专项作答改变候选后刷新仍恢复启动�
   await page.getByRole("button", { name: "查看结果" }).click();
   await expect(page.locator(".quiz-complete-score")).toHaveText("100%");
   await expect.poll(async () => (await readActiveQuizSnapshot(page))?.complete).toBe(true);
+  await expect.poll(() => readLatestReviewSessionIds(page, 2))
+    .toEqual([started.id, started.id]);
 
-  await page.getByRole("button", { name: "再来一组" }).click();
-  await expect.poll(async () => (await readActiveQuizSnapshot(page))?.id === started.id)
-    .toBe(false);
-  const restarted = await readActiveQuizSnapshot(page);
-  expect(restarted).toMatchObject({
-    mode: "chinese-to-english",
-    index: 0,
-    correctCount: 0,
-    answerIds: [],
-    complete: false,
+  // Quiz 成功 review 会让此前的 lookup 信号降级；用真实再次划词制造复发。
+  await page.getByRole("button", { name: "词环首页" }).click();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await selectText(
+    page.getByText("Stars radiate energy into space.", { exact: true }),
+    "radiate",
+  );
+  const popup = page.getByRole("dialog", { name: "划词查询：radiate" });
+  await expect(popup).toContainText("已加入划词集");
+  await popup.getByRole("button", { name: "关闭划词查询" }).click();
+
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
+  await expect.poll(async () => {
+    const settings = await readStoreRecord(page, "settings", "current");
+    return settings?.activeSession;
+  }).toMatchObject({
+    id: expect.stringMatching(/^sprint:treatment:lookup-recall:/),
+    wordIds: [1],
   });
-  expect(restarted.seed).not.toBe(started.seed);
-  expect(restarted.questionWordIds).toHaveLength(2);
+  const lookupSession = (await readStoreRecord(page, "settings", "current")).activeSession;
+
+  await page.reload();
+  await waitForApp(page);
+  await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await page.getByRole("button", { name: /认识/ }).click();
+  await expect.poll(async () => (await readLatestReviewSessionIds(page, 1))[0])
+    .toBe(lookupSession.id);
+
+  await page.getByRole("button", { name: "返回轨迹页" }).click();
+  const history = page.locator(".sprint-history");
+  await expect(history).toContainText("共 2 次 · 覆盖 2 个不同单词");
+  await history.locator(".sprint-history-row").first()
+    .getByRole("button", { name: "再跑一次" }).click();
+  await expect.poll(async () => {
+    const settings = await readStoreRecord(page, "settings", "current");
+    return {
+      id: settings?.activeSession?.id,
+      wordIds: settings?.activeSession?.wordIds,
+    };
+  }).toEqual({
+    id: expect.stringMatching(/^sprint:treatment:generic-sprint:/),
+    wordIds: [1],
+  });
 });
 
 test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同维回流", async ({ context, page }) => {

@@ -52,8 +52,11 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  createTreatmentSprintSessionId,
   createStubbornSprintSessionId,
+  parseSprintSessionId,
   parseStubbornSprintSessionId,
+  SPRINT_TREATMENT_DIMENSIONS,
   wordRecallStats,
   type WeakSignalInput,
   type WeakThresholds,
@@ -231,6 +234,42 @@ test("activeQuiz题组快照：归一化清洗、限长、分域往返与旧会�
     },
   }));
   assert.equal(invalid.activeQuiz?.questionWordIds, undefined);
+});
+
+test("未来维度化 id：activeSession、activeQuiz 与 review 分域往返不丢失", () => {
+  const activeSessionId = "sprint:treatment:lookup-recall:2026-08-09T08:00:00.000Z";
+  const activeQuizId = "sprint:treatment:meaning-choice:2026-08-09T08:01:00.000Z";
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeSession: {
+      id: activeSessionId,
+      kind: "sprint",
+      title: "考前薄弱冲刺 · 词义主动回忆",
+      wordIds: [1, 2],
+      index: 1,
+      createdAt: "2026-08-09T08:00:00.000Z",
+    },
+    activeQuiz: {
+      id: activeQuizId,
+      mode: "meaning-choice",
+      seed: 40,
+      questionWordIds: [1, 2],
+      index: 0,
+      correctCount: 0,
+      answers: {},
+      complete: false,
+      startedAt: "2026-08-09T08:01:00.000Z",
+    },
+    reviews: [{
+      ...makeReview(1, 2, "2026-08-09T08:02:00.000Z", 4_000),
+      section: "必考词",
+      sessionId: activeSessionId,
+    }],
+  }));
+  const restored = combineStoredState(splitStoredState(state));
+  assert.equal(restored.activeSession?.id, activeSessionId);
+  assert.equal(restored.activeQuiz?.id, activeQuizId);
+  assert.equal(restored.reviews[0]?.sessionId, activeSessionId);
 });
 
 test("activeQuiz题组快照：实时画像变化后仍恢复原题序、答案和干扰项", () => {
@@ -692,6 +731,92 @@ test("冲刺历史：按 sessionId 分组、去重词数、时间倒序，无记
   assert.equal(history.records[1].averageRecallMs, 8_667); // (8+12+6)/3 取整
   assert.equal(buildSprintHistory([]).totalCount, 0);
   assert.deepEqual(buildSprintHistory([]).records, []);
+});
+
+test("冲刺会话 id：新维度、旧普通与顽固格式统一安全解析", () => {
+  const now = new Date("2026-08-09T00:12:34.567Z");
+  for (const dimension of SPRINT_TREATMENT_DIMENSIONS) {
+    const sessionId = createTreatmentSprintSessionId(dimension, now);
+    assert.equal(
+      sessionId,
+      `sprint:treatment:${dimension}:2026-08-09T00:12:34.567Z`,
+    );
+    assert.deepEqual(parseSprintSessionId(sessionId), {
+      dimension,
+      format: "treatment",
+      startedAt: now.toISOString(),
+    });
+  }
+
+  assert.deepEqual(
+    parseSprintSessionId("sprint:treatment:lookup-recall:2026-08-09T08:12:34.567+08:00"),
+    {
+      dimension: "lookup-recall",
+      format: "treatment",
+      startedAt: "2026-08-09T08:12:34.567+08:00",
+    },
+  );
+  assert.deepEqual(parseSprintSessionId("sprint:2026-08-09T00:12:34.567Z"), {
+    dimension: "unknown",
+    format: "legacy",
+    startedAt: "2026-08-09T00:12:34.567Z",
+  });
+  assert.deepEqual(
+    parseSprintSessionId("sprint:stubborn:listening-spelling:2026-08-09T00:12:34.567Z"),
+    {
+      dimension: "stubborn",
+      format: "stubborn",
+      startedAt: "2026-08-09T00:12:34.567Z",
+      submode: "listening-spelling",
+    },
+  );
+  assert.deepEqual(
+    parseSprintSessionId("sprint:treatment:future-mode:2026-08-09T00:12:34.567Z"),
+    {
+      dimension: "unknown",
+      format: "treatment",
+      startedAt: "2026-08-09T00:12:34.567Z",
+    },
+  );
+  assert.deepEqual(
+    parseSprintSessionId("sprint:stubborn:future-mode:2026-08-09T00:12:34.567Z"),
+    {
+      dimension: "unknown",
+      format: "stubborn",
+      startedAt: "2026-08-09T00:12:34.567Z",
+    },
+  );
+  assert.deepEqual(parseSprintSessionId("sprint:treatment:lapse:not-a-time"), {
+    dimension: "unknown",
+    format: "treatment",
+  });
+  assert.deepEqual(parseSprintSessionId("sprint:not-a-time"), {
+    dimension: "unknown",
+    format: "legacy",
+  });
+  assert.equal(parseSprintSessionId("today:2026-08-09T00:12:34.567Z"), null);
+});
+
+test("冲刺历史：旧、顽固、新 treatment 同时排序，非法时间不进入汇总", () => {
+  const legacyId = "sprint:2026-08-07T08:00:00.000Z";
+  const stubbornId = "sprint:stubborn:lookup-recall:2026-08-08T08:00:00.000Z";
+  const treatmentId = "sprint:treatment:meaning-choice:2026-08-09T08:00:00.000Z";
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-07T08:01:00.000Z"), sessionId: legacyId },
+    { ...makeReview(2, 2, "2026-08-08T08:01:00.000Z"), sessionId: stubbornId },
+    { ...makeReview(3, 2, "2026-08-09T08:01:00.000Z"), sessionId: treatmentId },
+    { ...makeReview(4, 2, "2026-08-09T08:02:00.000Z"), sessionId: treatmentId },
+    { ...makeReview(5, 2, "2026-08-09T08:03:00.000Z"), sessionId: "sprint:treatment:lapse:invalid" },
+  ];
+  const history = buildSprintHistory(reviews);
+  assert.deepEqual(history.records.map((record) => record.sessionId), [
+    treatmentId,
+    stubbornId,
+    legacyId,
+  ]);
+  assert.equal(history.totalCount, 3);
+  assert.equal(history.totalWordCount, 4);
+  assert.deepEqual(buildSprintRecordWordIds(reviews, treatmentId), [3, 4]);
 });
 
 test("冲刺历史再跑：按 sessionId 提取去重词 id，其他会话不混入", () => {
@@ -1591,6 +1716,37 @@ test("首次正常复习保持：最近成功锚点只归一次，同毫秒按 i
   assert.equal(series[3].retention?.truncatedCount, 1);
   assert.equal(series[3].retention?.retentionRate, 50);
   assert.equal(series[3].retention?.pairedRecall.sampleCount, 2);
+});
+
+test("首次正常复习保持：新维度锚点、跨维冲刺截断与普通随访口径不变", () => {
+  const anchorAt = "2026-08-04T08:00:00+08:00";
+  const followAt = "2026-08-05T08:00:00+08:00";
+  const tieAt = "2026-08-06T08:00:00+08:00";
+  const reviews = [
+    retentionReview(1, 2, anchorAt, "w1-anchor", "sprint:treatment:listening-spelling:2026-08-04T08:00:00+08:00", 10_000),
+    retentionReview(1, 2, followAt, "w1-follow", "quiz:listening-spelling", 6_000),
+    retentionReview(2, 3, anchorAt, "w2-anchor", "sprint:treatment:lookup-recall:2026-08-04T08:00:00+08:00", 8_000),
+    retentionReview(2, 1, followAt, "w2-follow", undefined, 7_000),
+    retentionReview(3, 2, anchorAt, "w3-anchor", "sprint:treatment:meaning-choice:2026-08-04T08:00:00+08:00", 9_000),
+    retentionReview(3, 1, followAt, "w3-next", "sprint:treatment:chinese-to-english:2026-08-05T08:00:00+08:00", 5_000),
+    retentionReview(3, 2, "2026-08-07T08:00:00+08:00", "w3-too-late", undefined, 4_000),
+    retentionReview(4, 2, tieAt, "a-anchor", "sprint:treatment:generic-sprint:2026-08-06T08:00:00+08:00", 6_000),
+    retentionReview(4, 2, tieAt, "z-follow", "quiz:meaning-choice", 3_000),
+  ].reverse();
+  const retention = buildSprintRetentionSeries(
+    reviews,
+    new Date("2026-08-10T12:00:00+08:00"),
+  ).at(-1)?.retention;
+
+  assert.ok(retention);
+  assert.equal(retention.cohortWordCount, 4);
+  assert.equal(retention.followedUpCount, 3);
+  assert.equal(retention.unobservedCount, 1);
+  assert.equal(retention.truncatedCount, 1);
+  assert.equal(retention.coverageRate, 75);
+  assert.equal(retention.retainedCount, 2);
+  assert.equal(retention.retentionRate, 67);
+  assert.equal(retention.pairedRecall.sampleCount, 3);
 });
 
 test("首次正常复习保持：无效/未来事件排除，quizAttempt 不充当 review，合法 0 测时保留", () => {

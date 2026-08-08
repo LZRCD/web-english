@@ -81,6 +81,7 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  createTreatmentSprintSessionId,
   createStubbornSprintSessionId,
   parseStubbornSprintSessionId,
   type WeakSignalInput,
@@ -1573,19 +1574,27 @@ export default function Home() {
           "sprint",
           "考前薄弱冲刺 · 词义主动回忆",
           sprintTreatment.wordIds,
+          undefined,
+          createTreatmentSprintSessionId("lookup-recall", now),
         );
         return;
       }
       setActiveQuiz({
         ...createQuizSession(sprintTreatment.mode, now.getTime(), now),
-        id: `sprint:${now.toISOString()}`,
+        id: createTreatmentSprintSessionId(sprintTreatment.mode, now),
       });
       clearSession();
       setActiveView("quiz");
       showToast(`已按薄弱维度推荐${sprintTreatment.label} · ${sprintTreatment.wordIds.length} 词`, 1800);
       return;
     }
-    startSession("sprint", "考前薄弱冲刺", sprintWordIds);
+    startSession(
+      "sprint",
+      "考前薄弱冲刺",
+      sprintWordIds,
+      undefined,
+      createTreatmentSprintSessionId("generic-sprint"),
+    );
   }
 
   // 集中区按分册/单元发起冲刺：只带该区域命中薄弱信号的词
@@ -1605,6 +1614,8 @@ export default function Home() {
       "sprint",
       `薄弱冲刺 · ${section}${unit ? ` ${unit}` : ""}`,
       wordIds,
+      undefined,
+      createTreatmentSprintSessionId("generic-sprint"),
     );
   }
   // 从完成页一键再冲刺：只带「仍需关注」的词
@@ -1612,7 +1623,13 @@ export default function Home() {
     const stillWeakIds = sprintCompletionSummary?.stillWeakWords.map(
       (item) => item.wordId,
     ) ?? [];
-    startSession("sprint", "薄弱冲刺 · 补漏", stillWeakIds);
+    startSession(
+      "sprint",
+      "薄弱冲刺 · 补漏",
+      stillWeakIds,
+      undefined,
+      createTreatmentSprintSessionId("generic-sprint"),
+    );
   }
 
   // 从轨迹页当前仍薄弱追踪一键再冲刺：只带当前仍薄弱词
@@ -1622,12 +1639,24 @@ export default function Home() {
       showToast("暂无当前仍薄弱词可冲刺", 1800);
       return;
     }
-    startSession("sprint", "薄弱冲刺 · 再次处置", wordIds);
+    startSession(
+      "sprint",
+      "薄弱冲刺 · 再次处置",
+      wordIds,
+      undefined,
+      createTreatmentSprintSessionId("generic-sprint"),
+    );
   }
   // 从轨迹页冲刺记录再跑一次：复用该次冲刺的词集
   function startSprintFromHistory(sessionId: string) {
     const wordIds = buildSprintRecordWordIds(reviews, sessionId);
-    startSession("sprint", "薄弱冲刺 · 历史复跑", wordIds);
+    startSession(
+      "sprint",
+      "薄弱冲刺 · 历史复跑",
+      wordIds,
+      undefined,
+      createTreatmentSprintSessionId("generic-sprint"),
+    );
   }
 
   // 复制薄弱冲刺清单：多行「词 — 信号1、信号2」文本

@@ -1,7 +1,7 @@
 # 咬合验证表（occlusion table）
 
 > 以第 0 轮对前 18 轮的核对为基线，并持续记录第 19~33 轮修复。状态：✅ 已验证咬合 / ❌ 断链 / ⚠️ 存疑。
-> 当前 22 项全部为 ✅；维度化处置审计另见 `dimension-treatment-audit.md`，其中“猜错”仍没有可靠事件时间源。只读子代理产出初版，后续轮次仅更新状态与修复证据。
+> 当前 23 项全部为 ✅；维度化处置审计另见 `dimension-treatment-audit.md`，其中“猜错”仍没有可靠事件时间源。只读子代理产出初版，后续轮次仅更新状态与修复证据。
 
 | # | 联动检查项 | 关键代码位置 | 状态 | 断链说明（在哪一步断：数据流/UI/判定） | 修复轮次 |
 |---|---|---|---|---|---|
@@ -32,6 +32,7 @@
 | 20 | 维度事实/阈值 → 分域持久化 → 刷新后画像与推荐保持 | `persistedState` → `splitStoredState` / `combineStoredState` → `normalizeStoredState` → hydrate | ✅ 已验证咬合 | settings 分域补齐既有阈值、猜错累计、义项频率和两项显示设置；真实刷新与再次写盘后不丢失，不新增 schema/version。 | 32 |
 | 21 | activeQuiz 启动题组 → 作答改变画像 → 刷新后原题组与进度保持 | `QuizView` 实际 questions → `questionWordIds` → `normalizeQuizSession` → `restoreQuizQuestions` | ✅ 已验证咬合 | 有序目标 ID 快照优先于刷新后的实时推荐和优先级；普通、sprint、顽固会话保持模式、题序、位置、答案、正确数和 sessionId，meaning-choice 干扰项仍来自全部已学词；旧会话安全回退后自愈。 | 33 |
 | 22 | 成功冲刺 → 下一次冲刺前首次正常复习 → 保持与测时观察 | `reviews` → `buildSprintRetentionSeries` → `page.tsx` → `HistoryView` | ✅ 已验证咬合 | 最近 4 个完整周按每词最近成功冲刺锚点归组；下一 sprint 截断，首条非 sprint review（含 `quiz:*` review）形成随访。覆盖、保持、未观察、截断、实际间隔与合法同词测时分别披露；quizAttempt 不参与，未观察不算失败。 | 38 |
+| 23 | 启动真实处置维度 → 唯一 sessionId → 写入/刷新 → 历史与 generic 复跑 | `createTreatmentSprintSessionId` / `parseSprintSessionId` → activeSession/activeQuiz → review → `buildSprintHistory` / `buildSprintRecordWordIds` | ✅ 已验证咬合 | 新 treatment、旧普通、顽固和 generic 统一解析；真实 Quiz 与 lookup 入口写入同 id、刷新保持、历史可见，历史复跑只取原词集并写新 generic id。固定 3000 signal-flow 17/17；测试遵守成功 review 后 lookup 降级，并用真实再次划词触发复发。 | 40 |
 
 ## 缺口清单（从第 0 轮报告 ⑥ 同步，后续轮次目标池）
 

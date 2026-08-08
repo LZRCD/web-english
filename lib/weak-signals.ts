@@ -106,6 +106,28 @@ export type StubbornTreatmentMode =
   typeof STUBBORN_TREATMENT_SEQUENCE[number];
 
 export const STUBBORN_SPRINT_SESSION_PREFIX = "sprint:stubborn:";
+export const TREATMENT_SPRINT_SESSION_PREFIX = "sprint:treatment:";
+
+export const SPRINT_TREATMENT_DIMENSIONS = [
+  "listening-spelling",
+  "chinese-to-english",
+  "meaning-choice",
+  "lookup-recall",
+  "stubborn",
+  "slow-recall",
+  "lapse",
+  "generic-sprint",
+] as const;
+
+export type SprintTreatmentDimension =
+  typeof SPRINT_TREATMENT_DIMENSIONS[number];
+
+export type ParsedSprintSession = {
+  dimension: SprintTreatmentDimension | "unknown";
+  format: "treatment" | "stubborn" | "legacy";
+  startedAt?: string;
+  submode?: StubbornTreatmentMode;
+};
 
 const STUBBORN_TREATMENT_LABELS: Record<
   StubbornTreatmentMode,
@@ -123,16 +145,63 @@ export function createStubbornSprintSessionId(
   return `${STUBBORN_SPRINT_SESSION_PREFIX}${mode}:${now.toISOString()}`;
 }
 
-/** 解析结构化顽固词冲刺 id；旧记录或非法值安全回退。 */
+/** 为未来普通冲刺写入唯一的维度化 id；unknown 只能来自解析。 */
+export function createTreatmentSprintSessionId(
+  dimension: SprintTreatmentDimension,
+  now = new Date(),
+) {
+  return `${TREATMENT_SPRINT_SESSION_PREFIX}${dimension}:${now.toISOString()}`;
+}
+
+const TRAILING_ISO_PATTERN = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))$/;
+
+function validTrailingStartedAt(value: string) {
+  const startedAt = value.match(TRAILING_ISO_PATTERN)?.[1];
+  return startedAt && Number.isFinite(new Date(startedAt).getTime())
+    ? startedAt
+    : undefined;
+}
+
+/** 统一解析新旧冲刺 id；非法结构安全回退，且尽量保留合法尾部时间。 */
+export function parseSprintSessionId(sessionId?: string): ParsedSprintSession | null {
+  if (!sessionId?.startsWith("sprint:")) return null;
+  if (sessionId.startsWith(TREATMENT_SPRINT_SESSION_PREFIX)) {
+    const rest = sessionId.slice(TREATMENT_SPRINT_SESSION_PREFIX.length);
+    const dimension = SPRINT_TREATMENT_DIMENSIONS.find((candidate) =>
+      rest.startsWith(`${candidate}:`));
+    const startedAt = validTrailingStartedAt(rest);
+    return {
+      dimension: dimension && startedAt ? dimension : "unknown",
+      format: "treatment",
+      ...(startedAt ? { startedAt } : {}),
+    };
+  }
+  if (sessionId.startsWith(STUBBORN_SPRINT_SESSION_PREFIX)) {
+    const rest = sessionId.slice(STUBBORN_SPRINT_SESSION_PREFIX.length);
+    const submode = STUBBORN_TREATMENT_SEQUENCE.find((candidate) =>
+      rest.startsWith(`${candidate}:`));
+    const startedAt = validTrailingStartedAt(rest);
+    return {
+      dimension: submode && startedAt ? "stubborn" : "unknown",
+      format: "stubborn",
+      ...(startedAt ? { startedAt } : {}),
+      ...(submode && startedAt ? { submode } : {}),
+    };
+  }
+  const startedAt = validTrailingStartedAt(sessionId.slice("sprint:".length));
+  return {
+    dimension: "unknown",
+    format: "legacy",
+    ...(startedAt ? { startedAt } : {}),
+  };
+}
+
+/** 兼容既有顽固词调用方；权威解析委托给 parseSprintSessionId。 */
 export function parseStubbornSprintSessionId(sessionId?: string) {
-  if (!sessionId?.startsWith(STUBBORN_SPRINT_SESSION_PREFIX)) return null;
-  const rest = sessionId.slice(STUBBORN_SPRINT_SESSION_PREFIX.length);
-  const mode = STUBBORN_TREATMENT_SEQUENCE.find((candidate) =>
-    rest.startsWith(`${candidate}:`));
-  if (!mode) return null;
-  const startedAt = rest.slice(mode.length + 1);
-  if (!Number.isFinite(new Date(startedAt).getTime())) return null;
-  return { mode, startedAt };
+  const parsed = parseSprintSessionId(sessionId);
+  return parsed?.dimension === "stubborn" && parsed.submode && parsed.startedAt
+    ? { mode: parsed.submode, startedAt: parsed.startedAt }
+    : null;
 }
 
 /** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
@@ -594,9 +663,8 @@ export function buildSprintHistory(
     groups.set(sessionId, items);
   }
   const records = [...groups.entries()].flatMap(([sessionId, items]) => {
-    const startedAt = parseStubbornSprintSessionId(sessionId)?.startedAt
-      ?? sessionId.slice("sprint:".length);
-    if (!Number.isFinite(new Date(startedAt).getTime())) return [];
+    const startedAt = parseSprintSessionId(sessionId)?.startedAt;
+    if (!startedAt) return [];
     const wordIds = new Set(
       items
         .map((review) => review.wordId)
@@ -626,14 +694,18 @@ export function buildSprintHistory(
         : null,
     }];
   });
-  records.sort((first, second) => second.startedAt.localeCompare(first.startedAt));
+  records.sort((first, second) =>
+    new Date(second.startedAt).getTime() - new Date(first.startedAt).getTime()
+    || second.sessionId.localeCompare(first.sessionId));
+  const validSessionIds = new Set(records.map((record) => record.sessionId));
   return {
     records,
     totalCount: records.length,
     totalWordCount: new Set(
       reviews
         .filter((review) =>
-          review.sessionId?.startsWith("sprint:")
+          review.sessionId !== undefined
+          && validSessionIds.has(review.sessionId)
           && review.wordId !== undefined)
         .map((review) => review.wordId),
     ).size,

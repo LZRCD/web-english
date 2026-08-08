@@ -1238,3 +1238,20 @@
 - 第 40 轮唯一目标是最小统一未来 sessionId 编码：覆盖三类 Quiz、lookup-recall、stubborn、slow-recall、lapse、generic-sprint、unknown；保留顽固旧格式，统一 startedAt，并验证写入、刷新、历史、成效、保持和再跑兼容。
 - 第 40 轮仍不实现分维度报告、排行或自适应。只有未来编码纵向链完整闭环后，才能判断阶段 C 完成并进入阶段 D。
 - 本轮只改审计与演进文档，不更新 `occlusion-table.md`，不启动服务或浏览器 E2E；定向静态验证数字见 `docs/iterations/round-39.md`。
+
+## 第五十九次迭代：证据驱动学习第七轮（未来处置维度统一编码）
+
+本次迭代：2026-08-09。
+
+### 实现与边界
+
+- 新增唯一未来编码 `sprint:treatment:<dimension>:<ISO>` 与统一解析器；兼容旧普通 sprint、三种顽固子 mode、未知维度和非法时间，不回填历史。
+- 三类 Quiz 与查词主动回忆按启动时结构化事实写真实维度；顽固格式保持；fallback、限定、补漏、当前仍薄弱与历史复跑统一写 `generic-sprint`，unknown 不冒充 generic。
+- `buildSprintHistory` 统一解析 startedAt；其余时间线、成效、当前仍薄弱、保持和再跑消费者保持完整 id/`startsWith("sprint:")` 语义。
+- activeSession、activeQuiz 与 review 继续走既有分域和 normalize，不新增 schema/version/store/domain；评分、FSRS、每日 Quiz 门禁、阶段 A/B 指标与推荐优先级均未修改。
+
+### 验证与阶段状态
+
+- 定向 85/85，lint/typecheck 通过，`npm test` 含生产构建 205/205。
+- signal-flow 已扩展真实 Quiz → 刷新 → review 同 id → 真实再次划词复发 → lookup WordCard → 刷新 → review 同 id → 历史 → generic 复跑的复合链；固定 3000 全组 17/17（45.6s）。首次 16/17 证明成功 review 后旧 lookup 会正确降级，测试随后改用真实再次划词，不放宽产品规则。
+- 阶段 C 完成；下一轮可进入阶段 D 分维度观察报告，但必须并列披露样本和 unknown，不排名、不改推荐。
