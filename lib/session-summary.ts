@@ -7,12 +7,14 @@ import {
 } from "./learning.ts";
 import {
   buildPairedRecallChange,
-  buildWordWeakSignals,
+  buildWordWeakSignalEntries,
   type PairedRecallChange,
   type WeakDimensionTrend,
   type WeakSignalInput,
+  type WeakSignalKey,
   type WeakThresholds,
 } from "./weak-signals.ts";
+import { localDayStart } from "./date-utils.ts";
 
 const REINFORCEMENT_LIMIT = 5;
 
@@ -51,10 +53,6 @@ type BuildSessionCompletionSummaryInput = {
 function validTime(value: string) {
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : null;
-}
-
-function localDayStart(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
 function latestReviewByWord(
@@ -267,8 +265,13 @@ export type SprintCompletionSummary = {
   stillWeakCount: number;
   /** 本次冲刺与开始前最近非冲刺记录的同词配对观察 */
   pairedRecall: PairedRecallChange;
-  /** 冲刺后仍薄弱的具体词（word + 薄弱标签） */
-  stillWeakWords: { wordId: number; word: string; signals: string[] }[];
+  /** 冲刺后仍薄弱的具体词（word + 薄弱标签与结构化信号 key） */
+  stillWeakWords: {
+    wordId: number;
+    word: string;
+    signals: string[];
+    signalKeys: WeakSignalKey[];
+  }[];
   /** 各薄弱维度词数分布（冲刺后仍命中） */
   dimensionCounts: WeakDimensionTrend[];
 };
@@ -281,7 +284,7 @@ type SprintSummaryInput = {
   weakThresholds?: WeakThresholds;
 };
 
-/** 按薄弱标签前缀归类维度词数（buildWordWeakSignals 的标签为固定格式） */
+/** 按结构化信号 key 归类维度词数（signalKeys 与标签同源，不解析中文文案） */
 function sprintDimensionCounts(
   stillWeakWords: SprintCompletionSummary["stillWeakWords"],
 ): WeakDimensionTrend[] {
@@ -297,18 +300,9 @@ function sprintDimensionCounts(
   ];
   const rowByKey = new Map(rows.map((row) => [row.key, row]));
   for (const item of stillWeakWords) {
-    for (const signal of item.signals) {
-      const key: WeakDimensionTrend["key"] | undefined =
-        signal.startsWith("查过") ? "lookup"
-        : signal.startsWith("猜错") ? "guess"
-        : signal.startsWith("拼写测验错") ? "quiz-spelling"
-        : signal.startsWith("中译英错") ? "quiz-c2e"
-        : signal.startsWith("辨析错") ? "quiz-choice"
-        : signal.startsWith("回忆偏慢") ? "slow-recall"
-        : signal === "顽固词" ? "stubborn"
-        : signal.startsWith("FSRS lapse") ? "lapse"
-        : undefined;
-      if (key) rowByKey.get(key)!.count += 1;
+    for (const key of item.signalKeys) {
+      const row = rowByKey.get(key);
+      if (row) row.count += 1;
     }
   }
   return rows;
@@ -338,18 +332,23 @@ export function buildSprintCompletionSummary({
     sessionReviews,
     startedAtMs,
   );
-  // 冲刺后仍薄弱：实时派生（buildWordWeakSignals 标签非空）
+  // 冲刺后仍薄弱：实时派生（结构化信号条目非空）
   const stillWeakWords = [...reviewedWordIds].flatMap((wordId) => {
-    const signals = buildWordWeakSignals(
+    const entries = buildWordWeakSignalEntries(
       wordId,
       weakSignals,
       undefined,
       weakThresholds,
     );
-    if (!signals.length) return [];
+    if (!entries.length) return [];
     const word = sessionReviews.find((review) => review.wordId === wordId)?.word
       ?? `词 ${wordId}`;
-    return [{ wordId, word, signals }];
+    return [{
+      wordId,
+      word,
+      signals: entries.map((entry) => entry.label),
+      signalKeys: entries.map((entry) => entry.key),
+    }];
   });
   return {
     sprintWordCount: session.wordIds.length,

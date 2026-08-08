@@ -11,6 +11,7 @@ import type {
   Word,
 } from "./study.ts";
 import { seededScore, splitSenseItems } from "./word-utils.ts";
+import { localDateKey } from "./date-utils.ts";
 
 export type QuizMode =
   | "listening-spelling"
@@ -167,7 +168,7 @@ export function shouldApplyQuizToSchedule(
   wordId: number,
   now: Date,
 ) {
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const today = localDateKey(now);
   return !attempts.some(
     (attempt) =>
       attempt.wordId === wordId
