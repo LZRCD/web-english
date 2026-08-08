@@ -33,6 +33,7 @@
 | 21 | activeQuiz 启动题组 → 作答改变画像 → 刷新后原题组与进度保持 | `QuizView` 实际 questions → `questionWordIds` → `normalizeQuizSession` → `restoreQuizQuestions` | ✅ 已验证咬合 | 有序目标 ID 快照优先于刷新后的实时推荐和优先级；普通、sprint、顽固会话保持模式、题序、位置、答案、正确数和 sessionId，meaning-choice 干扰项仍来自全部已学词；旧会话安全回退后自愈。 | 33 |
 | 22 | 成功冲刺 → 下一次冲刺前首次正常复习 → 保持与测时观察 | `reviews` → `buildSprintRetentionSeries` → `page.tsx` → `HistoryView` | ✅ 已验证咬合 | 最近 4 个完整周按每词最近成功冲刺锚点归组；下一 sprint 截断，首条非 sprint review（含 `quiz:*` review）形成随访。覆盖、保持、未观察、截断、实际间隔与合法同词测时分别披露；quizAttempt 不参与，未观察不算失败。 | 38 |
 | 23 | 启动真实处置维度 → 唯一 sessionId → 写入/刷新 → 历史与 generic 复跑 | `createTreatmentSprintSessionId` / `parseSprintSessionId` → activeSession/activeQuiz → review → `buildSprintHistory` / `buildSprintRecordWordIds` | ✅ 已验证咬合 | 新 treatment、旧普通、顽固和 generic 统一解析；真实 Quiz 与 lookup 入口写入同 id、刷新保持、历史可见，历史复跑只取原词集并写新 generic id。固定 3000 signal-flow 17/17；测试遵守成功 review 后 lookup 降级，并用真实再次划词触发复发。 | 40 |
+| 24 | 分维度观察报告：parser 归属 → 活动/锚点双口径 → 保持与仍薄弱独立分母 → unknown/generic 分列 | `parseSprintSessionId` → `buildDimensionObservationReport` → `page.tsx` → `HistoryView` | ✅ 已验证咬合 | 固定 9 行并列披露样本数与分子/分母；活动系同词跨维可重复且标注不可合计；锚点系分维合计==全局；unknown 与 generic 分列，顽固子 mode 只披露；不排名、不改推荐。 | 41 |
 
 ## 缺口清单（从第 0 轮报告 ⑥ 同步，后续轮次目标池）
 

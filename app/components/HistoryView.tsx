@@ -11,6 +11,7 @@ import type { ExamPhase, ExamProgressTiers } from "../../lib/learning";
 import type { SprintDimensionWithTrend } from "../../lib/session-summary";
 import {
   emphasizedWeakDimensions,
+  type DimensionObservationReport,
   type SprintEffectivenessWeek,
   type SprintHistory,
   type SprintRelapse,
@@ -71,6 +72,8 @@ type HistoryViewProps = {
   sprintRelapseSeries: SprintRelapseWeek[];
   /** 最近 4 个完整处置周的首次正常复习保持观察。 */
   sprintRetentionSeries: SprintRetentionWeek[];
+  /** 最近 4 个完整周的分维度活动与保持观察。 */
+  dimensionObservationReport: DimensionObservationReport;
   /** 上周冲刺当场达标词截至当前仍薄弱追踪（无上周冲刺为 null） */
   sprintRelapse: SprintRelapse | null;
   /** 当前仍薄弱词词名明细（wordId → 词名，供悬停展示） */
@@ -120,6 +123,7 @@ export default function HistoryView({
   sprintEffectivenessSeries,
   sprintRelapseSeries,
   sprintRetentionSeries,
+  dimensionObservationReport,
   sprintRelapse,
   sprintRelapseWords,
   sprintDimensionTrend,
@@ -641,6 +645,66 @@ export default function HistoryView({
             </div>
           </div>
         )}
+        <details className="dimension-observation" aria-label="分维度观察报告（最近 4 个完整周）">
+          <summary>分维度观察报告（最近 4 个完整周）</summary>
+          <p>
+            {dimensionObservationReport.windowStart} 至 {dimensionObservationReport.windowEnd}（不含结束日） ·
+            用户选择与固定推荐下的观察，不代表模式效果、因果、最佳/最差或推荐依据。
+          </p>
+          <p>覆盖词与当场达标词是各维活动口径，同词可跨维重复，不可跨维合计；session 数可以合计。</p>
+          <div className="dimension-observation-grid">
+            {dimensionObservationReport.rows.map((row) => (
+              <article key={row.dimension} data-dimension={row.dimension}>
+                <strong>{({
+                  "listening-spelling": "听音拼写",
+                  "chinese-to-english": "中译英",
+                  "meaning-choice": "释义辨析",
+                  "lookup-recall": "词义主动回忆",
+                  stubborn: "顽固词强化",
+                  "slow-recall": "回忆偏慢",
+                  lapse: "FSRS lapse",
+                  "generic-sprint": "通用冲刺",
+                  unknown: "未知历史",
+                } as const)[row.dimension]}</strong>
+                <small>活动：session {row.sessionCount} · 覆盖 {row.coveredWordCount} 词 · 当场达标 {row.resolvedCount} 词</small>
+                <small>
+                  当前仍薄弱：{row.stillWeakRate === null
+                    ? "无样本"
+                    : `${row.stillWeakCount}/${row.cohortWordCount}（${row.stillWeakRate}%）`}
+                </small>
+                <small>
+                  随访覆盖：{row.coverageRate === null
+                    ? "无样本"
+                    : `${row.followedUpCount}/${row.cohortWordCount}（${row.coverageRate}%）`}
+                  {row.cohortWordCount > 0
+                    ? ` · 未观察 ${row.unobservedCount} · 截断 ${row.truncatedCount}`
+                    : ""}
+                </small>
+                <small>
+                  保持：{row.retentionRate === null
+                    ? "无随访样本"
+                    : `${row.retainedCount}/${row.followedUpCount}（${row.retentionRate}%）`}
+                  {row.followUpDelayMs === null
+                    ? " · 间隔 —"
+                    : ` · 平均间隔 ${formatFollowUpDelay(row.followUpDelayMs)}`}
+                </small>
+                <small>
+                  配对测时：{row.pairedRecall.sampleCount === 0
+                    ? "无配对样本"
+                    : `${row.pairedRecall.sampleCount} 词 · 冲刺 ${formatRecall(row.pairedRecall.sprintAverageRecallMs)} → 随访 ${formatRecall(row.pairedRecall.followUpAverageRecallMs)} · ${formatRetentionRecallChange(row.pairedRecall.changeMs!)}`}
+                </small>
+                {row.stubbornSubmodeSessionCounts && (
+                  <small>
+                    子模式 session：词义主动回忆 {row.stubbornSubmodeSessionCounts["lookup-recall"] ?? 0} ·
+                    听音拼写 {row.stubbornSubmodeSessionCounts["listening-spelling"] ?? 0} ·
+                    中译英 {row.stubbornSubmodeSessionCounts["chinese-to-english"] ?? 0}
+                  </small>
+                )}
+              </article>
+            ))}
+          </div>
+          <p>“当前仍薄弱”不能区分从未恢复与恢复后再次薄弱，当前弱点也未必由该处置维度产生。</p>
+        </details>
         {sprintDimensionTrend.length > 0 && (
           <div className="weak-trend" aria-label="冲刺维度归因">
             <div className="weak-trend-head">

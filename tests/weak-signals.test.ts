@@ -24,6 +24,7 @@ import {
 } from "../lib/quiz.ts";
 import {
   buildPairedRecallChange,
+  buildDimensionObservationReport,
   buildSprintCsv,
   buildSprintEffectiveness,
   buildSprintEffectivenessSeries,
@@ -1816,6 +1817,159 @@ test("首次正常复习保持：空 cohort 与零观察保持 null，不伪造 
   const failedRetention = buildSprintRetentionSeries(failedFollowUp, now).at(-1)?.retention;
   assert.ok(failedRetention);
   assert.equal(failedRetention.retentionRate, 0);
+});
+
+test("分维度观察：固定 8 维加 unknown 顺序，维度只来自统一 parser", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const at = "2026-08-04T08:00:00+08:00";
+  const reviews = SPRINT_TREATMENT_DIMENSIONS.map((dimension, index) =>
+    retentionReview(
+      index + 1,
+      2,
+      at,
+      `known-${dimension}`,
+      `sprint:treatment:${dimension}:${at}`,
+    ));
+  reviews.push(
+    retentionReview(20, 2, at, "legacy", `sprint:${at}`),
+    retentionReview(21, 2, at, "future", `sprint:treatment:future-mode:${at}`),
+    retentionReview(22, 2, at, "bad-stubborn", `sprint:stubborn:future-mode:${at}`),
+  );
+  const report = buildDimensionObservationReport(
+    reviews,
+    baseInput({ reviews }),
+    now,
+  );
+
+  assert.deepEqual(report.rows.map((row) => row.dimension), [
+    ...SPRINT_TREATMENT_DIMENSIONS,
+    "unknown",
+  ]);
+  assert.deepEqual(
+    report.rows.slice(0, 8).map((row) => row.sessionCount),
+    Array(8).fill(1),
+  );
+  assert.equal(report.rows.at(-1)?.sessionCount, 3);
+  assert.equal(report.rows.at(-1)?.cohortWordCount, 3);
+  assert.equal(report.rows.find((row) => row.dimension === "generic-sprint")?.sessionCount, 1);
+});
+
+test("分维度观察：合法顽固归主维，子模式只披露 session 数", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const firstAt = "2026-08-04T08:00:00+08:00";
+  const secondAt = "2026-08-05T08:00:00+08:00";
+  const reviews = [
+    retentionReview(1, 2, firstAt, "s1-a", `sprint:stubborn:lookup-recall:${firstAt}`),
+    retentionReview(2, 1, firstAt, "s1-b", `sprint:stubborn:lookup-recall:${firstAt}`),
+    retentionReview(3, 2, secondAt, "s2", `sprint:stubborn:listening-spelling:${secondAt}`),
+  ];
+  const row = buildDimensionObservationReport(
+    reviews,
+    baseInput({ reviews }),
+    now,
+  ).rows.find((item) => item.dimension === "stubborn")!;
+
+  assert.equal(row.sessionCount, 2);
+  assert.equal(row.coveredWordCount, 3);
+  assert.equal(row.resolvedCount, 2);
+  assert.deepEqual(row.stubbornSubmodeSessionCounts, {
+    "lookup-recall": 1,
+    "listening-spelling": 1,
+    "chinese-to-english": 0,
+  });
+});
+
+test("分维度观察：全局先选唯一锚点，合计等于既有 B 链且跨维下一冲刺截断", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const reviews = [
+    retentionReview(1, 2, "2026-07-15T08:00:00+08:00", "w1-old", "sprint:treatment:listening-spelling:2026-07-15T08:00:00+08:00", 10_000),
+    retentionReview(1, 3, "2026-08-04T08:00:00+08:00", "w1-new", "sprint:treatment:generic-sprint:2026-08-04T08:00:00+08:00", 8_000),
+    retentionReview(1, 2, "2026-08-05T08:00:00+08:00", "w1-follow", "quiz:meaning-choice", 4_000),
+    retentionReview(2, 2, "2026-08-04T09:00:00+08:00", "w2-anchor", "sprint:treatment:lookup-recall:2026-08-04T09:00:00+08:00", 7_000),
+    retentionReview(2, 1, "2026-08-05T09:00:00+08:00", "w2-next", "sprint:treatment:meaning-choice:2026-08-05T09:00:00+08:00", 6_000),
+    retentionReview(2, 3, "2026-08-06T09:00:00+08:00", "w2-too-late", undefined, 3_000),
+    retentionReview(3, 2, "2026-08-04T10:00:00+08:00", "w3-anchor", "sprint:2026-08-04T10:00:00+08:00", 5_000),
+    retentionReview(3, 1, "2026-08-05T10:00:00+08:00", "w3-follow", undefined, 5_000),
+  ].reverse();
+  const input = baseInput({ reviews, guessMistakes: { 1: 1, 3: 1 } });
+  const report = buildDimensionObservationReport(reviews, input, now);
+  const globalCohort = buildSprintRetentionSeries(reviews, now)
+    .reduce((sum, week) => sum + (week.retention?.cohortWordCount ?? 0), 0);
+
+  assert.equal(report.rows.reduce((sum, row) => sum + row.cohortWordCount, 0), globalCohort);
+  assert.equal(globalCohort, 3);
+  assert.equal(report.rows.find((row) => row.dimension === "listening-spelling")?.cohortWordCount, 0);
+  assert.equal(report.rows.find((row) => row.dimension === "generic-sprint")?.cohortWordCount, 1);
+  assert.equal(report.rows.find((row) => row.dimension === "lookup-recall")?.truncatedCount, 1);
+  assert.equal(report.rows.reduce((sum, row) => sum + row.stillWeakCount, 0), 2);
+});
+
+test("分维度观察：quiz 与无 session 随访、同毫秒 id 总序及输入乱序稳定", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const at = "2026-08-04T08:00:00+08:00";
+  const reviews = [
+    retentionReview(1, 2, at, "a-anchor", `sprint:treatment:meaning-choice:${at}`, 10_000),
+    retentionReview(1, 2, at, "z-quiz", "quiz:meaning-choice", 6_000),
+    retentionReview(2, 2, at, "a-anchor-2", `sprint:treatment:lookup-recall:${at}`, 8_000),
+    retentionReview(2, 1, "2026-08-05T08:00:00+08:00", "no-session", undefined, 4_000),
+  ];
+  const forward = buildDimensionObservationReport(reviews, baseInput({ reviews }), now);
+  const reverse = buildDimensionObservationReport(
+    [...reviews].reverse(),
+    baseInput({ reviews: [...reviews].reverse() }),
+    now,
+  );
+
+  assert.deepEqual(reverse, forward);
+  assert.equal(forward.rows.find((row) => row.dimension === "meaning-choice")?.retentionRate, 100);
+  assert.equal(forward.rows.find((row) => row.dimension === "lookup-recall")?.retentionRate, 0);
+  assert.equal(forward.rows.find((row) => row.dimension === "meaning-choice")?.pairedRecall.changeMs, -4_000);
+});
+
+test("分维度观察：空样本保留 null，真实零保留 0", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const anchorAt = "2026-08-04T08:00:00+08:00";
+  const reviews = [
+    retentionReview(1, 2, anchorAt, "anchor", `sprint:treatment:lapse:${anchorAt}`, 0),
+    retentionReview(1, 1, "2026-08-05T08:00:00+08:00", "follow", undefined, 0),
+  ];
+  const report = buildDimensionObservationReport(reviews, baseInput({ reviews }), now);
+  const lapse = report.rows.find((row) => row.dimension === "lapse")!;
+  const empty = report.rows.find((row) => row.dimension === "slow-recall")!;
+
+  assert.equal(lapse.stillWeakRate, 0);
+  assert.equal(lapse.retentionRate, 0);
+  assert.deepEqual(lapse.pairedRecall, {
+    sampleCount: 1,
+    sprintAverageRecallMs: 0,
+    followUpAverageRecallMs: 0,
+    changeMs: 0,
+  });
+  assert.equal(empty.coverageRate, null);
+  assert.equal(empty.retentionRate, null);
+  assert.equal(empty.stillWeakRate, null);
+  assert.deepEqual(empty.pairedRecall, {
+    sampleCount: 0,
+    sprintAverageRecallMs: null,
+    followUpAverageRecallMs: null,
+    changeMs: null,
+  });
+});
+
+test("分维度观察：活动覆盖词允许跨维重复，但各维内部去重", () => {
+  const now = new Date("2026-08-10T12:00:00+08:00");
+  const firstAt = "2026-08-04T08:00:00+08:00";
+  const secondAt = "2026-08-05T08:00:00+08:00";
+  const reviews = [
+    retentionReview(1, 2, firstAt, "first", `sprint:treatment:listening-spelling:${firstAt}`),
+    retentionReview(1, 2, firstAt, "first-repeat", `sprint:treatment:listening-spelling:${firstAt}`),
+    retentionReview(1, 2, secondAt, "second", `sprint:treatment:chinese-to-english:${secondAt}`),
+  ];
+  const report = buildDimensionObservationReport(reviews, baseInput({ reviews }), now);
+
+  assert.equal(report.rows.find((row) => row.dimension === "listening-spelling")?.coveredWordCount, 1);
+  assert.equal(report.rows.find((row) => row.dimension === "chinese-to-english")?.coveredWordCount, 1);
+  assert.equal(report.rows.reduce((sum, row) => sum + row.coveredWordCount, 0), 2);
 });
 
 test("薄弱降级贯通：答对且查询不再增长 → 查词标签消失，其他信号保留", () => {

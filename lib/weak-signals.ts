@@ -1092,6 +1092,31 @@ export type SprintRetentionWeek = {
   retention: SprintRetention | null;
 };
 
+export type DimensionObservationRow = {
+  dimension: SprintTreatmentDimension | "unknown";
+  sessionCount: number;
+  coveredWordCount: number;
+  resolvedCount: number;
+  cohortWordCount: number;
+  followedUpCount: number;
+  unobservedCount: number;
+  truncatedCount: number;
+  coverageRate: number | null;
+  retainedCount: number;
+  retentionRate: number | null;
+  followUpDelayMs: number | null;
+  pairedRecall: SprintRetentionPairedRecall;
+  stillWeakCount: number;
+  stillWeakRate: number | null;
+  stubbornSubmodeSessionCounts?: Partial<Record<StubbornTreatmentMode, number>>;
+};
+
+export type DimensionObservationReport = {
+  windowStart: string;
+  windowEnd: string;
+  rows: DimensionObservationRow[];
+};
+
 type OrderedReview = {
   review: ReviewEvent;
   reviewedAtMs: number;
@@ -1236,6 +1261,190 @@ export function buildSprintRetentionSeries(
       },
     };
   });
+}
+
+/**
+ * 最近完整本地周的分维度只读观察；维度只取统一 sessionId parser 的结果。
+ * 活动、当前仍薄弱、保持随访与配对测时各自保留独立分母，不用于排序或推荐。
+ */
+export function buildDimensionObservationReport(
+  reviews: readonly ReviewEvent[],
+  input: WeakSignalInput,
+  now = new Date(),
+  weeks = 4,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): DimensionObservationReport {
+  const thisWeekStart = localWeekStart(now);
+  const count = Math.max(1, Math.trunc(weeks));
+  const windowStart = addLocalDays(thisWeekStart, -count * 7);
+  const windowStartMs = windowStart.getTime();
+  const windowEndMs = thisWeekStart.getTime();
+  const nowMs = now.getTime();
+  const dimensions = [...SPRINT_TREATMENT_DIMENSIONS, "unknown" as const];
+  const activity = new Map(dimensions.map((dimension) => [dimension, {
+    sessions: new Set<string>(),
+    coveredWordIds: new Set<number>(),
+    resolvedWordIds: new Set<number>(),
+    stubbornSubmodeSessions: new Map<StubbornTreatmentMode, Set<string>>(),
+  }]));
+  const orderedByWordId = new Map<number, OrderedReview[]>();
+  const latestAnchorByWordId = new Map<number, OrderedReview>();
+
+  for (const review of reviews) {
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (!Number.isFinite(reviewedAtMs) || reviewedAtMs > nowMs) continue;
+    if (review.wordId !== undefined) {
+      const ordered = { review, reviewedAtMs };
+      const wordReviews = orderedByWordId.get(review.wordId) ?? [];
+      wordReviews.push(ordered);
+      orderedByWordId.set(review.wordId, wordReviews);
+      if (
+        reviewedAtMs >= windowStartMs
+        && reviewedAtMs < windowEndMs
+        && review.sessionId?.startsWith("sprint:")
+        && review.rating >= 2
+      ) {
+        const previous = latestAnchorByWordId.get(review.wordId);
+        if (!previous || compareOrderedReview(ordered, previous) > 0) {
+          latestAnchorByWordId.set(review.wordId, ordered);
+        }
+      }
+    }
+    if (
+      reviewedAtMs < windowStartMs
+      || reviewedAtMs >= windowEndMs
+      || !review.sessionId?.startsWith("sprint:")
+    ) continue;
+    const parsed = parseSprintSessionId(review.sessionId)!;
+    const bucket = activity.get(parsed.dimension)!;
+    bucket.sessions.add(review.sessionId);
+    if (review.wordId !== undefined) {
+      bucket.coveredWordIds.add(review.wordId);
+      if (review.rating >= 2) bucket.resolvedWordIds.add(review.wordId);
+    }
+    if (parsed.dimension === "stubborn" && parsed.submode) {
+      const sessions = bucket.stubbornSubmodeSessions.get(parsed.submode)
+        ?? new Set<string>();
+      sessions.add(review.sessionId);
+      bucket.stubbornSubmodeSessions.set(parsed.submode, sessions);
+    }
+  }
+
+  for (const wordReviews of orderedByWordId.values()) {
+    wordReviews.sort(compareOrderedReview);
+  }
+
+  const anchorsByDimension = new Map(
+    dimensions.map((dimension) => [dimension, [] as OrderedReview[]]),
+  );
+  for (const anchor of latestAnchorByWordId.values()) {
+    const dimension = parseSprintSessionId(anchor.review.sessionId)?.dimension
+      ?? "unknown";
+    anchorsByDimension.get(dimension)!.push(anchor);
+  }
+  const weakSignalCountByWordId = new Map<number, number>();
+
+  return {
+    windowStart: localDateKey(windowStart),
+    windowEnd: localDateKey(thisWeekStart),
+    rows: dimensions.map((dimension) => {
+      const bucket = activity.get(dimension)!;
+      const anchors = anchorsByDimension.get(dimension)!;
+      let followedUpCount = 0;
+      let truncatedCount = 0;
+      let retainedCount = 0;
+      let delayTotalMs = 0;
+      let pairedSampleCount = 0;
+      let sprintRecallTotalMs = 0;
+      let followUpRecallTotalMs = 0;
+      let stillWeakCount = 0;
+
+      for (const anchor of anchors) {
+        const wordId = anchor.review.wordId!;
+        let signalCount = weakSignalCountByWordId.get(wordId);
+        if (signalCount === undefined) {
+          signalCount = buildWordWeakSignals(
+            wordId,
+            input,
+            undefined,
+            thresholds,
+          ).length;
+          weakSignalCountByWordId.set(wordId, signalCount);
+        }
+        if (signalCount > 0) stillWeakCount += 1;
+
+        const next = orderedByWordId.get(wordId)
+          ?.find((candidate) => isStrictlyAfterReview(candidate, anchor));
+        if (!next) continue;
+        if (next.review.sessionId?.startsWith("sprint:")) {
+          truncatedCount += 1;
+          continue;
+        }
+        followedUpCount += 1;
+        delayTotalMs += next.reviewedAtMs - anchor.reviewedAtMs;
+        if (next.review.rating >= 2) retainedCount += 1;
+        if (
+          isValidRecallMs(anchor.review.recallMs)
+          && isValidRecallMs(next.review.recallMs)
+        ) {
+          pairedSampleCount += 1;
+          sprintRecallTotalMs += anchor.review.recallMs;
+          followUpRecallTotalMs += next.review.recallMs;
+        }
+      }
+
+      const cohortWordCount = anchors.length;
+      const sprintAverageRecallMs = pairedSampleCount
+        ? Math.round(sprintRecallTotalMs / pairedSampleCount)
+        : null;
+      const followUpAverageRecallMs = pairedSampleCount
+        ? Math.round(followUpRecallTotalMs / pairedSampleCount)
+        : null;
+      const stubbornSubmodeSessionCounts = dimension === "stubborn"
+        ? Object.fromEntries(
+            STUBBORN_TREATMENT_SEQUENCE.map((submode) => [
+              submode,
+              bucket.stubbornSubmodeSessions.get(submode)?.size ?? 0,
+            ]),
+          ) as Record<StubbornTreatmentMode, number>
+        : undefined;
+      return {
+        dimension,
+        sessionCount: bucket.sessions.size,
+        coveredWordCount: bucket.coveredWordIds.size,
+        resolvedCount: bucket.resolvedWordIds.size,
+        cohortWordCount,
+        followedUpCount,
+        unobservedCount: cohortWordCount - followedUpCount,
+        truncatedCount,
+        coverageRate: cohortWordCount
+          ? Math.round((followedUpCount / cohortWordCount) * 100)
+          : null,
+        retainedCount,
+        retentionRate: followedUpCount
+          ? Math.round((retainedCount / followedUpCount) * 100)
+          : null,
+        followUpDelayMs: followedUpCount
+          ? Math.round(delayTotalMs / followedUpCount)
+          : null,
+        pairedRecall: {
+          sampleCount: pairedSampleCount,
+          sprintAverageRecallMs,
+          followUpAverageRecallMs,
+          changeMs: pairedSampleCount
+            ? followUpAverageRecallMs! - sprintAverageRecallMs!
+            : null,
+        },
+        stillWeakCount,
+        stillWeakRate: cohortWordCount
+          ? Math.round((stillWeakCount / cohortWordCount) * 100)
+          : null,
+        ...(stubbornSubmodeSessionCounts
+          ? { stubbornSubmodeSessionCounts }
+          : {}),
+      };
+    }),
+  };
 }
 
 /** 考前薄弱冲刺候选：已学且统一薄弱画像非空的词 id，按薄弱程度排序 */

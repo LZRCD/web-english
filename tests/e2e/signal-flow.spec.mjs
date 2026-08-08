@@ -1633,3 +1633,70 @@ test("信号联动：冲刺后首次正常复习保持披露覆盖、截断与�
   await expect(retention).toContainText("未观察 1 · 截断 0 · 平均间隔 —");
   await expect(retention).toContainText("配对测时 0 词 · 无配对样本");
 });
+
+function dimensionObservationSeedState() {
+  const review = ({ id, wordId, rating, reviewedAt, sessionId, recallMs }) => ({
+    id,
+    wordId,
+    word: `word-${wordId}`,
+    rating,
+    kind: "review",
+    intervalMs: 600_000,
+    dueAt: new Date(new Date(reviewedAt).getTime() + 600_000).toISOString(),
+    reviewedAt,
+    ...(sessionId ? { sessionId } : {}),
+    ...(recallMs === undefined ? {} : { recallMs }),
+    section: "必考词",
+    unit: 1,
+  });
+  const anchorAt = localWeekTime(1, 1, 8, 0);
+  const followAt = localWeekTime(1, 2, 8, 0);
+  return createState({
+    reviews: [
+      review({ id: "dimension-known-anchor", wordId: 1, rating: 2, reviewedAt: anchorAt, sessionId: `sprint:treatment:meaning-choice:${anchorAt}`, recallMs: 8_000 }),
+      review({ id: "dimension-known-follow", wordId: 1, rating: 2, reviewedAt: followAt, sessionId: "quiz:meaning-choice", recallMs: 4_000 }),
+      review({ id: "dimension-unknown-anchor", wordId: 2, rating: 2, reviewedAt: anchorAt, sessionId: `sprint:${anchorAt}`, recallMs: 7_000 }),
+      review({ id: "dimension-unknown-follow", wordId: 2, rating: 1, reviewedAt: followAt, recallMs: 5_000 }),
+      review({ id: "dimension-generic-anchor", wordId: 3, rating: 2, reviewedAt: anchorAt, sessionId: `sprint:treatment:generic-sprint:${anchorAt}` }),
+      review({ id: "dimension-stubborn-anchor", wordId: 4, rating: 2, reviewedAt: anchorAt, sessionId: `sprint:stubborn:lookup-recall:${anchorAt}`, recallMs: 6_000 }),
+      review({ id: "dimension-stubborn-follow", wordId: 4, rating: 2, reviewedAt: followAt, sessionId: "quiz:meaning-choice", recallMs: 6_000 }),
+    ],
+    wordProgress: {},
+  });
+}
+
+test("信号联动：分维度观察固定并列 known、unknown、generic 与顽固样本", async ({ context, page }) => {
+  await installStateSeed(context, dimensionObservationSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  const report = page.locator('[aria-label="分维度观察报告（最近 4 个完整周）"]');
+  await expect(report).toBeVisible();
+  await report.locator("summary").click();
+
+  await expect(report).toContainText("不代表模式效果、因果、最佳/最差或推荐依据");
+  await expect(report).toContainText("同词可跨维重复，不可跨维合计");
+  await expect(report).toContainText("当前弱点也未必由该处置维度产生");
+  await expect(report.locator('[data-dimension="meaning-choice"]')).toContainText("保持：1/1（100%）");
+  await expect(report.locator('[data-dimension="unknown"]')).toContainText("保持：0/1（0%）");
+  await expect(report.locator('[data-dimension="generic-sprint"]')).toContainText("通用冲刺");
+  await expect(report.locator('[data-dimension="unknown"]')).toContainText("未知历史");
+  await expect(report.locator('[data-dimension="stubborn"]')).toContainText("词义主动回忆 1");
+  await expect(report.locator('[data-dimension="slow-recall"]')).toContainText("无样本");
+  await expect(report.locator('[data-dimension="slow-recall"]')).toContainText("无随访样本");
+  await expect(report.locator("article")).toHaveCount(9);
+  expect(await report.locator("article").evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-dimension")))).toEqual([
+    "listening-spelling",
+    "chinese-to-english",
+    "meaning-choice",
+    "lookup-recall",
+    "stubborn",
+    "slow-recall",
+    "lapse",
+    "generic-sprint",
+    "unknown",
+  ]);
+});

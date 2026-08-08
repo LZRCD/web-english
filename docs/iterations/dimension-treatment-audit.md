@@ -1,6 +1,18 @@
 # 薄弱维度 × 处置闭环审计
 
 > 审计日期：2026-08-08 ｜ 只读基线：`6a4f725` ｜ 分支：`codex/follow-up-hardening`
+## 第 41 轮：分维度观察报告已实现
+
+日期：2026-08-09 ｜ 基线：`cf46fdc`
+
+- 新增唯一纯函数 `buildDimensionObservationReport`（`lib/weak-signals.ts`）：固定 8 个已知 treatment 维加 `unknown` 共 9 行，按 `SPRINT_TREATMENT_DIMENSIONS` 顺序并列输出，不按数量排序；维度只由 `parseSprintSessionId(锚点.sessionId).dimension ?? "unknown"` 归属。
+- 锚点规则与第 38 轮 B 链逐字节一致：全局 `(reviewedAtMs,id)` 总序最近成功冲刺为唯一锚点，任意下一 `sprint:*` 截断，`quiz:*` review/无 sessionId review 可随访；维度只附着锚点，不改变窗口、截断、随访或分母。
+- 活动口径（session 数/覆盖词/当场达标）按该维窗口内去重，同词跨维可重复，UI 标注“不可跨维合计”；锚点系计数（cohort/随访/截断/保持/配对样本/仍薄弱）每词唯一归属，分维合计==全局，单测钉死。
+- 当前仍薄弱复用第 34 轮语义：分子=该维唯一成功锚点词中当前统一画像非空者，分母=该维全部唯一成功锚点 cohort（含未观察与截断），与随访可观测性解耦。
+- 旧 `sprint:<ISO>`、未知 treatment、非法顽固 mode、非法时间一律 `unknown`；`generic-sprint` 与 `unknown` 分列；顽固子 mode 只披露 `stubbornSubmodeSessionCounts`，不扁平并入普通听音拼写/中译英/lookup。slow-recall/lapse 暂无可复用的启动级单维判定，继续只作为解析能力与空行，不形成虚假可归因样本。
+- 验证：定向 91/91、全量 211/211、lint/typecheck/build 通过、固定 3000 signal-flow 18/18（45.8s）；UI 在轨迹页以 `<details>` 折叠披露样本数、分子/分母、无样本文案与非因果说明。
+- 未新增 schema/version/store/domain，未回填历史，未改评分/FSRS/门禁/备份/scripts/推荐优先级；未重构既有 B 链函数，等价性由分维合计单测保证。阶段 D 完成；阶段 E 无既定定义，需先只读审计边界与真实样本门槛。
+
 
 ## 第 40 轮：未来结构化 sessionId 已实现
 

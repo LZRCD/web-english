@@ -60,6 +60,7 @@ import {
 } from "../lib/insights";
 import {
   buildSprintCsv,
+  buildDimensionObservationReport,
   buildSprintEffectivenessSeries,
   buildWeakCandidateSummary,
   buildSprintHistory,
@@ -502,6 +503,16 @@ export default function Home() {
   const sprintRetentionSeries = useMemo(
     () => buildSprintRetentionSeries(reviews, new Date(clock)),
     [reviews, clock],
+  );
+  const dimensionObservationReport = useMemo(
+    () => buildDimensionObservationReport(
+      reviews,
+      weakSignalInput,
+      new Date(clock),
+      4,
+      weakThresholds,
+    ),
+    [reviews, weakSignalInput, clock, weakThresholds],
   );
   const sprintTreatment = useMemo(
     () => buildSprintTreatmentRecommendation(weakSignalInput, weakThresholds),
@@ -2252,6 +2263,7 @@ export default function Home() {
             sprintEffectivenessSeries={sprintEffectivenessSeries}
             sprintRelapseSeries={sprintRelapseSeries}
             sprintRetentionSeries={sprintRetentionSeries}
+            dimensionObservationReport={dimensionObservationReport}
             sprintRelapse={sprintRelapse}
             sprintRelapseWords={sprintRelapseWords}
             onSprintRelapse={startSprintFromRelapse}

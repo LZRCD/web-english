@@ -95,3 +95,27 @@
 - slow-recall/lapse 只有当启动当下的完整词集由结构化事实证明为单一维度时才可编码；多维、混合、猜错或不确定词集写 `generic-sprint`，禁止解析中文标签。
 - B 链不因维度编码改变：最近成功锚点、任意下一 sprint 截断、`quiz:*` review/无 sessionId review 可作随访、quizAttempt 不参与、未观察不进失败分母，全部保持。
 - 在统一未来编码纵向链完成前，不产出偏样本分维度保持率、排行或自适应结论。
+
+## 第 41 轮：分维度观察报告指标矩阵
+
+日期：2026-08-09 ｜ 基线：`cf46fdc` ｜ 唯一函数：`buildDimensionObservationReport`（`lib/weak-signals.ts`）
+
+| 指标 | 数据源 | 分子 | 分母 | 去重键 | 维度归属 | 合计安全性 | 空/null/真实 0 |
+|---|---|---|---|---|---|---|---|
+| 冲刺 session 数 | 窗口内 `sprint:*` review 的 `sessionId` | 计数值 | 该维不同 sessionId | sessionId | `parseSprintSessionId` | ✅ 分维合计==全局 | 0 会话显示无样本 |
+| 覆盖词数（活动） | 窗口内冲刺 review 的 `wordId` | 计数值 | 该维去重 wordId | wordId | sessionId→parser | ⚠️ 同词跨维可重复，不可合计 | 0 显示无样本 |
+| 当场达标词数（活动） | 窗口内冲刺 review `rating≥2` | 计数值 | 该维去重 wordId | wordId | sessionId→parser | ⚠️ 同词跨维可重复，不可合计 | 0 显示无样本 |
+| 成功锚点 cohort | 全局总序最近 `rating≥2` 冲刺（同 `buildSprintRetentionSeries`） | 计数值 | 该维唯一锚点词数 | wordId（唯一锚点） | 锚点 sessionId→parser | ✅ 分维合计==全局 | cohort=0 → 保持系全 null |
+| 随访覆盖数/率 | 锚点后首条 review 非 sprint（含 quiz:*/无 session） | `followedUpCount` | cohort | wordId | 继承锚点 | ✅ 计数可合计 | cohort>0 无随访 → 覆盖 0%（真实 0） |
+| 保持成功数/率 | 随访 review `rating≥2` | `retainedCount` | `followedUpCount` | wordId | 继承锚点 | ✅ 计数可合计 | 无已观察 → 保持率 null |
+| 实际随访间隔 | 已观察词锚点→随访间隔 | 间隔和 | `followedUpCount`（词等权） | wordId | 继承锚点 | 计数可合计；均值不合计 | 无已观察 → null |
+| 配对测时样本/变化 | 锚点与随访两侧合法 `recallMs` | 配对词数 | 该维双侧合法样本对数 | wordId | 继承锚点 | ✅ 样本数合计==全局 | 无配对 → sampleCount=0、均值/变化 null；合法 0 保留 |
+| 当前仍薄弱数/率 | cohort ∩ 当前 `buildWordWeakSignals` 非空 | 该维仍薄弱词数 | 该维全部唯一成功锚点 cohort（含未观察与截断） | wordId | 继承锚点 | ✅ 计数合计==全局 | cohort=0 → rate null；全弱/全不弱 → 100%/0% |
+
+关键口径结论：
+
+- 仍薄弱分母为全部唯一成功锚点 cohort，未观察/截断词仍参与判定；该指标与 B 链随访可观测性完全解耦，等价于第 34 轮 `buildSprintCohortRelapse` 按维度分区。
+- 锚点系计数分维合计恒等于全局同窗值（每词/每 session 唯一归属）；活动系覆盖/当场达标允许跨维重复，UI 与测试均显式标注不可跨维合计。
+- 四种分母独立（当场达标/仍薄弱/保持/配对测时），无样本显示“无样本/—”，真实 0 保留；不合并成综合分数，不排行。
+- 维度只由 `parseSprintSessionId` 得出；旧普通/未知 treatment/非法顽固=unknown，generic-sprint 与 unknown 分列，顽固子 mode 只披露不扁平，不从标签/标题/画像/attempt 反推。
+- 分维观察不改变任何既有指标：全量 211/211、signal-flow 18/18，阶段 A/B/C 数字保持不变（见 `round-41.md`）。
