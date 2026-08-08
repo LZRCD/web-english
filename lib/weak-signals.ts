@@ -773,28 +773,29 @@ export function buildSprintEffectivenessSeries(
   return series;
 }
 
-/** 某个冲刺周解决词截至当前的复发追踪：纯派生、不新增 schema */
+/** 某个冲刺周当场达标词截至当前的薄弱追踪：保留旧接口名，不代表历史复发事件。 */
 export type SprintRelapse = {
-  /** 该周冲刺解决（rating≥2 去重）词数 */
+  /** 该周冲刺当场达标（rating≥2 去重）词数 */
   solvedCount: number;
-  /** 该周解决词中当前仍薄弱（buildWordWeakSignals 非空）的词数 */
+  /** 该周当场达标词中当前仍薄弱（buildWordWeakSignals 非空）的词数 */
   relapsedCount: number;
-  /** 复发率（relapsedCount / solvedCount，0–100 取整） */
+  /** 当前仍薄弱率（relapsedCount / solvedCount，0–100 取整） */
   relapseRate: number;
-  /** 复发词 id（按当前薄弱信号数降序，便于定位） */
+  /** 当前仍薄弱词 id（按当前薄弱信号数降序，便于定位） */
   relapsedIds: number[];
 };
 
-/** 某个已完成冲刺周截至当前的复发结果（无解决词时为 null） */
+/** 某个已完成冲刺周截至当前的薄弱结果（无当场达标词时为 null） */
 export type SprintRelapseWeek = {
   /** 冲刺处置周起始日（本地周一，YYYY-MM-DD） */
   weekStart: string;
-  /** 截至当前的复发结果；该周无冲刺解决词时为 null */
+  /** 截至当前的薄弱结果；该周无冲刺当场达标词时为 null */
   relapse: SprintRelapse | null;
 };
 
 /**
- * 一次扫描按本地周收集冲刺解决词，供单周追踪与多周回溯共用。
+ * 一次扫描按本地周收集冲刺当场达标词，供单周追踪与多周回溯共用。
+ * 同词在多个所选周达标时只归最近一次处置周，避免跨周重复样本。
  */
 function buildSprintSolvedCohorts(
   reviews: readonly ReviewEvent[],
@@ -803,6 +804,10 @@ function buildSprintSolvedCohorts(
   const cohorts = new Map(
     weekStarts.map((start) => [localDateKey(start), new Set<number>()]),
   );
+  const latestCohortByWordId = new Map<
+    number,
+    { weekKey: string; reviewedAtMs: number }
+  >();
   for (const review of reviews) {
     if (
       !review.sessionId?.startsWith("sprint:")
@@ -812,12 +817,19 @@ function buildSprintSolvedCohorts(
     const reviewedAtMs = new Date(review.reviewedAt).getTime();
     if (!Number.isFinite(reviewedAtMs)) continue;
     const weekKey = localDateKey(localWeekStart(new Date(reviewedAtMs)));
-    cohorts.get(weekKey)?.add(review.wordId);
+    if (!cohorts.has(weekKey)) continue;
+    const previous = latestCohortByWordId.get(review.wordId);
+    if (!previous || reviewedAtMs > previous.reviewedAtMs) {
+      latestCohortByWordId.set(review.wordId, { weekKey, reviewedAtMs });
+    }
+  }
+  for (const [wordId, { weekKey }] of latestCohortByWordId) {
+    cohorts.get(weekKey)?.add(wordId);
   }
   return cohorts;
 }
 
-/** 用当前统一薄弱画像判断一个已解决 cohort，并复用跨 cohort 的判定缓存。 */
+/** 用当前统一薄弱画像判断一个当场达标 cohort，并复用跨 cohort 的判定缓存。 */
 function buildSprintCohortRelapse(
   solvedIds: ReadonlySet<number> | undefined,
   input: WeakSignalInput,
@@ -851,9 +863,10 @@ function buildSprintCohortRelapse(
 }
 
 /**
- * 追踪上周冲刺解决词的复发情况：取上周一至本周一之间、
+ * 追踪上周冲刺当场达标词的当前薄弱情况：取上周一至本周一之间、
  * 且 sessionId 为冲刺会话的 rating≥2 去重词集，再过滤当前仍薄弱的词。
  * 周划分与 buildSprintEffectiveness 一致（本地周一）。
+ * 旧接口名仅为兼容；当前状态不能区分从未恢复与恢复后再次薄弱。
  */
 export function buildSprintRelapse(
   reviews: readonly ReviewEvent[],
@@ -873,8 +886,9 @@ export function buildSprintRelapse(
 }
 
 /**
- * 最近 N 个已完成冲刺周的截至当前复发率回溯（按时间升序）。
- * 这是按处置周分组后用当前统一薄弱画像回看，不是历史周末状态快照。
+ * 最近 N 个已完成冲刺周的截至当前薄弱率回溯（按时间升序）。
+ * 这是按最近一次达标处置周分组后用当前统一薄弱画像回看，
+ * 不是历史周末状态快照，也不能区分从未恢复与恢复后再次薄弱。
  */
 export function buildSprintRelapseSeries(
   reviews: readonly ReviewEvent[],

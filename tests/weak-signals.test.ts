@@ -1257,7 +1257,7 @@ test("薄弱候选清单：与 buildSprintCsv 组合导出含 BOM 表头", () =>
   assert.ok(csv.includes("word-1,查过2次"));
 });
 
-test("冲刺复发：上周冲刺解决词中当前仍薄弱者计为复发", () => {
+test("冲刺后当前仍薄弱：上周当场达标词中当前仍薄弱者进入分子", () => {
   // 2026-08-10 周一（本周）；上周 = 08-03 ~ 08-10
   const reviews = [
     // 上周冲刺：词 1 解决（rating 2）、词 2 解决（rating 3）
@@ -1268,7 +1268,7 @@ test("冲刺复发：上周冲刺解决词中当前仍薄弱者计为复发", ()
   ];
   const input = baseInput({
     reviews,
-    // 词 1 查词仍多 → 当前薄弱（复发）；词 2 无新薄弱信号 → 未复发
+    // 词 1 查词仍多 → 当前仍薄弱；词 2 无新薄弱信号 → 当前不薄弱
     lookupStats: {
       "word-1": { count: 4, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-08-07T00:00:00.000Z" },
     },
@@ -1291,7 +1291,7 @@ test("冲刺复发：上周冲刺解决词中当前仍薄弱者计为复发", ()
   assert.deepEqual(result.relapsedIds, [1]);
 });
 
-test("冲刺复发：上周无冲刺解决词返回 null", () => {
+test("冲刺后当前仍薄弱：上周无冲刺当场达标词返回 null", () => {
   const reviews = [
     { ...makeReview(1, 2, "2026-08-11T08:00:00.000Z"), sessionId: "sprint:2026-08-11" },
   ];
@@ -1302,7 +1302,7 @@ test("冲刺复发：上周无冲刺解决词返回 null", () => {
   );
 });
 
-test("冲刺复发：全部解决词无复发则复发率 0", () => {
+test("冲刺后当前仍薄弱：全部当场达标词当前不薄弱则比率为 0", () => {
   const reviews = [
     { ...makeReview(1, 2, "2026-08-05T08:00:00.000Z"), sessionId: "sprint:2026-08-05" },
   ];
@@ -1320,7 +1320,7 @@ test("冲刺复发：全部解决词无复发则复发率 0", () => {
   assert.deepEqual(result.relapsedIds, []);
 });
 
-test("冲刺复发 4 周：完整周边界、周内去重且仅收集冲刺 rating≥2", () => {
+test("冲刺后当前仍薄弱 4 周：完整周边界、周内去重且仅收集冲刺 rating≥2", () => {
   // 当前周从 08-10（周一）开始；回溯 07-13、07-20、07-27、08-03 四个完整周。
   const reviews = [
     { ...makeReview(7, 2, "2026-07-12T23:59:59+08:00"), sessionId: "sprint:too-early" },
@@ -1352,7 +1352,30 @@ test("冲刺复发 4 周：完整周边界、周内去重且仅收集冲刺 rati
   assert.deepEqual(series[3].relapse?.relapsedIds, [5]);
 });
 
-test("冲刺复发 4 周：当前统一画像与传入阈值决定截至当前复发", () => {
+test("冲刺后当前仍薄弱 4 周：同词跨周达标只归最近一次处置周", () => {
+  const reviews = [
+    // 故意将较新的记录放在前面，确认归属不依赖输入顺序。
+    { ...makeReview(1, 3, "2026-08-05T08:00:00+08:00"), sessionId: "sprint:latest" },
+    { ...makeReview(2, 2, "2026-07-16T08:00:00+08:00"), sessionId: "sprint:first" },
+    { ...makeReview(1, 2, "2026-07-15T08:00:00+08:00"), sessionId: "sprint:older" },
+    { ...makeReview(3, 2, "2026-07-28T08:00:00+08:00"), sessionId: "sprint:third" },
+  ];
+  const series = buildSprintRelapseSeries(
+    reviews,
+    baseInput({ reviews, guessMistakes: { 1: 1, 2: 1, 3: 1 } }),
+    new Date("2026-08-10T12:00:00+08:00"),
+  );
+
+  assert.deepEqual(
+    series.map((week) => week.relapse?.solvedCount ?? null),
+    [1, null, 1, 1],
+  );
+  assert.deepEqual(series[0].relapse?.relapsedIds, [2]);
+  assert.deepEqual(series[2].relapse?.relapsedIds, [3]);
+  assert.deepEqual(series[3].relapse?.relapsedIds, [1]);
+});
+
+test("冲刺后当前仍薄弱 4 周：当前统一画像与传入阈值决定当前状态", () => {
   const reviews = [
     { ...makeReview(10, 2, "2026-08-05T08:00:00+08:00"), sessionId: "sprint:threshold" },
   ];
@@ -1382,7 +1405,7 @@ test("冲刺复发 4 周：当前统一画像与传入阈值决定截至当前�
   assert.equal(strict.at(-1)?.relapse?.relapseRate, 0);
 });
 
-test("冲刺复发 4 周：空周语义明确，当前恢复后序列更新且单周入口不变", () => {
+test("冲刺后当前仍薄弱 4 周：空周语义明确，当前画像更新且单周入口不变", () => {
   const now = new Date("2026-08-14T12:00:00+08:00");
   const emptySeries = buildSprintRelapseSeries([], baseInput(), now);
   assert.equal(emptySeries.length, 4);

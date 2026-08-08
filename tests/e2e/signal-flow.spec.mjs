@@ -1221,7 +1221,7 @@ test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async
   ).toBeVisible();
 });
 
-/** 复发追踪 seed：上周（8 天前，必落上周窗口）冲刺解决 2 词，两词当前仍薄弱（查过 2+ 次） */
+/** 当前仍薄弱追踪 seed：上周（8 天前）冲刺当场达标 2 词，两词当前仍薄弱 */
 function relapseSeedState() {
   const state = sprintSeedState();
   const lastWeekSessionId = `sprint:${daysAgo(8, 8, 0)}`;
@@ -1280,7 +1280,7 @@ function relapseSeedState() {
   return state;
 }
 
-test("信号联动：词书薄弱分布与冲刺复发追踪", async ({ context, page }) => {
+test("信号联动：词书薄弱分布与冲刺后当前仍薄弱追踪", async ({ context, page }) => {
   await installStateSeed(context, relapseSeedState());
   await openApp(page);
   // 词书页：必考词卡片显示薄弱文案
@@ -1293,7 +1293,7 @@ test("信号联动：词书薄弱分布与冲刺复发追踪", async ({ context,
     .filter({ has: page.getByRole("heading", { name: "必考词" }) });
   await expect(requiredCard).toBeVisible();
   await expect(requiredCard).toContainText("薄弱");
-  // 轨迹页：复发追踪栏显示上周解决与复发词数
+  // 轨迹页：追踪栏显示上周当场达标与当前仍薄弱词数，并披露证据边界
   await page
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
@@ -1301,17 +1301,22 @@ test("信号联动：词书薄弱分布与冲刺复发追踪", async ({ context,
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
-  const relapse = page.locator('[aria-label="冲刺复发追踪"]');
+  const relapse = page.locator('[aria-label="冲刺后当前仍薄弱追踪"]');
   await expect(relapse).toBeVisible();
-  await expect(relapse).toContainText("上周解决 2 词");
-  await expect(relapse).toContainText("复发 2 词");
-  await expect(relapse).toContainText("复发率 100%");
+  await expect(relapse).toContainText("上周当场达标 2 词");
+  await expect(relapse).toContainText("当前仍薄弱 2 词");
+  await expect(relapse).toContainText("当前仍薄弱率 100%");
+  await expect(relapse).toContainText("未区分从未恢复与恢复后再次薄弱");
+  const relapseSeries = page.locator('[aria-label="冲刺后当前仍薄弱率 4 周回溯"]');
+  await expect(relapseSeries).toBeVisible();
+  await expect(relapseSeries).toContainText("按最近一次达标处置周分组");
+  await expect(relapseSeries).toContainText("未区分从未恢复与恢复后再次薄弱");
 });
 
-test("信号联动：复发词一键再冲刺与词书薄弱单元", async ({ context, page }) => {
+test("信号联动：当前仍薄弱词一键再冲刺与词书薄弱单元", async ({ context, page }) => {
   await installStateSeed(context, relapseSeedState());
   await openApp(page);
-  // 轨迹页：复发栏出现「再冲刺复发词（2）」按钮
+  // 轨迹页：追踪栏出现「再冲刺当前仍薄弱词（2）」按钮
   await page
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
@@ -1319,14 +1324,14 @@ test("信号联动：复发词一键再冲刺与词书薄弱单元", async ({ co
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
-  const relapse = page.locator('[aria-label="冲刺复发追踪"]');
+  const relapse = page.locator('[aria-label="冲刺后当前仍薄弱追踪"]');
   await expect(relapse).toBeVisible();
   const resprintRelapse = relapse.getByRole("button", {
-    name: /再冲刺复发词（2）/,
+    name: /再冲刺当前仍薄弱词（2）/,
   });
   await expect(resprintRelapse).toBeVisible();
   await resprintRelapse.click();
-  // 学习卡：复发词冲刺会话 + 信号原因
+  // 学习卡：当前仍薄弱词再次处置会话 + 信号原因
   await expect(
     page.getByRole("button", { name: "显示单词释义" }),
   ).toBeEnabled();

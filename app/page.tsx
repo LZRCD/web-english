@@ -517,7 +517,7 @@ export default function Home() {
       ? restoredTreatment.wordIds
       : undefined;
   }, [activeQuiz, sprintTreatment, weakSignalInput]);
-  // 序列最后一项就是上个完整周，继续供既有复发词列表与再冲刺入口使用。
+  // 序列最后一项就是上个完整周，继续供当前仍薄弱词列表与再冲刺入口使用。
   const sprintRelapse = sprintRelapseSeries.at(-1)?.relapse ?? null;
   const sprintRelapseWords = useMemo(
     () => (sprintRelapse?.relapsedIds ?? []).flatMap((wordId) => {
@@ -1610,14 +1610,14 @@ export default function Home() {
     startSession("sprint", "薄弱冲刺 · 补漏", stillWeakIds);
   }
 
-  // 从轨迹页复发追踪一键再冲刺：只带复发词
+  // 从轨迹页当前仍薄弱追踪一键再冲刺：只带当前仍薄弱词
   function startSprintFromRelapse() {
     const wordIds = sprintRelapse?.relapsedIds ?? [];
     if (!wordIds.length) {
-      showToast("暂无复发词可冲刺", 1800);
+      showToast("暂无当前仍薄弱词可冲刺", 1800);
       return;
     }
-    startSession("sprint", "薄弱冲刺 · 复发词", wordIds);
+    startSession("sprint", "薄弱冲刺 · 再次处置", wordIds);
   }
   // 从轨迹页冲刺记录再跑一次：复用该次冲刺的词集
   function startSprintFromHistory(sessionId: string) {
