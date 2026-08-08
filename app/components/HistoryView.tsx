@@ -128,6 +128,12 @@ export default function HistoryView({
   // 回忆耗时格式化：毫秒 → x.xs；null 显示 —
   const formatRecall = (ms: number | null) =>
     ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`;
+  const formatPairedChange = (changeMs: number | null) => {
+    if (changeMs === null) return "无配对样本";
+    if (changeMs < 0) return `较此前快 ${(-changeMs / 1000).toFixed(1)}s`;
+    if (changeMs > 0) return `较此前慢 ${(changeMs / 1000).toFixed(1)}s`;
+    return "与此前持平";
+  };
   const maxConcentrationTotal = Math.max(
     1,
     ...weakConcentration.map((section) => section.total),
@@ -432,11 +438,11 @@ export default function HistoryView({
             </div>
           </div>
         )}
-                {weeklyReport.sprintEffectiveness && (
-          <div className="weak-trend" aria-label="本周冲刺成效">
+        {weeklyReport.sprintEffectiveness && (
+          <div className="weak-trend" aria-label="本周冲刺观察">
             <div className="weak-trend-head">
-              <strong>本周冲刺成效</strong>
-              <small>冲刺次数 · 覆盖词数 · 平均回忆变化 · 当场达标词数</small>
+              <strong>本周冲刺观察</strong>
+              <small>冲刺次数 · 覆盖词数 · 同词配对回忆变化 · 当场达标词数</small>
             </div>
             <div className="weak-trend-grid">
               <div className="weak-trend-item">
@@ -448,22 +454,22 @@ export default function HistoryView({
                 <strong>{weeklyReport.sprintEffectiveness.coveredWordCount}</strong>
               </div>
               <div className="weak-trend-item">
-                <span>平均回忆</span>
-                <strong title={`冲刺前 ${formatRecall(weeklyReport.sprintEffectiveness.beforeAverageRecallMs)} → 冲刺 ${formatRecall(weeklyReport.sprintEffectiveness.sprintAverageRecallMs)}`}>
-                  {formatRecall(weeklyReport.sprintEffectiveness.sprintAverageRecallMs)}
+                <span>配对词回忆变化</span>
+                <strong title={`最近非冲刺 ${formatRecall(weeklyReport.sprintEffectiveness.pairedRecall.pairedBeforeAverageRecallMs)} → 本周冲刺 ${formatRecall(weeklyReport.sprintEffectiveness.pairedRecall.pairedTargetAverageRecallMs)}`}>
+                  {formatPairedChange(weeklyReport.sprintEffectiveness.pairedRecall.pairedChangeMs)}
                 </strong>
                 <small className={
-                  weeklyReport.sprintEffectiveness.recallImprovementMs === null
+                  weeklyReport.sprintEffectiveness.pairedRecall.pairedChangeMs === null
                     ? "neutral"
-                    : weeklyReport.sprintEffectiveness.recallImprovementMs > 0
+                    : weeklyReport.sprintEffectiveness.pairedRecall.pairedChangeMs < 0
                       ? "positive"
-                      : "negative"
+                      : weeklyReport.sprintEffectiveness.pairedRecall.pairedChangeMs > 0
+                        ? "negative"
+                        : "neutral"
                 }>
-                  {weeklyReport.sprintEffectiveness.recallImprovementMs === null
-                    ? "无样本"
-                    : weeklyReport.sprintEffectiveness.recallImprovementMs > 0
-                      ? `↑ 提升 ${(weeklyReport.sprintEffectiveness.recallImprovementMs / 1000).toFixed(1)}s`
-                      : `↓ 变慢 ${(-weeklyReport.sprintEffectiveness.recallImprovementMs / 1000).toFixed(1)}s`}
+                  {weeklyReport.sprintEffectiveness.pairedRecall.pairedChangeMs === null
+                    ? "配对词 0"
+                    : `配对词 ${weeklyReport.sprintEffectiveness.pairedRecall.pairedWordCount}`}
                 </small>
               </div>
               <div className="weak-trend-item">
@@ -474,10 +480,10 @@ export default function HistoryView({
           </div>
         )}
         {sprintEffectivenessSeries.length > 0 && (
-          <div className="weak-trend" aria-label="冲刺成效 4 周">
+          <div className="weak-trend" aria-label="冲刺观察 4 周">
             <div className="weak-trend-head">
-              <strong>冲刺成效 4 周</strong>
-              <small>每周冲刺次数 · 当场达标词数 · 平均回忆变化</small>
+              <strong>冲刺观察 4 周</strong>
+              <small>每周冲刺次数 · 当场达标词数 · 同词配对回忆变化</small>
             </div>
             <div className="sprint-effectiveness-series">
               {sprintEffectivenessSeries.map((week) => (
@@ -488,17 +494,17 @@ export default function HistoryView({
                       <strong>{week.effectiveness.sprintCount} 次</strong>
                       <small>当场达标 {week.effectiveness.resolvedCount} 词</small>
                       <small className={
-                        week.effectiveness.recallImprovementMs === null
+                        week.effectiveness.pairedRecall.pairedChangeMs === null
                           ? "neutral"
-                          : week.effectiveness.recallImprovementMs > 0
+                          : week.effectiveness.pairedRecall.pairedChangeMs < 0
                             ? "positive"
-                            : "negative"
+                            : week.effectiveness.pairedRecall.pairedChangeMs > 0
+                              ? "negative"
+                              : "neutral"
                       }>
-                        {week.effectiveness.recallImprovementMs === null
-                          ? "无样本"
-                          : week.effectiveness.recallImprovementMs > 0
-                            ? `↑ ${(week.effectiveness.recallImprovementMs / 1000).toFixed(1)}s`
-                            : `↓ ${(-week.effectiveness.recallImprovementMs / 1000).toFixed(1)}s`}
+                        {week.effectiveness.pairedRecall.pairedChangeMs === null
+                          ? "无配对样本"
+                          : `${formatPairedChange(week.effectiveness.pairedRecall.pairedChangeMs)} · 配对 ${week.effectiveness.pairedRecall.pairedWordCount} 词`}
                       </small>
                     </>
                   ) : (

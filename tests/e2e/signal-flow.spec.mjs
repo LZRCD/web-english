@@ -209,6 +209,7 @@ function sprintSeedState() {
         intervalMs: 600_000,
         dueAt: new Date(new Date(plainAt).getTime() + 600_000).toISOString(),
         reviewedAt: plainAt,
+        recallMs: 24_000,
         section: "必考词",
         unit: 1,
       },
@@ -221,6 +222,7 @@ function sprintSeedState() {
         intervalMs: 600_000,
         dueAt: new Date(new Date(plainAt).getTime() + 720_000).toISOString(),
         reviewedAt: new Date(new Date(plainAt).getTime() + 120_000).toISOString(),
+        recallMs: 20_000,
         section: "必考词",
         unit: 1,
       },
@@ -1127,11 +1129,15 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
     name: /开始考前薄弱冲刺（2 词）/,
   });
   await expect(sprintStart).toBeVisible();
-  const weeklyEffectiveness = page.locator('[aria-label="本周冲刺成效"]');
+  const weeklyEffectiveness = page.locator('[aria-label="本周冲刺观察"]');
   await expect(weeklyEffectiveness).toContainText("当场达标词数");
-  const effectivenessSeries = page.locator('[aria-label="冲刺成效 4 周"]');
+  await expect(weeklyEffectiveness).toContainText("配对词回忆变化");
+  await expect(weeklyEffectiveness).toContainText("较此前快 8.0s");
+  await expect(weeklyEffectiveness).toContainText("配对词 2");
+  const effectivenessSeries = page.locator('[aria-label="冲刺观察 4 周"]');
   await expect(effectivenessSeries).toContainText("当场达标词数");
   await expect(effectivenessSeries).toContainText("当场达标 1 词");
+  await expect(effectivenessSeries).toContainText("较此前快 8.0s · 配对 2 词");
   await sprintStart.click();
 
   // 学习卡：冲刺会话中释义面板显示薄弱原因
@@ -1158,6 +1164,12 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
     page.getByRole("heading", { name: "本次冲刺小结" }),
   ).toBeVisible();
   await expect(page.getByText("当场达标", { exact: true })).toBeVisible();
+  await expect(page.getByText("配对词冲刺均值", { exact: true })).toBeVisible();
+  const pairedRecall = page.locator('[aria-label="同词配对回忆变化"]');
+  await expect(pairedRecall).toContainText("2 个配对词");
+  await expect(pairedRecall).toContainText("最近非冲刺");
+  await expect(pairedRecall).toContainText("本次冲刺");
+  await expect(pairedRecall).toContainText("观察到本次较此前快");
   const resprintButton = page.getByRole("button", {
     name: /再冲刺仍需关注（\d+）/,
   });

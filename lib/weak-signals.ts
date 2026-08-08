@@ -653,26 +653,127 @@ export function buildSprintRecordWordIds(
   return [...wordIds];
 }
 
-/** 本周冲刺成效：按本地周一聚合，纯派生、不新增 schema */
+/**
+ * 同词配对回忆变化：目标侧按词内全部合法事件取均值，基线侧取边界前
+ * 最近一次非冲刺合法事件，再跨词等权。变化值为目标均值减基线均值：
+ * 负值表示目标侧更快，正值表示目标侧更慢。
+ */
+export type PairedRecallChange = {
+  /** 两侧都有合法样本的去重词数 */
+  pairedWordCount: number;
+  /** 配对词的边界前最近非冲刺回忆均值 */
+  pairedBeforeAverageRecallMs: number | null;
+  /** 配对词的目标事件词内均值，再跨词等权 */
+  pairedTargetAverageRecallMs: number | null;
+  /** 目标均值 − 基线均值；负值更快、正值更慢 */
+  pairedChangeMs: number | null;
+};
+
+function isValidRecallMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+/** 由指定目标事件和时间边界构建一致的同词配对观察。 */
+export function buildPairedRecallChange(
+  reviews: readonly ReviewEvent[],
+  targetReviews: readonly ReviewEvent[],
+  beforeBoundaryMs: number,
+): PairedRecallChange {
+  if (!Number.isFinite(beforeBoundaryMs)) {
+    return {
+      pairedWordCount: 0,
+      pairedBeforeAverageRecallMs: null,
+      pairedTargetAverageRecallMs: null,
+      pairedChangeMs: null,
+    };
+  }
+
+  const targetByWordId = new Map<number, { totalMs: number; count: number }>();
+  for (const review of targetReviews) {
+    if (review.wordId === undefined || !isValidRecallMs(review.recallMs)) continue;
+    const current = targetByWordId.get(review.wordId) ?? { totalMs: 0, count: 0 };
+    current.totalMs += review.recallMs;
+    current.count += 1;
+    targetByWordId.set(review.wordId, current);
+  }
+
+  const beforeByWordId = new Map<
+    number,
+    { reviewedAtMs: number; recallMs: number; id: string }
+  >();
+  for (const review of reviews) {
+    if (
+      review.wordId === undefined
+      || !targetByWordId.has(review.wordId)
+      || review.sessionId?.startsWith("sprint:")
+      || !isValidRecallMs(review.recallMs)
+    ) continue;
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (!Number.isFinite(reviewedAtMs) || reviewedAtMs >= beforeBoundaryMs) continue;
+    const previous = beforeByWordId.get(review.wordId);
+    if (
+      !previous
+      || reviewedAtMs > previous.reviewedAtMs
+      || (reviewedAtMs === previous.reviewedAtMs
+        && review.id.localeCompare(previous.id) < 0)
+    ) {
+      beforeByWordId.set(review.wordId, {
+        reviewedAtMs,
+        recallMs: review.recallMs,
+        id: review.id,
+      });
+    }
+  }
+
+  let pairedWordCount = 0;
+  let beforeTotalMs = 0;
+  let targetTotalMs = 0;
+  for (const [wordId, target] of targetByWordId) {
+    const before = beforeByWordId.get(wordId);
+    if (!before) continue;
+    pairedWordCount += 1;
+    beforeTotalMs += before.recallMs;
+    targetTotalMs += target.totalMs / target.count;
+  }
+  if (!pairedWordCount) {
+    return {
+      pairedWordCount: 0,
+      pairedBeforeAverageRecallMs: null,
+      pairedTargetAverageRecallMs: null,
+      pairedChangeMs: null,
+    };
+  }
+  const pairedBeforeAverageRecallMs = Math.round(
+    beforeTotalMs / pairedWordCount,
+  );
+  const pairedTargetAverageRecallMs = Math.round(
+    targetTotalMs / pairedWordCount,
+  );
+  return {
+    pairedWordCount,
+    pairedBeforeAverageRecallMs,
+    pairedTargetAverageRecallMs,
+    pairedChangeMs:
+      pairedTargetAverageRecallMs - pairedBeforeAverageRecallMs,
+  };
+}
+
+/** 本周冲刺观察：按本地周一聚合，纯派生、不新增 schema */
 export type SprintEffectiveness = {
   /** 本周冲刺次数 */
   sprintCount: number;
   /** 本周冲刺覆盖的去重词数 */
   coveredWordCount: number;
-  /** 冲刺前这些词的历史平均回忆耗时（毫秒），无样本为 null */
-  beforeAverageRecallMs: number | null;
-  /** 冲刺期间平均回忆耗时（毫秒），无样本为 null */
-  sprintAverageRecallMs: number | null;
-  /** 平均回忆降幅（毫秒）：冲刺前平均 − 冲刺期间平均；正值表示回忆更快 */
-  recallImprovementMs: number | null;
+  /** 同词配对回忆变化；无配对样本时各均值与变化为 null */
+  pairedRecall: PairedRecallChange;
   /** 冲刺期间当场达标（rating≥2）的去重词数 */
   resolvedCount: number;
 };
 
 /**
- * 从评分日志按本地周一聚合本周冲刺成效。
- * 周归属用 reviewedAt；baseline 取覆盖词集中早于本周首次冲刺开始、
- * 且非冲刺会话的历史评分，避免后续冲刺样本混入（与完成页口径同源）。
+ * 从评分日志按本地周一聚合本周冲刺观察。
+ * 周归属用 reviewedAt；目标侧为周窗内全部冲刺事件，配对边界为该周
+ * 首个冲刺事件时间，基线只取每个目标词边界前最近一次非冲刺事件。
  */
 export function buildSprintEffectiveness(
   reviews: readonly ReviewEvent[],
@@ -699,45 +800,10 @@ export function buildSprintEffectiveness(
       .filter((review) => review.rating >= 2)
       .map((review) => review.wordId),
   ).size;
-  const sprintSamples = weekSprints
-    .map((review) => review.recallMs)
-    .filter((value): value is number =>
-      typeof value === "number" && Number.isFinite(value) && value >= 0);
-  const sprintAverageRecallMs = sprintSamples.length
-    ? Math.round(
-        sprintSamples.reduce((sum, ms) => sum + ms, 0) / sprintSamples.length,
-      )
-    : null;
-  const beforeSamples = reviews.flatMap<number>((review) => {
-    const reviewedAtMs = new Date(review.reviewedAt).getTime();
-    if (
-      review.wordId !== undefined
-      && coveredIds.has(review.wordId)
-      && Number.isFinite(reviewedAtMs)
-      && reviewedAtMs < firstSprintMs
-      && !review.sessionId?.startsWith("sprint:")
-      && typeof review.recallMs === "number"
-      && Number.isFinite(review.recallMs)
-      && review.recallMs >= 0
-    ) {
-      return [review.recallMs];
-    }
-    return [];
-  });
-  const beforeAverageRecallMs = beforeSamples.length
-    ? Math.round(
-        beforeSamples.reduce((sum, ms) => sum + ms, 0) / beforeSamples.length,
-      )
-    : null;
   return {
     sprintCount: new Set(weekSprints.map((review) => review.sessionId)).size,
     coveredWordCount: coveredIds.size,
-    beforeAverageRecallMs,
-    sprintAverageRecallMs,
-    recallImprovementMs:
-      beforeAverageRecallMs !== null && sprintAverageRecallMs !== null
-        ? beforeAverageRecallMs - sprintAverageRecallMs
-        : null,
+    pairedRecall: buildPairedRecallChange(reviews, weekSprints, firstSprintMs),
     resolvedCount,
   };
 }

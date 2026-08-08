@@ -146,11 +146,11 @@ export default function SessionCompleteView({
               </strong>
             </div>
             <div>
-              <span>平均回忆</span>
+              <span>配对词冲刺均值</span>
               <strong>
-                {sprintSummary.sprintAverageRecallMs === null
+                {sprintSummary.pairedRecall.pairedTargetAverageRecallMs === null
                   ? "—"
-                  : `${(sprintSummary.sprintAverageRecallMs / 1000).toFixed(1)}s`}
+                  : `${(sprintSummary.pairedRecall.pairedTargetAverageRecallMs / 1000).toFixed(1)}s`}
               </strong>
             </div>
           </div>
@@ -168,35 +168,46 @@ export default function SessionCompleteView({
             </div>
           )}
 
-          {sprintSummary.beforeAverageRecallMs !== null
-            && sprintSummary.sprintAverageRecallMs !== null && (
-            <div className="sprint-recall-compare" aria-label="冲刺前后回忆耗时对比">
-              <p className="sprint-recall-compare-title">冲刺前后平均回忆</p>
+          <div className="sprint-recall-compare" aria-label="同词配对回忆变化">
+            <p className="sprint-recall-compare-title">
+              同词配对回忆变化 · {sprintSummary.pairedRecall.pairedWordCount} 个配对词
+            </p>
+            {sprintSummary.pairedRecall.pairedBeforeAverageRecallMs !== null
+              && sprintSummary.pairedRecall.pairedTargetAverageRecallMs !== null
+              && sprintSummary.pairedRecall.pairedChangeMs !== null ? (
+              <>
               <div className="sprint-recall-compare-row">
-                <span>冲刺前</span>
+                <span>最近非冲刺</span>
                 <div className="sprint-recall-bar">
-                  <i style={{ width: `${sprintBarWidth(sprintSummary.beforeAverageRecallMs, sprintSummary.sprintAverageRecallMs)}%` }} />
+                  <i style={{ width: `${sprintBarWidth(sprintSummary.pairedRecall.pairedBeforeAverageRecallMs, Math.max(sprintSummary.pairedRecall.pairedBeforeAverageRecallMs, sprintSummary.pairedRecall.pairedTargetAverageRecallMs))}%` }} />
                 </div>
-                <strong>{(sprintSummary.beforeAverageRecallMs / 1000).toFixed(1)}s</strong>
+                <strong>{(sprintSummary.pairedRecall.pairedBeforeAverageRecallMs / 1000).toFixed(1)}s</strong>
               </div>
               <div className="sprint-recall-compare-row">
-                <span>冲刺后</span>
+                <span>本次冲刺</span>
                 <div className="sprint-recall-bar">
-                  <i className="after" style={{ width: `${sprintBarWidth(sprintSummary.sprintAverageRecallMs, sprintSummary.sprintAverageRecallMs)}%` }} />
+                  <i className="after" style={{ width: `${sprintBarWidth(sprintSummary.pairedRecall.pairedTargetAverageRecallMs, Math.max(sprintSummary.pairedRecall.pairedBeforeAverageRecallMs, sprintSummary.pairedRecall.pairedTargetAverageRecallMs))}%` }} />
                 </div>
-                <strong>{(sprintSummary.sprintAverageRecallMs / 1000).toFixed(1)}s</strong>
+                <strong>{(sprintSummary.pairedRecall.pairedTargetAverageRecallMs / 1000).toFixed(1)}s</strong>
               </div>
               <small className={
-                sprintSummary.sprintAverageRecallMs < sprintSummary.beforeAverageRecallMs
+                sprintSummary.pairedRecall.pairedChangeMs < 0
                   ? "positive"
-                  : "neutral"
+                  : sprintSummary.pairedRecall.pairedChangeMs > 0
+                    ? "negative"
+                    : "neutral"
               }>
-                {sprintSummary.sprintAverageRecallMs < sprintSummary.beforeAverageRecallMs
-                  ? `↑ 平均回忆提升 ${Math.max(0, sprintSummary.beforeAverageRecallMs - sprintSummary.sprintAverageRecallMs) / 1000}s`
-                  : "回忆耗时与冲刺前持平或略升"}
+                {sprintSummary.pairedRecall.pairedChangeMs < 0
+                  ? `观察到本次较此前快 ${(-sprintSummary.pairedRecall.pairedChangeMs / 1000).toFixed(1)}s`
+                  : sprintSummary.pairedRecall.pairedChangeMs > 0
+                    ? `观察到本次较此前慢 ${(sprintSummary.pairedRecall.pairedChangeMs / 1000).toFixed(1)}s`
+                    : "观察到本次与此前持平"}
               </small>
-            </div>
-          )}
+              </>
+            ) : (
+              <small className="neutral">无配对样本</small>
+            )}
+          </div>
 
           {sprintDimensionTrend && sprintDimensionTrend.some((row) => row.weeklyCount !== null) && (
             <div className="sprint-dimension-trend" aria-label="薄弱维度与本周趋势">

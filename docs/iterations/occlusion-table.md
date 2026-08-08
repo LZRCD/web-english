@@ -9,7 +9,7 @@
 | 2 | 处置 → 感知更新（冲刺/集中区后薄弱标签刷新） | `rateWord` → `setReviews` / `setWordProgress` → `weakSignalInput` / `buildWeakProfiles`；`buildSprintCompletionSummary` | ✅ 已验证咬合 | 处置结果写回 state 后，薄弱画像与冲刺总结实时重算。 | 既有实现 |
 | 3 | 复发 → 回到处置（复发词可再冲刺） | `buildSprintRelapse` → `startSprintFromRelapse` → `HistoryView`；复发再冲刺测试 | ✅ 已验证咬合 | 复发词可从历史视图重新进入冲刺。 | 既有实现 |
 | 4 | 复习 → 时间线记录（学习动作进时间线） | `rateWord` / `buildWordSignalTimeline`；四档评分与去重排序测试 | ✅ 已验证咬合 | 所有 review 动作均按 `reviewedAt` 进入时间线：`rating=0` 复用既有遗忘事件，1~3 显示“模糊/认识/熟练”，冲刺沿用 session 标记；相同 review ID 不重复，慢回忆等既有信号事件保留。 | 21 |
-| 5 | 冲刺 → 成效反映（冲刺后成效 4 周/维度归因更新） | review `sessionId` → `buildSprintEffectiveness` / `buildSprintEffectivenessSeries` → `HistoryView` | ✅ 已验证咬合 | 冲刺复习带 sessionId，成效聚合与 4 周序列实时派生并展示。 | 既有实现 |
+| 5 | 冲刺 → 观察反映（周报/4 周同词配对变化） | review `sessionId` / `wordId` / `recallMs` → `buildPairedRecallChange` → `buildSprintEffectiveness` / `buildSprintEffectivenessSeries` → `HistoryView` | ✅ 已验证咬合 | 周窗冲刺事件与边界前最近非冲刺记录按同词配对，目标侧先词内聚合再跨词等权；无配对不填 0，页面报告样本数且不声称因果。 | 36 |
 | 6 | 插队/补漏 → 学习卡感知（一键补漏词即时显示薄弱） | `lookupPriorityWordIds` / `buildTodayQueue` / `startTodayWithCurrent` → `WordCard` | ✅ 已验证咬合 | 插队与补漏词进入学习卡后可显示全态薄弱标签；现有 E2E 已覆盖按钮后的标签展示。 | 既有实现 |
 | 7 | 全态标签 → 各入口一致（学习卡/词本/词书/集中度/复发判定同一派生） | `buildWordWeakSignals` / `buildWeakProfiles`；`weakSignalsByWordId`；`lookupWeakCandidateIds`；`buildSprintWordIds` | ✅ 已验证咬合 | 词书、划词候选、冲刺候选均消费统一实时画像；纯查词降级词退出各入口，仍有其他薄弱信号时继续保留。 | 19 |
 | 8 | 薄弱→稳定转换可感知（「已稳定」提示） | `currentStabilizedDimensions` / `buildWordStabilizedDimensions` / `page.tsx` | ✅ 已验证咬合 | 稳定提示复用统一结构化派生；查词仍须达到当前薄弱阈值并满足既有降级条件，阈值变化实时生效，单维文案语义保持。 | 20、25 |

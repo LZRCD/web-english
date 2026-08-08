@@ -246,9 +246,14 @@ test("冲刺完成总结：统计当场达标/仍需关注、回忆对比与薄�
       sessionId: session.id,
       recallMs: 16_000,
     }),
-    // 冲刺前历史样本：词 1 曾 10s（不触发回忆偏慢）、词 2 曾 30s
+    // 冲刺前普通历史：词 1 曾 10s（不触发回忆偏慢）、词 2 曾 30s
     review(1, 1, "2026-08-08T08:00:00.000Z", { recallMs: 10_000 }),
     review(2, 0, "2026-08-08T08:00:00.000Z", { recallMs: 30_000 }),
+    // 更晚的历史冲刺不能成为词 2 的配对基线
+    review(2, 1, "2026-08-09T08:00:00.000Z", {
+      sessionId: "sprint:older",
+      recallMs: 5_000,
+    }),
   ];
   const weakSignals: WeakSignalInput = {
     lookupStats: {
@@ -304,10 +309,13 @@ test("冲刺完成总结：统计当场达标/仍需关注、回忆对比与薄�
     summary.stillWeakWords.map((item) => item.wordId).sort(),
     [2, 3],
   );
-  // 冲刺期间平均回忆：(8+12+16)/3 = 12s
-  assert.equal(summary.sprintAverageRecallMs, 12_000);
-  // 冲刺前历史平均：(10+30)/2 = 20s
-  assert.equal(summary.beforeAverageRecallMs, 20_000);
+  // 词 3 无普通历史不进入分母；词 1/2 同词配对后跨词等权。
+  assert.deepEqual(summary.pairedRecall, {
+    pairedWordCount: 2,
+    pairedBeforeAverageRecallMs: 20_000,
+    pairedTargetAverageRecallMs: 10_000,
+    pairedChangeMs: -10_000,
+  });
   // 维度分布：lapse 词 2、顽固 词 2、反复查词 词 3
   const lookup = summary.dimensionCounts.find((row) => row.key === "lookup");
   assert.equal(lookup?.count, 1);

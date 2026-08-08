@@ -6,7 +6,9 @@ import {
   type WordProgressMap,
 } from "./learning.ts";
 import {
+  buildPairedRecallChange,
   buildWordWeakSignals,
+  type PairedRecallChange,
   type WeakDimensionTrend,
   type WeakSignalInput,
   type WeakThresholds,
@@ -263,10 +265,8 @@ export type SprintCompletionSummary = {
   resolvedCount: number;
   /** 冲刺后仍命中薄弱信号的词数（实时派生） */
   stillWeakCount: number;
-  /** 冲刺期间平均回忆耗时（毫秒） */
-  sprintAverageRecallMs: number | null;
-  /** 冲刺前这些词的词级平均回忆耗时（毫秒） */
-  beforeAverageRecallMs: number | null;
+  /** 本次冲刺与开始前最近非冲刺记录的同词配对观察 */
+  pairedRecall: PairedRecallChange;
   /** 冲刺后仍薄弱的具体词（word + 薄弱标签） */
   stillWeakWords: { wordId: number; word: string; signals: string[] }[];
   /** 各薄弱维度词数分布（冲刺后仍命中） */
@@ -314,31 +314,6 @@ function sprintDimensionCounts(
   return rows;
 }
 
-/** 冲刺前这些词的词级平均回忆耗时（仅早于冲刺开始的合法样本） */
-function beforeAverageRecallMs(
-  wordIds: ReadonlySet<number>,
-  weakSignals: WeakSignalInput,
-  beforeMs: number,
-) {
-  const samples: number[] = [];
-  for (const review of weakSignals.reviews) {
-    const reviewedAtMs = new Date(review.reviewedAt).getTime();
-    if (
-      review.wordId !== undefined
-      && wordIds.has(review.wordId)
-      && reviewedAtMs < beforeMs
-      && typeof review.recallMs === "number"
-      && Number.isFinite(review.recallMs)
-      && review.recallMs >= 0
-    ) {
-      samples.push(review.recallMs);
-    }
-  }
-  return samples.length
-    ? Math.round(samples.reduce((sum, ms) => sum + ms, 0) / samples.length)
-    : null;
-}
-
 /** 构建冲刺完成总结（仅 kind === "sprint" 时使用） */
 export function buildSprintCompletionSummary({
   session,
@@ -357,14 +332,12 @@ export function buildSprintCompletionSummary({
       .filter((review) => review.rating >= 2)
       .map((review) => review.wordId),
   ).size;
-  const recallTimes = sessionReviews
-    .map((review) => review.recallMs)
-    .filter((value): value is number =>
-      value !== undefined && Number.isFinite(value) && value >= 0);
   const startedAtMs = new Date(session.createdAt).getTime();
-  const beforeAverage = Number.isFinite(startedAtMs)
-    ? beforeAverageRecallMs(reviewedWordIds, weakSignals, startedAtMs)
-    : null;
+  const pairedRecall = buildPairedRecallChange(
+    weakSignals.reviews,
+    sessionReviews,
+    startedAtMs,
+  );
   // 冲刺后仍薄弱：实时派生（buildWordWeakSignals 标签非空）
   const stillWeakWords = [...reviewedWordIds].flatMap((wordId) => {
     const signals = buildWordWeakSignals(
@@ -383,10 +356,7 @@ export function buildSprintCompletionSummary({
     reviewedCount: sessionReviews.length,
     resolvedCount,
     stillWeakCount: stillWeakWords.length,
-    sprintAverageRecallMs: recallTimes.length
-      ? Math.round(recallTimes.reduce((sum, ms) => sum + ms, 0) / recallTimes.length)
-      : null,
-    beforeAverageRecallMs: beforeAverage,
+    pairedRecall,
     stillWeakWords,
     dimensionCounts: sprintDimensionCounts(stillWeakWords),
   };

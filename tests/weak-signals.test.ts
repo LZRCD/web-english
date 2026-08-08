@@ -23,6 +23,7 @@ import {
   restoreQuizQuestions,
 } from "../lib/quiz.ts";
 import {
+  buildPairedRecallChange,
   buildSprintCsv,
   buildSprintEffectiveness,
   buildSprintEffectivenessSeries,
@@ -851,7 +852,66 @@ function makeWord(
   };
 }
 
-test("冲刺成效：按本地周一聚合次数/覆盖词数/回忆降幅/当场达标词数", () => {
+test("同词配对回忆变化：词内聚合、跨词等权并选最近非冲刺基线", () => {
+  const boundaryMs = new Date("2026-08-10T08:00:00.000Z").getTime();
+  const targetReviews = [
+    { ...makeReview(1, 2, "2026-08-10T08:01:00.000Z", 4_000), sessionId: "sprint:target" },
+    { ...makeReview(1, 3, "2026-08-10T08:02:00.000Z", 8_000), sessionId: "sprint:target" },
+    { ...makeReview(2, 2, "2026-08-10T08:03:00.000Z", 10_000), sessionId: "sprint:target" },
+    { ...makeReview(3, 2, "2026-08-10T08:04:00.000Z", -1), sessionId: "sprint:target" },
+    { ...makeReview(4, 2, "2026-08-10T08:05:00.000Z", 9_000), sessionId: "sprint:target" },
+    { ...makeReview(5, 2, "2026-08-10T08:06:00.000Z", 7_000), sessionId: "sprint:target" },
+    { ...makeReview(6, 2, "2026-08-10T08:07:00.000Z"), sessionId: "sprint:target" },
+  ];
+  const reviews = [
+    targetReviews[2],
+    makeReview(1, 1, "2026-08-01T08:00:00.000Z", 20_000),
+    { ...makeReview(1, 1, "2026-08-09T09:00:00.000Z", 2_000), sessionId: "sprint:older" },
+    makeReview(2, 1, "2026-08-09T10:00:00.000Z", 30_000),
+    targetReviews[0],
+    makeReview(1, 1, "2026-08-09T08:00:00.000Z", 12_000),
+    makeReview(2, 1, "2026-08-08T08:00:00.000Z", 50_000),
+    makeReview(2, 1, "2026-08-09T11:00:00.000Z", Number.NaN),
+    makeReview(5, 1, "2026-08-10T08:00:00.000Z", 1_000),
+    targetReviews[5],
+    targetReviews[1],
+    targetReviews[3],
+    targetReviews[4],
+    makeReview(6, 1, "2026-08-09T08:00:00.000Z", 11_000),
+    targetReviews[6],
+  ];
+  const paired = buildPairedRecallChange(reviews, targetReviews, boundaryMs);
+  assert.deepEqual(paired, {
+    pairedWordCount: 2,
+    pairedBeforeAverageRecallMs: 21_000,
+    pairedTargetAverageRecallMs: 8_000,
+    pairedChangeMs: -13_000,
+  });
+  assert.deepEqual(
+    buildPairedRecallChange([...reviews].reverse(), [...targetReviews].reverse(), boundaryMs),
+    paired,
+  );
+});
+
+test("同词配对回忆变化：无配对或非法边界诚实返回 null", () => {
+  const target = [{
+    ...makeReview(1, 2, "2026-08-10T08:01:00.000Z", 8_000),
+    sessionId: "sprint:target",
+  }];
+  const expected = {
+    pairedWordCount: 0,
+    pairedBeforeAverageRecallMs: null,
+    pairedTargetAverageRecallMs: null,
+    pairedChangeMs: null,
+  };
+  assert.deepEqual(
+    buildPairedRecallChange(target, target, new Date("2026-08-10T08:00:00.000Z").getTime()),
+    expected,
+  );
+  assert.deepEqual(buildPairedRecallChange(target, target, Number.NaN), expected);
+});
+
+test("冲刺观察：按本地周一聚合次数/覆盖词数/配对变化/当场达标词数", () => {
   // 2026-08-10 为周一（本周），2026-08-05 在上周
   const reviews = [
     // 本周冲刺 1
@@ -875,12 +935,13 @@ test("冲刺成效：按本地周一聚合次数/覆盖词数/回忆降幅/当�
   assert.equal(result.sprintCount, 2);
   assert.equal(result.coveredWordCount, 3); // 去重词 1/2/3
   assert.equal(result.resolvedCount, 2); // 词 1、词 3（词 1 两次答对去重）
-  // 冲刺期间平均：(8+12+16+5)/4 = 10.25s
-  assert.equal(result.sprintAverageRecallMs, 10_250);
-  // baseline：早于 08-10T08:05 且非冲刺：(10+30+20)/3 = 20s
-  assert.equal(result.beforeAverageRecallMs, 20_000);
-  // 降幅：20 − 10.25 = 9.75s
-  assert.equal(result.recallImprovementMs, 9_750);
+  // 词 1 目标词内均值 6.5s，再与词 2 的 12s、词 3 的 16s 跨词等权。
+  assert.deepEqual(result.pairedRecall, {
+    pairedWordCount: 3,
+    pairedBeforeAverageRecallMs: 20_000,
+    pairedTargetAverageRecallMs: 11_500,
+    pairedChangeMs: -8_500,
+  });
 });
 
 test("冲刺成效：无本周冲刺记录返回 null", () => {
@@ -897,7 +958,7 @@ test("冲刺成效：无本周冲刺记录返回 null", () => {
   );
 });
 
-test("冲刺成效：baseline 排除冲刺会话样本", () => {
+test("冲刺观察：配对基线排除历史冲刺会话样本", () => {
   const reviews = [
     { ...makeReview(1, 2, "2026-08-10T08:05:00.000Z", 8_000), sessionId: "sprint:2026-08-10" },
     makeReview(1, 1, "2026-08-08T08:00:00.000Z", 10_000), // 普通历史
@@ -908,7 +969,8 @@ test("冲刺成效：baseline 排除冲刺会话样本", () => {
     new Date("2026-08-14T12:00:00.000Z"),
   );
   assert.ok(result);
-  assert.equal(result.beforeAverageRecallMs, 10_000);
+  assert.equal(result.pairedRecall.pairedBeforeAverageRecallMs, 10_000);
+  assert.equal(result.pairedRecall.pairedWordCount, 1);
 });
 
 test("薄弱集中度：按 section 分组、unit 聚合，total 与 count 降序", () => {
@@ -1008,11 +1070,11 @@ test("冲刺成效 4 周：多周聚合、空周返回 null、与单周口径一
   // 本周
   assert.equal(series[2].effectiveness?.sprintCount, 1);
   assert.equal(series[2].effectiveness?.resolvedCount, 1);
-  assert.equal(series[2].effectiveness?.beforeAverageRecallMs, 10_000);
-  assert.equal(series[2].effectiveness?.sprintAverageRecallMs, 8_000);
+  assert.equal(series[2].effectiveness?.pairedRecall.pairedBeforeAverageRecallMs, 10_000);
+  assert.equal(series[2].effectiveness?.pairedRecall.pairedTargetAverageRecallMs, 8_000);
   // 上周
   assert.equal(series[1].effectiveness?.sprintCount, 1);
-  assert.equal(series[1].effectiveness?.beforeAverageRecallMs, 12_000);
+  assert.equal(series[1].effectiveness?.pairedRecall.pairedBeforeAverageRecallMs, 12_000);
   // 前周无冲刺
   assert.equal(series[0].effectiveness, null);
   // 与单周口径一致
