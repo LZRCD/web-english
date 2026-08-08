@@ -168,6 +168,75 @@ test("lapse 标签随既有薄弱恢复淡出，再次遗忘后重新出现", ()
   assert.deepEqual(signalsFor(forgottenAgain), ["猜错2次", "FSRS lapse 2"]);
 });
 
+test("慢回忆标签连续两次成功快速回忆后淡出，再次变慢立即重现", () => {
+  const slow = makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000);
+  const oneFast = makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000);
+  const twoFast = makeReview(10, 3, "2026-07-22T00:00:00.000Z", 7_000);
+  const slowAgain = makeReview(10, 2, "2026-07-23T00:00:00.000Z", 20_000);
+  const inputFor = (reviews: ReviewEvent[]) => baseInput({
+    guessMistakes: { 10: 2 },
+    reviews,
+  });
+
+  assert.deepEqual(buildWordWeakSignals(10, inputFor([slow])), [
+    "猜错2次",
+    "回忆偏慢1次",
+  ]);
+  assert.deepEqual(buildWordWeakSignals(10, inputFor([slow, oneFast])), [
+    "猜错2次",
+    "回忆偏慢1次",
+  ]);
+  assert.deepEqual(buildWordWeakSignals(10, inputFor([slow, oneFast, twoFast])), [
+    "猜错2次",
+  ]);
+  assert.deepEqual(buildWordWeakSignals(10, inputFor([slow, oneFast, twoFast, slowAgain])), [
+    "猜错2次",
+    "回忆偏慢2次",
+  ]);
+});
+
+test("慢回忆恢复只接受有测时的成功快速回忆", () => {
+  const slow = makeReview(10, 2, "2026-07-20T00:00:00.000Z", 18_000);
+  const fast = makeReview(10, 2, "2026-07-21T00:00:00.000Z", 8_000);
+  const unmeasured = makeReview(10, 3, "2026-07-22T00:00:00.000Z");
+  const fastButFailed = makeReview(10, 1, "2026-07-22T00:00:00.000Z", 5_000);
+
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    reviews: [slow, fast, unmeasured],
+  })), ["回忆偏慢1次"]);
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    reviews: [slow, fast, fastButFailed],
+  })), ["回忆偏慢1次"]);
+});
+
+test("慢回忆恢复实时跟随阈值，历史时间线与周趋势不被降级改写", () => {
+  const input = baseInput({
+    reviews: [
+      makeReview(10, 2, "2026-07-28T08:00:00.000Z", 18_000),
+      makeReview(10, 2, "2026-07-29T08:00:00.000Z", 12_000),
+      makeReview(10, 3, "2026-07-30T08:00:00.000Z", 11_000),
+    ],
+  });
+  const threshold15 = { ...DEFAULT_WEAK_THRESHOLDS, slowRecallMs: 15_000 };
+  const threshold10 = { ...DEFAULT_WEAK_THRESHOLDS, slowRecallMs: 10_000 };
+
+  assert.deepEqual(buildWordWeakSignals(10, input, undefined, threshold15), []);
+  assert.deepEqual(buildWordWeakSignals(10, input, undefined, threshold10), [
+    "回忆偏慢3次",
+  ]);
+  assert.equal(
+    buildWordSignalTimeline(10, input, threshold15)
+      .filter((event) => event.type === "slow-recall").length,
+    1,
+  );
+  assert.equal(
+    buildWeakDimensionTrend(input, new Date(2026, 6, 30, 12), threshold15)
+      .find((dimension) => dimension.key === "slow-recall")?.count,
+    1,
+  );
+  assert.equal(wordRecallStats(input.reviews, 10)?.sampleCount, 3);
+});
+
 test("薄弱画像：无信号时返回空数组，划词查询按学习项 id 归并", () => {
   const input = baseInput({
     lookupStats: {

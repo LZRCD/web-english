@@ -141,7 +141,13 @@ function quizErrorCounts(attempts: readonly QuizAttempt[], wordId: number) {
   }, {});
 }
 
-/** 该词回忆耗时不低于阈值的评分次数 */
+function hasValidRecallMs(review: ReviewEvent): review is ReviewEvent & { recallMs: number } {
+  return typeof review.recallMs === "number"
+    && Number.isFinite(review.recallMs)
+    && review.recallMs >= 0;
+}
+
+/** 该词回忆耗时不低于阈值的历史评分次数 */
 function slowReviewCount(
   reviews: readonly ReviewEvent[],
   wordId: number,
@@ -149,8 +155,33 @@ function slowReviewCount(
 ) {
   return reviews.filter((review) =>
     review.wordId === wordId
-    && typeof review.recallMs === "number"
+    && hasValidRecallMs(review)
     && review.recallMs >= slowRecallMs).length;
+}
+
+/** 最近两次均为有测时的成功快速回忆时，当前慢回忆信号视为已恢复。 */
+function isSlowRecallRecovered(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+  slowRecallMs: number,
+) {
+  const latestReviews = reviews
+    .filter((review) => review.wordId === wordId)
+    .sort((first, second) => second.reviewedAt.localeCompare(first.reviewedAt));
+  let consecutiveFastSuccesses = 0;
+  for (const review of latestReviews) {
+    if (
+      review.rating >= 2
+      && hasValidRecallMs(review)
+      && review.recallMs < slowRecallMs
+    ) {
+      consecutiveFastSuccesses += 1;
+      if (consecutiveFastSuccesses >= 2) return true;
+      continue;
+    }
+    break;
+  }
+  return false;
 }
 
 /**
@@ -186,7 +217,13 @@ export function buildWordWeakSignals(
     signals.push(`辨析错${quizErrors["meaning-choice"]}次`);
   }
   const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
-  if (slowCount > 0) signals.push(`回忆偏慢${slowCount}次`);
+  // 历史慢回忆仍保留在 review/时间线/统计中；仅当前标签在可靠恢复后淡出
+  if (
+    slowCount > 0
+    && !isSlowRecallRecovered(input.reviews, wordId, thresholds.slowRecallMs)
+  ) {
+    signals.push(`回忆偏慢${slowCount}次`);
+  }
   if (input.stubbornWords[wordId]?.active) signals.push("顽固词");
   const progress = input.wordProgress[wordId];
   const lapseCount = progress?.lapseCount ?? 0;

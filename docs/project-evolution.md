@@ -898,3 +898,20 @@
 - `tests/weak-signals.test.ts` 定向测试 46/46 通过。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（17.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮父 PID 13944 与监听 PID 6860，端口、日志与 PID 文件均已清理。
 - 本轮按边界未实现非查词类「已稳定」UI，也未处理慢回忆或测验信号降级。
+
+## 第四十二次迭代：信号联动二十三轮（慢回忆薄弱标签降级）
+
+本次迭代：2026-08-08。
+
+### 修正
+
+- `buildWordWeakSignals` 的慢回忆分支继续按当前 `slowRecallMs` 统计历史慢样本，但最近连续两次 review 均为有合法测时、评分 2/3 且低于当前阈值时，当前「回忆偏慢 N 次」标签淡出；无测时、低评分或慢回忆会中断恢复连续性，后续再次慢回忆立即恢复标签。
+- 历史 review 不删除、不改写；`buildWordSignalTimeline`、`wordRecallStats` 与周级慢回忆趋势继续表达历史事实，未误改为当前状态统计。
+- 统一画像的学习卡、词书、冲刺、集中度和复发入口同步消费降级结果；未新增稳定 UI，未处理测验/猜错降级，未改评分、FSRS 排程、备份、持久化 schema 或既有 E2E 语义。
+- 随生产构建刷新 `lib/build-info.generated.ts` 的起点提交与源码哈希。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 166/166 通过。
+- `tests/weak-signals.test.ts` 定向测试 49/49 通过，覆盖首次慢、一次快速不足、连续两次快速恢复、无测时/低评分不算快速、恢复后再次慢、阈值实时生效、其他信号及历史时间线/统计不受影响。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮监听 PID 40548，确认端口、日志和 PID 文件无残留。
