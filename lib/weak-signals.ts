@@ -698,17 +698,82 @@ export function buildSprintEffectivenessSeries(
   return series;
 }
 
-/** 上周冲刺解决词的复发追踪：纯派生、不新增 schema */
+/** 某个冲刺周解决词截至当前的复发追踪：纯派生、不新增 schema */
 export type SprintRelapse = {
-  /** 上周冲刺解决（rating≥2 去重）词数 */
+  /** 该周冲刺解决（rating≥2 去重）词数 */
   solvedCount: number;
-  /** 上周解决词中当前仍薄弱（buildWordWeakSignals 非空）的词数 */
+  /** 该周解决词中当前仍薄弱（buildWordWeakSignals 非空）的词数 */
   relapsedCount: number;
   /** 复发率（relapsedCount / solvedCount，0–100 取整） */
   relapseRate: number;
   /** 复发词 id（按当前薄弱信号数降序，便于定位） */
   relapsedIds: number[];
 };
+
+/** 某个已完成冲刺周截至当前的复发结果（无解决词时为 null） */
+export type SprintRelapseWeek = {
+  /** 冲刺处置周起始日（本地周一，YYYY-MM-DD） */
+  weekStart: string;
+  /** 截至当前的复发结果；该周无冲刺解决词时为 null */
+  relapse: SprintRelapse | null;
+};
+
+/**
+ * 一次扫描按本地周收集冲刺解决词，供单周追踪与多周回溯共用。
+ */
+function buildSprintSolvedCohorts(
+  reviews: readonly ReviewEvent[],
+  weekStarts: readonly Date[],
+): Map<string, Set<number>> {
+  const cohorts = new Map(
+    weekStarts.map((start) => [localDateKey(start), new Set<number>()]),
+  );
+  for (const review of reviews) {
+    if (
+      !review.sessionId?.startsWith("sprint:")
+      || review.rating < 2
+      || review.wordId === undefined
+    ) continue;
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (!Number.isFinite(reviewedAtMs)) continue;
+    const weekKey = localDateKey(localWeekStart(new Date(reviewedAtMs)));
+    cohorts.get(weekKey)?.add(review.wordId);
+  }
+  return cohorts;
+}
+
+/** 用当前统一薄弱画像判断一个已解决 cohort，并复用跨 cohort 的判定缓存。 */
+function buildSprintCohortRelapse(
+  solvedIds: ReadonlySet<number> | undefined,
+  input: WeakSignalInput,
+  thresholds: WeakThresholds,
+  weakSignalCountByWordId = new Map<number, number>(),
+): SprintRelapse | null {
+  if (!solvedIds?.size) return null;
+  const relapsedIds = [...solvedIds]
+    .map((wordId) => {
+      let signalCount = weakSignalCountByWordId.get(wordId);
+      if (signalCount === undefined) {
+        signalCount = buildWordWeakSignals(
+          wordId,
+          input,
+          undefined,
+          thresholds,
+        ).length;
+        weakSignalCountByWordId.set(wordId, signalCount);
+      }
+      return { wordId, signalCount };
+    })
+    .filter((item) => item.signalCount > 0)
+    .sort((first, second) => second.signalCount - first.signalCount)
+    .map((item) => item.wordId);
+  return {
+    solvedCount: solvedIds.size,
+    relapsedCount: relapsedIds.length,
+    relapseRate: Math.round((relapsedIds.length / solvedIds.size) * 100),
+    relapsedIds,
+  };
+}
 
 /**
  * 追踪上周冲刺解决词的复发情况：取上周一至本周一之间、
@@ -722,32 +787,47 @@ export function buildSprintRelapse(
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): SprintRelapse | null {
   const weekStart = localWeekStart(now);
-  const lastWeekStartMs = addLocalDays(weekStart, -7).getTime();
-  const weekStartMs = weekStart.getTime();
-  const solvedIds = new Set<number>();
-  for (const review of reviews) {
-    if (
-      review.sessionId?.startsWith("sprint:")
-      && review.rating >= 2
-      && review.wordId !== undefined
-      && inWindow(review.reviewedAt, lastWeekStartMs, weekStartMs)
-    ) {
-      solvedIds.add(review.wordId);
-    }
+  const lastWeekStart = addLocalDays(weekStart, -7);
+  const weekKey = localDateKey(lastWeekStart);
+  const cohorts = buildSprintSolvedCohorts(reviews, [lastWeekStart]);
+  return buildSprintCohortRelapse(
+    cohorts.get(weekKey),
+    input,
+    thresholds,
+  );
+}
+
+/**
+ * 最近 N 个已完成冲刺周的截至当前复发率回溯（按时间升序）。
+ * 这是按处置周分组后用当前统一薄弱画像回看，不是历史周末状态快照。
+ */
+export function buildSprintRelapseSeries(
+  reviews: readonly ReviewEvent[],
+  input: WeakSignalInput,
+  now = new Date(),
+  weeks = 4,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): SprintRelapseWeek[] {
+  const thisWeekStart = localWeekStart(now);
+  const count = Math.max(1, Math.trunc(weeks));
+  const weekStarts: Date[] = [];
+  for (let offset = count; offset >= 1; offset -= 1) {
+    weekStarts.push(addLocalDays(thisWeekStart, -offset * 7));
   }
-  if (!solvedIds.size) return null;
-  const relapsed = [...solvedIds]
-    .filter((wordId) =>
-      buildWordWeakSignals(wordId, input, undefined, thresholds).length > 0)
-    .sort((first, second) =>
-      buildWordWeakSignals(second, input, undefined, thresholds).length
-      - buildWordWeakSignals(first, input, undefined, thresholds).length);
-  return {
-    solvedCount: solvedIds.size,
-    relapsedCount: relapsed.length,
-    relapseRate: Math.round((relapsed.length / solvedIds.size) * 100),
-    relapsedIds: relapsed,
-  };
+  const cohorts = buildSprintSolvedCohorts(reviews, weekStarts);
+  const weakSignalCountByWordId = new Map<number, number>();
+  return weekStarts.map((start) => {
+    const weekStart = localDateKey(start);
+    return {
+      weekStart,
+      relapse: buildSprintCohortRelapse(
+        cohorts.get(weekStart),
+        input,
+        thresholds,
+        weakSignalCountByWordId,
+      ),
+    };
+  });
 }
 
 /** 考前薄弱冲刺候选：已学且统一薄弱画像非空的词 id，按薄弱程度排序 */

@@ -64,7 +64,7 @@ import {
   buildWeakCandidateSummary,
   buildSprintHistory,
   buildSprintRecordWordIds,
-  buildSprintRelapse,
+  buildSprintRelapseSeries,
   buildSprintSummary,
   buildSprintWordIds,
   buildScopedSprintWordIds,
@@ -482,10 +482,18 @@ export default function Home() {
     () => buildSprintEffectivenessSeries(reviews, new Date(clock)),
     [reviews, clock],
   );
-  const sprintRelapse = useMemo(
-    () => buildSprintRelapse(reviews, weakSignalInput, new Date(clock), weakThresholds),
+  const sprintRelapseSeries = useMemo(
+    () => buildSprintRelapseSeries(
+      reviews,
+      weakSignalInput,
+      new Date(clock),
+      4,
+      weakThresholds,
+    ),
     [reviews, weakSignalInput, clock, weakThresholds],
   );
+  // 序列最后一项就是上个完整周，继续供既有复发词列表与再冲刺入口使用。
+  const sprintRelapse = sprintRelapseSeries.at(-1)?.relapse ?? null;
   const sprintRelapseWords = useMemo(
     () => (sprintRelapse?.relapsedIds ?? []).flatMap((wordId) => {
       const word = wordById.get(wordId)?.word;
@@ -2133,6 +2141,7 @@ export default function Home() {
             onExportSprint={exportSprintCsv}
             weakConcentration={weakConcentration}
             sprintEffectivenessSeries={sprintEffectivenessSeries}
+            sprintRelapseSeries={sprintRelapseSeries}
             sprintRelapse={sprintRelapse}
             sprintRelapseWords={sprintRelapseWords}
             onSprintRelapse={startSprintFromRelapse}

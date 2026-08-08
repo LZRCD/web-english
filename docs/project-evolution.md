@@ -957,3 +957,20 @@
 - `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 175/175 通过。
 - `tests/weak-signals.test.ts` 定向测试 58/58 通过。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过；固定端口 3000 健康检查 200，结束后精确关闭本轮服务树，端口、日志和 PID 文件无残留。
+
+## 第四十五次迭代：信号联动二十六轮（冲刺处置周复发率回溯）
+
+本次迭代：2026-08-08。
+
+### 新增
+
+- `lib/weak-signals.ts` 新增 `buildSprintRelapseSeries`：覆盖当前周之前最近 4 个完整本地周，一次扫描按周收集冲刺会话中 `rating≥2` 的去重解决词，再复用当前 `buildWordWeakSignals` 与当前阈值判断各 cohort 截至现在是否复发；跨周重复词只计算一次当前画像。
+- 既有 `buildSprintRelapse` 改为复用相同 cohort 收集与复发排序逻辑，结果和 `relapsedIds` 语义不变。page.tsx 从 4 周序列最后一项派生既有上周追踪，继续支持复发词明细与「再冲刺复发词」。
+- 轨迹页在「冲刺成效 4 周」相邻位置新增「冲刺复发率 4 周」，逐周显示解决词数、复发词数和复发率；标题明确“按冲刺处置周分组、截至当前回溯（非历史周末快照）”。无冲刺解决词显示明确空态，不虚报 0%。
+- 未新增持久化 schema 或历史快照，未改评分、排程、备份、package scripts 或既有 E2E 语义。
+
+### 测试与验证
+
+- `tests/weak-signals.test.ts` 新增 3 个用例，覆盖四周边界、周内去重、仅冲刺且 `rating≥2`、当前画像与阈值传递、无冲刺周、恢复后实时更新，以及现有单周结果和复发词 ID 不变；定向测试 61/61 通过。
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，178/178 通过。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.7s）；固定端口 3000 健康检查 200，结束后只精确关闭本轮记录的 PID 21920 进程树，端口、PID 文件与唯一日志无残留。

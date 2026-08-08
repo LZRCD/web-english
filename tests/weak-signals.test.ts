@@ -16,6 +16,7 @@ import {
   buildSprintHistory,
   buildSprintRecordWordIds,
   buildSprintRelapse,
+  buildSprintRelapseSeries,
   buildSprintSummary,
   buildSprintWordIds,
   buildWeakCandidateSummary,
@@ -1142,6 +1143,106 @@ test("冲刺复发：全部解决词无复发则复发率 0", () => {
   assert.equal(result.relapsedCount, 0);
   assert.equal(result.relapseRate, 0);
   assert.deepEqual(result.relapsedIds, []);
+});
+
+test("冲刺复发 4 周：完整周边界、周内去重且仅收集冲刺 rating≥2", () => {
+  // 当前周从 08-10（周一）开始；回溯 07-13、07-20、07-27、08-03 四个完整周。
+  const reviews = [
+    { ...makeReview(7, 2, "2026-07-12T23:59:59+08:00"), sessionId: "sprint:too-early" },
+    { ...makeReview(1, 2, "2026-07-13T00:00:00+08:00"), sessionId: "sprint:first" },
+    { ...makeReview(1, 3, "2026-07-19T23:59:59+08:00"), sessionId: "sprint:first-repeat" },
+    { ...makeReview(2, 2, "2026-07-20T00:00:00+08:00"), sessionId: "sprint:second" },
+    { ...makeReview(3, 3, "2026-07-27T12:00:00+08:00"), sessionId: "today:ordinary" },
+    { ...makeReview(4, 1, "2026-07-28T12:00:00+08:00"), sessionId: "sprint:low-rating" },
+    { ...makeReview(5, 2, "2026-08-03T00:00:00+08:00"), sessionId: "sprint:last" },
+    { ...makeReview(6, 2, "2026-08-10T00:00:00+08:00"), sessionId: "sprint:current" },
+  ];
+  const input = baseInput({ reviews, guessMistakes: { 1: 1, 2: 1, 5: 1 } });
+  const series = buildSprintRelapseSeries(
+    reviews,
+    input,
+    new Date("2026-08-10T12:00:00+08:00"),
+  );
+
+  assert.deepEqual(
+    series.map((week) => week.weekStart),
+    ["2026-07-13", "2026-07-20", "2026-07-27", "2026-08-03"],
+  );
+  assert.deepEqual(
+    series.map((week) => week.relapse?.solvedCount ?? null),
+    [1, 1, null, 1],
+  );
+  assert.deepEqual(series[0].relapse?.relapsedIds, [1]);
+  assert.deepEqual(series[1].relapse?.relapsedIds, [2]);
+  assert.deepEqual(series[3].relapse?.relapsedIds, [5]);
+});
+
+test("冲刺复发 4 周：当前统一画像与传入阈值决定截至当前复发", () => {
+  const reviews = [
+    { ...makeReview(10, 2, "2026-08-05T08:00:00+08:00"), sessionId: "sprint:threshold" },
+  ];
+  const input = baseInput({
+    reviews,
+    lookupStats: {
+      "word-10": { count: 3, firstAt: "2026-08-01T00:00:00+08:00", lastAt: "2026-08-06T00:00:00+08:00" },
+    },
+    lookupWords: [lookupWord("word-10", 10)],
+    wordProgress: {
+      10: { wordId: 10, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-08-05T08:00:00+08:00" },
+    } as unknown as WordProgressMap,
+  });
+  const now = new Date("2026-08-14T12:00:00+08:00");
+  const relaxed = buildSprintRelapseSeries(reviews, input, now);
+  const strict = buildSprintRelapseSeries(
+    reviews,
+    input,
+    now,
+    4,
+    { ...DEFAULT_WEAK_THRESHOLDS, lookupWeak: 4 },
+  );
+
+  assert.equal(relaxed.at(-1)?.relapse?.relapsedCount, 1);
+  assert.equal(relaxed.at(-1)?.relapse?.relapseRate, 100);
+  assert.equal(strict.at(-1)?.relapse?.relapsedCount, 0);
+  assert.equal(strict.at(-1)?.relapse?.relapseRate, 0);
+});
+
+test("冲刺复发 4 周：空周语义明确，当前恢复后序列更新且单周入口不变", () => {
+  const now = new Date("2026-08-14T12:00:00+08:00");
+  const emptySeries = buildSprintRelapseSeries([], baseInput(), now);
+  assert.equal(emptySeries.length, 4);
+  assert.deepEqual(emptySeries.map((week) => week.relapse), [null, null, null, null]);
+
+  const reviews = [
+    { ...makeReview(1, 2, "2026-08-05T08:00:00+08:00"), sessionId: "sprint:recovery" },
+  ];
+  const lookupStats = {
+    "word-1": { count: 2, firstAt: "2026-08-01T00:00:00+08:00", lastAt: "2026-08-06T00:00:00+08:00" },
+  };
+  const weakInput = baseInput({
+    reviews,
+    lookupStats,
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-08-05T08:00:00+08:00" },
+    } as unknown as WordProgressMap,
+  });
+  const recoveredInput = baseInput({
+    reviews,
+    lookupStats,
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-08-07T08:00:00+08:00" },
+    } as unknown as WordProgressMap,
+  });
+  const weakSeries = buildSprintRelapseSeries(reviews, weakInput, now);
+  const recoveredSeries = buildSprintRelapseSeries(reviews, recoveredInput, now);
+  const existingSingleWeek = buildSprintRelapse(reviews, weakInput, now);
+
+  assert.deepEqual(weakSeries.at(-1)?.relapse, existingSingleWeek);
+  assert.deepEqual(existingSingleWeek?.relapsedIds, [1]);
+  assert.equal(recoveredSeries.at(-1)?.relapse?.relapsedCount, 0);
+  assert.deepEqual(recoveredSeries.at(-1)?.relapse?.relapsedIds, []);
 });
 
 test("薄弱降级贯通：答对且查询不再增长 → 查词标签消失，其他信号保留", () => {

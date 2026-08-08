@@ -14,6 +14,7 @@ import {
   type SprintEffectivenessWeek,
   type SprintHistory,
   type SprintRelapse,
+  type SprintRelapseWeek,
   type WeakDimensionTrendWeek,
   type WeakSectionConcentration,
 } from "../../lib/weak-signals";
@@ -57,6 +58,8 @@ type HistoryViewProps = {
   weakConcentration: WeakSectionConcentration[];
   /** 冲刺成效近 N 周序列（含本周，无冲刺周为 null） */
   sprintEffectivenessSeries: SprintEffectivenessWeek[];
+  /** 最近 4 个已完成冲刺周截至当前的复发率回溯 */
+  sprintRelapseSeries: SprintRelapseWeek[];
   /** 上周冲刺解决词复发追踪（无上周冲刺为 null） */
   sprintRelapse: SprintRelapse | null;
   /** 复发词词名明细（wordId → 词名，供悬停展示） */
@@ -104,6 +107,7 @@ export default function HistoryView({
   sprintCount,
   weakConcentration,
   sprintEffectivenessSeries,
+  sprintRelapseSeries,
   sprintRelapse,
   sprintRelapseWords,
   sprintDimensionTrend,
@@ -499,6 +503,34 @@ export default function HistoryView({
                     </>
                   ) : (
                     <small className="neutral">—</small>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {sprintRelapseSeries.length > 0 && (
+          <div className="weak-trend" aria-label="冲刺复发率 4 周回溯">
+            <div className="weak-trend-head">
+              <strong>冲刺复发率 4 周</strong>
+              <small>按冲刺处置周分组 · 截至当前回溯（非历史周末快照）</small>
+            </div>
+            <div className="sprint-effectiveness-series">
+              {sprintRelapseSeries.map((week) => (
+                <div className="sprint-effectiveness-week" key={week.weekStart}>
+                  <span>{week.weekStart.slice(5)}</span>
+                  {week.relapse ? (
+                    <>
+                      <strong>{week.relapse.relapseRate}%</strong>
+                      <small>
+                        解决 {week.relapse.solvedCount} 词 · 复发 {week.relapse.relapsedCount} 词
+                      </small>
+                      <small className={week.relapse.relapseRate === 0 ? "positive" : "negative"}>
+                        {week.relapse.relapseRate === 0 ? "截至当前无复发" : "截至当前需关注"}
+                      </small>
+                    </>
+                  ) : (
+                    <small className="neutral">无冲刺解决词</small>
                   )}
                 </div>
               ))}
