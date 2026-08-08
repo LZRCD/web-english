@@ -138,7 +138,7 @@ export default function SessionCompleteView({
           </div>
           <div className="sprint-completion-stats">
             <div><span>冲刺词数</span><strong>{sprintSummary.sprintWordCount}</strong></div>
-            <div><span>已解决</span><strong>{sprintSummary.resolvedCount}</strong></div>
+            <div><span>当场达标</span><strong>{sprintSummary.resolvedCount}</strong></div>
             <div>
               <span>仍需关注</span>
               <strong className={sprintSummary.stillWeakCount > 0 ? "negative" : ""}>

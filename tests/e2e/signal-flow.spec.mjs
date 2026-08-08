@@ -993,6 +993,7 @@ test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({
     historySection.getByRole("heading", { name: "冲刺记录" }),
   ).toBeVisible();
   await expect(historySection).toContainText("共 1 次 · 覆盖 2 个不同单词");
+  await expect(historySection).toContainText("当场达标 50%");
   await expect(
     historySection.getByRole("button", { name: "再跑一次" }),
   ).toBeVisible();
@@ -1126,6 +1127,11 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
     name: /开始考前薄弱冲刺（2 词）/,
   });
   await expect(sprintStart).toBeVisible();
+  const weeklyEffectiveness = page.locator('[aria-label="本周冲刺成效"]');
+  await expect(weeklyEffectiveness).toContainText("当场达标词数");
+  const effectivenessSeries = page.locator('[aria-label="冲刺成效 4 周"]');
+  await expect(effectivenessSeries).toContainText("当场达标词数");
+  await expect(effectivenessSeries).toContainText("当场达标 1 词");
   await sprintStart.click();
 
   // 学习卡：冲刺会话中释义面板显示薄弱原因
@@ -1151,7 +1157,7 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
   await expect(
     page.getByRole("heading", { name: "本次冲刺小结" }),
   ).toBeVisible();
-  await expect(page.getByText("已解决")).toBeVisible();
+  await expect(page.getByText("当场达标", { exact: true })).toBeVisible();
   const resprintButton = page.getByRole("button", {
     name: /再冲刺仍需关注（\d+）/,
   });

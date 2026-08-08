@@ -253,13 +253,13 @@ export function mergeSprintWithTrend(
   }));
 }
 
-/** 冲刺完成总结：本次冲刺的薄弱维度分布、回忆对比、已解决/仍需关注 */
+/** 冲刺完成总结：本次冲刺的薄弱维度分布、回忆对比、当场达标/仍需关注 */
 export type SprintCompletionSummary = {
   /** 本次冲刺完成的词数 */
   sprintWordCount: number;
   /** 冲刺期间评分词数 */
   reviewedCount: number;
-  /** 冲刺期间顺利回忆（rating≥2）的词数 */
+  /** 冲刺期间当场达标（rating≥2）的去重词数 */
   resolvedCount: number;
   /** 冲刺后仍命中薄弱信号的词数（实时派生） */
   stillWeakCount: number;

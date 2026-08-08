@@ -451,7 +451,7 @@ export default function Home() {
     ),
     [todayKey, weakSignalInput, weakThresholds],
   );
-  // 冲刺会话专属总结：薄弱维度分布、回忆对比、已解决/仍需关注
+  // 冲刺会话专属总结：薄弱维度分布、回忆对比、当场达标/仍需关注
   const sprintCompletionSummary = useMemo(
     () => activeSession?.kind === "sprint" && sessionComplete
       ? buildSprintCompletionSummary({

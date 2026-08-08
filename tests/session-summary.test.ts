@@ -221,7 +221,7 @@ test("sessionId 经评分创建与状态解析后保持不变", () => {
   assert.equal(state.activeSession?.originKind, "lookups");
 });
 
-test("冲刺完成总结：统计已解决/仍需关注、回忆对比与薄弱维度分布", () => {
+test("冲刺完成总结：统计当场达标/仍需关注、回忆对比与薄弱维度分布", () => {
   const session = {
     ...createStudySession(
       "sprint",
@@ -232,7 +232,7 @@ test("冲刺完成总结：统计已解决/仍需关注、回忆对比与薄弱�
     id: "sprint:2026-08-10",
     index: 3,
   };
-  // 词 1 冲刺期间答对（已解决）；词 2 仍答错且 lapse；词 3 答对但查询次数仍高
+  // 词 1 冲刺期间当场达标；词 2 仍答错且 lapse；词 3 达标但查询次数仍高
   const reviews = [
     review(1, 2, "2026-08-10T08:05:00.000Z", {
       sessionId: session.id,

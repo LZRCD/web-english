@@ -563,7 +563,7 @@ export type SprintHistoryRecord = {
   startedAt: string;
   /** 本次冲刺覆盖的去重词数 */
   wordCount: number;
-  /** 本次冲刺顺利回忆（rating≥2）的去重词数 */
+  /** 本次冲刺当场达标（rating≥2）的去重词数 */
   successCount: number;
   /** 本次冲刺平均回忆耗时（毫秒），无合法样本为 null */
   averageRecallMs: number | null;
@@ -665,7 +665,7 @@ export type SprintEffectiveness = {
   sprintAverageRecallMs: number | null;
   /** 平均回忆降幅（毫秒）：冲刺前平均 − 冲刺期间平均；正值表示回忆更快 */
   recallImprovementMs: number | null;
-  /** 冲刺期间顺利回忆（rating≥2）的去重词数 */
+  /** 冲刺期间当场达标（rating≥2）的去重词数 */
   resolvedCount: number;
 };
 

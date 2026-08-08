@@ -436,7 +436,7 @@ export default function HistoryView({
           <div className="weak-trend" aria-label="本周冲刺成效">
             <div className="weak-trend-head">
               <strong>本周冲刺成效</strong>
-              <small>冲刺次数 · 覆盖词数 · 平均回忆变化 · 解决词数</small>
+              <small>冲刺次数 · 覆盖词数 · 平均回忆变化 · 当场达标词数</small>
             </div>
             <div className="weak-trend-grid">
               <div className="weak-trend-item">
@@ -467,7 +467,7 @@ export default function HistoryView({
                 </small>
               </div>
               <div className="weak-trend-item">
-                <span>解决词数</span>
+                <span>当场达标词数</span>
                 <strong>{weeklyReport.sprintEffectiveness.resolvedCount}</strong>
               </div>
             </div>
@@ -477,7 +477,7 @@ export default function HistoryView({
           <div className="weak-trend" aria-label="冲刺成效 4 周">
             <div className="weak-trend-head">
               <strong>冲刺成效 4 周</strong>
-              <small>每周冲刺次数 · 解决词数 · 平均回忆变化</small>
+              <small>每周冲刺次数 · 当场达标词数 · 平均回忆变化</small>
             </div>
             <div className="sprint-effectiveness-series">
               {sprintEffectivenessSeries.map((week) => (
@@ -486,7 +486,7 @@ export default function HistoryView({
                   {week.effectiveness ? (
                     <>
                       <strong>{week.effectiveness.sprintCount} 次</strong>
-                      <small>解决 {week.effectiveness.resolvedCount} 词</small>
+                      <small>当场达标 {week.effectiveness.resolvedCount} 词</small>
                       <small className={
                         week.effectiveness.recallImprovementMs === null
                           ? "neutral"
@@ -697,7 +697,7 @@ export default function HistoryView({
                     <small>{started.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
                   </strong>
                   <span>{record.wordCount} 词</span>
-                  <span>顺利 {successRate}%</span>
+                  <span>当场达标 {successRate}%</span>
                   <span>
                     平均回忆{" "}
                     {record.averageRecallMs === null
