@@ -839,3 +839,23 @@
 - `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 156/156 通过。
 - `tests/weak-signals.test.ts` 定向测试 39/39 通过，新增统一入口用例并补充阈值同步断言。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.1s）；固定端口 3000 启动前确认无监听，结束后精确关闭本轮父/监听 PID，未批量终止 Node，日志与 PID 记录已清理。
+
+## 第三十九次迭代：信号联动二十轮（查词已稳定阈值门禁）
+
+本次迭代：2026-08-08。
+
+### 修正
+
+- 新增 `isLookupStabilized(wordId, input, thresholds)` 统一派生：仅当查询次数达到当前 `lookupWeak` 薄弱阈值、随后满足既有 `isLookupDemoted` 降级条件，且 `buildWordWeakSignals` 已无其他当前薄弱信号时，才判定查词薄弱已稳定。
+- `app/page.tsx` 的 `currentLookupStabilized` 改为复用该派生，不再在 UI 层拼装判定；仅查询 1 次、从未达到默认薄弱阈值的词答对后不再误显「已稳定」。设置页调整查询薄弱阈值后，提示随当前阈值实时重算。
+- 未扩展到非查词稳定反馈，未改时间线、评分、排程、备份和持久化 schema。
+
+### 测试
+
+- `tests/weak-signals.test.ts` 新增 4 个用例，覆盖未达阈值不提示、达到阈值并降级且无其他信号才提示、未降级或仍有其他薄弱信号不提示，以及阈值配置实时生效。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 160/160 通过。
+- `tests/weak-signals.test.ts` 定向测试 43/43 通过。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮服务 PID 11240 及其子进程 7244、39944，端口无监听，日志与 PID 记录已清理。

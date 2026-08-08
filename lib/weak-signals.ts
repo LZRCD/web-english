@@ -305,7 +305,8 @@ export function buildWeakCandidateSummary(
 /**
  * 反复查过但之后答对（rating≥2 且查询次数不再增长）→ 自动降级出队。
  * 纯派生判断：最近一次评分时间晚于最近查询时间即认为已覆盖。
- */ export function isLookupDemoted(
+ */
+export function isLookupDemoted(
   wordId: number,
   stat: LookupStat,
   input: WeakSignalInput,
@@ -313,6 +314,20 @@ export function buildWeakCandidateSummary(
   const progress = input.wordProgress[wordId];
   if (!progress) return false;
   return progress.lastRating >= 2 && progress.lastReviewedAt >= stat.lastAt;
+}
+
+/**
+ * 查词薄弱已稳定：查询次数达到当前薄弱阈值，随后满足降级条件，且无其他当前薄弱信号。
+ */
+export function isLookupStabilized(
+  wordId: number,
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+) {
+  const stat = lookupStatForWordId(wordId, input);
+  if (!stat || stat.count < thresholds.lookupWeak) return false;
+  if (!isLookupDemoted(wordId, stat, input)) return false;
+  return buildWordWeakSignals(wordId, input, undefined, thresholds).length === 0;
 }
 
 /** 单次冲刺记录（由评分日志按 sessionId 分组派生） */

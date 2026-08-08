@@ -74,7 +74,7 @@ import {
   buildWeakProfiles,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
-  isLookupDemoted,
+  isLookupStabilized,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
@@ -429,13 +429,11 @@ export default function Home() {
     [current.id, weakSignalInput],
   );
   // 学习卡「已稳定」正向反馈：曾因查词被标记薄弱，现已降级稳定且无其他信号
-  const currentLookupStabilized = useMemo(() => {
-    if (current.id === undefined) return false;
-    const stat = lookupStatForWordId(current.id, weakSignalInput);
-    if (!stat) return false;
-    if (!isLookupDemoted(current.id, stat, weakSignalInput)) return false;
-    return buildWordWeakSignals(current.id, weakSignalInput, undefined, weakThresholds).length === 0;
-  }, [current.id, weakSignalInput, weakThresholds]);
+  const currentLookupStabilized = useMemo(
+    () => current.id !== undefined
+      && isLookupStabilized(current.id, weakSignalInput, weakThresholds),
+    [current.id, weakSignalInput, weakThresholds],
+  );
   // 薄弱维度近 4 周趋势（轨迹页周报下方）
   const weakTrendSeries = useMemo(
     () => buildWeakDimensionTrendSeries(

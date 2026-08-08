@@ -26,6 +26,7 @@ import {
   DEFAULT_WEAK_THRESHOLDS,
   emphasizedWeakDimensions,
   isLookupDemoted,
+  isLookupStabilized,
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
@@ -1006,4 +1007,81 @@ test("已稳定判定 isLookupDemoted：未答对 → false", () => {
   });
   const stat = lookupStatForWordId(1, input)!;
   assert.equal(isLookupDemoted(1, stat, input), false);
+});
+
+test("查词已稳定：查询次数未达当前薄弱阈值时不提示", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 1, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.equal(isLookupDemoted(1, lookupStatForWordId(1, input)!, input), true);
+  assert.equal(isLookupStabilized(1, input), false);
+});
+
+test("查词已稳定：达到薄弱阈值且随后降级、无其他信号时提示", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 2, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.equal(isLookupStabilized(1, input), true);
+});
+
+test("查词已稳定：达到阈值但未降级或仍有其他薄弱信号时不提示", () => {
+  const common = {
+    lookupStats: {
+      "word-1": { count: 2, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+  };
+  const notDemoted = baseInput({
+    ...common,
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 1, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const withOtherSignal = baseInput({
+    ...common,
+    guessMistakes: { 1: 1 },
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  assert.equal(isLookupStabilized(1, notDemoted), false);
+  assert.equal(isLookupStabilized(1, withOtherSignal), false);
+});
+
+test("查词已稳定：实时使用当前查询薄弱阈值", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 3, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1)],
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+  const thresholdThree: WeakThresholds = {
+    ...DEFAULT_WEAK_THRESHOLDS,
+    lookupWeak: 3,
+  };
+  const thresholdFour: WeakThresholds = {
+    ...DEFAULT_WEAK_THRESHOLDS,
+    lookupWeak: 4,
+  };
+
+  assert.equal(isLookupStabilized(1, input, thresholdThree), true);
+  assert.equal(isLookupStabilized(1, input, thresholdFour), false);
 });
