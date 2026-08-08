@@ -269,6 +269,60 @@ function chineseToEnglishTreatmentSeedState() {
   });
 }
 
+function meaningChoiceTreatmentSeedState() {
+  const examDate = new Date(Date.now() + 5 * 86_400_000)
+    .toISOString().slice(0, 10);
+  const learnedAt = daysAgo(5, 8, 0);
+  const learnedWords = ["radiate", "radiant", "radical", "object"];
+  return createState({
+    examDate,
+    reviews: learnedWords.map((word, index) => ({
+      id: `choice-learned-${index + 1}`,
+      wordId: index + 1,
+      word,
+      rating: 2,
+      kind: "new",
+      intervalMs: 86_400_000,
+      dueAt: daysAgo(4, 8, index),
+      reviewedAt: new Date(new Date(learnedAt).getTime() + index * 60_000).toISOString(),
+      recallMs: 4_000,
+      section: "必考词",
+      unit: 1,
+    })),
+    quizAttempts: [
+      {
+        id: "choice-wrong",
+        wordId: 1,
+        mode: "meaning-choice",
+        correct: false,
+        recallMs: 7_000,
+        answeredAt: daysAgo(3, 8, 0),
+        appliedToSchedule: false,
+      },
+      {
+        id: "choice-correct-once",
+        wordId: 1,
+        mode: "meaning-choice",
+        correct: true,
+        recallMs: 5_000,
+        answeredAt: daysAgo(2, 8, 0),
+        appliedToSchedule: false,
+      },
+    ],
+    stubbornWords: {
+      1: {
+        wordId: 1,
+        active: true,
+        reason: "again-3",
+        triggeredAt: daysAgo(3, 7, 0),
+        lastChangedAt: daysAgo(3, 7, 0),
+        triggerCount: 1,
+      },
+    },
+    started: true,
+  });
+}
+
 test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结果", async ({ context, page }) => {
   await installStateSeed(context, spellingTreatmentSeedState());
   await openApp(page);
@@ -404,6 +458,83 @@ test("信号联动：拼写恢复后中译英接管冲刺并完成同维回流",
     .click();
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
+});
+
+test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同维回流", async ({ context, page }) => {
+  await installStateSeed(context, meaningChoiceTreatmentSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText("熟词僻义", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /radiate.*忽略的义项/ })).toBeVisible();
+  await expect(page.locator(".quiz-option")).toHaveCount(4);
+
+  const answer = "呈辐射状发散 (或伸展)";
+  await page.getByRole("button", { name: new RegExp(answer.replace(/[()]/g, "\\$&")) }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("回答正确");
+
+  await expect.poll(async () => page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const store = transaction.objectStore("state-domains");
+      const attemptsRequest = store.get("quiz-attempts");
+      const reviewsRequest = store.get("reviews");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const attempt = attemptsRequest.result?.value?.at(-1);
+        const review = reviewsRequest.result?.value?.at(-1);
+        database.close();
+        resolve({
+          mode: attempt?.mode,
+          correct: attempt?.correct,
+          optionsStoredAsAttempt: attempt?.wordId === 1,
+          sprintAttributed: review?.sessionId?.startsWith("sprint:") ?? false,
+        });
+      };
+    };
+  }))).toEqual({
+    mode: "meaning-choice",
+    correct: true,
+    optionsStoredAsAttempt: true,
+    sprintAttributed: true,
+  });
+
+  await page.getByRole("button", { name: "查看结果" }).click();
+  await page.getByRole("button", { name: "再来一组" }).click();
+  await expect(page.getByRole("heading", { name: /radiate.*忽略的义项/ })).toBeVisible();
+  await page.locator(".quiz-option").filter({ hasNotText: answer }).first().click();
+  await expect(page.locator(".quiz-feedback")).toContainText("已加入薄弱词");
+  await expect.poll(async () => page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const store = transaction.objectStore("state-domains");
+      const attemptsRequest = store.get("quiz-attempts");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const attempt = attemptsRequest.result?.value?.at(-1);
+        database.close();
+        resolve({ wordId: attempt?.wordId, mode: attempt?.mode, correct: attempt?.correct });
+      };
+    };
+  }))).toEqual({ wordId: 1, mode: "meaning-choice", correct: false });
+
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(page.locator(".sprint-history")).toContainText("覆盖 1 个不同单词");
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText("熟词僻义", { exact: true })).toBeVisible();
 });
 
 test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({ context, page }) => {

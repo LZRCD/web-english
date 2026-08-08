@@ -63,3 +63,29 @@
 | 中译英错 | 结构化读取未恢复的 `chinese-to-english` 错误；不解析标签文案 | 考前薄弱冲刺；拼写专项优先，拼写恢复后中译英接管 | 限定当前中译英薄弱词集，以中文释义提示并输入英文 | 每次作答写 `quizAttempts`；首次有效作答按既有门禁写 `reviews/wordProgress`，并沿用 `sprint:*` sessionId | 最近两次同模式正确后退出建议与统一画像；其他维度保持 | 再次同模式答错后，中译英标签、建议和入口重现 | ✅ 已形成维度闭环 |
 
 第 28 轮没有新增 schema，也没有修改答案判定、评分、FSRS 排程、备份或普通测验语义。拼写和中译英的结构化优先级固定为前者优先；辨析仍回退通用冲刺，是下一条最高价值断链。
+
+## 第 29 轮只读复核
+
+> 复核基线：`7b507c3`。分支仅有用户文件 `1.txt` 未跟踪，固定端口 3000 无监听；以下结论在修改前取得。
+
+| 核对项 | 当前实现 | 证据位置 | 是否闭环 |
+|---|---|---|---|
+| 辨析信号来源 | `quizAttempts` 中同词 `mode=meaning-choice && !correct` 累计；恢复只看同模式有效时间序列 | `quizErrorCounts` / `isQuizModeRecovered` / `buildWordWeakSignals` | ✅ 信号真实 |
+| 结构化处置建议 | 推荐联合类型和优先级只有拼写、中译英 | `SprintTreatmentRecommendation` / `buildSprintTreatmentRecommendation` | ❌ 未接辨析 |
+| 冲刺入口路由 | 有前两类建议才直达 Quiz；仅辨析薄弱时回退通用 `WordCard` | `page.tsx#startSprintSession` | ❌ 处置错配 |
+| 实际训练模式 | `QuizView` 已真实支持 `meaning-choice` 四选一 | `buildQuizQuestions` / `QuizView#submitAnswer` | ✅ 组件可复用 |
+| 题干与选项 | 多义词问未熟义项，单义词按释义选英文；答案来自目标词，干扰项来自全部已学词并去重 | `buildMeaningQuestion` / `distinctOptions` | ✅ 已具备 |
+| 候选弱词限定 | `candidateWordIds` 只限制目标词，全部已学词仍供干扰项；但辨析没有上游候选 | `buildQuizQuestions` / `restoreQuizQuestions` | ❌ 辨析无上游 |
+| 结果与归因 | 每次作答写真实 `mode/correct/recallMs`；每日首次有效结果才写排程，`sprint:*` 原样进入 review | `recordQuizResult` / `shouldApplyQuizToSchedule` | ✅ 已具备 |
+| 淡出与复发 | 最近两次同模式正确后淡出；新同模式错误中断恢复并重现，其他维度不受影响 | `isQuizModeRecovered` / `buildWordWeakSignals` | ✅ 已具备 |
+| 多维优先级 | 拼写 → 中译英 → 通用，缺辨析第三级 | `buildSprintTreatmentRecommendation` | ❌ 优先级断在第三级 |
+
+只读结论：断点只在结构化推荐层。第 29 轮唯一目标选择“拼写 → 中译英 → 辨析 → 通用”，复用现有训练、候选、回流、恢复和冲刺归因，不改题目或干扰项算法。
+
+## 第 29 轮实施后目标行
+
+| 薄弱维度 | 信号来源 | 当前入口 | 实际训练方式 | 结果写入位置 | 降级规则 | 复发规则 | 状态 |
+|---|---|---|---|---|---|---|---|
+| 辨析错 | 结构化读取未恢复的 `meaning-choice` 错误；不解析标签或按钮文案 | 考前薄弱冲刺；拼写、中译英恢复后辨析接管 | 只限定当前辨析薄弱目标词，直达现有释义选择；干扰项仍来自全部已学词 | 每次作答写 `quizAttempts.mode=meaning-choice`；首次有效作答按既有门禁写 `reviews/wordProgress` 并沿用 `sprint:*` | 最近两次同模式正确后退出辨析建议与统一画像；其他维度保持 | 再次同模式答错后，辨析标签、建议与入口重现；高优先级复发可重新抢占 | ✅ 已形成维度闭环 |
+
+专项 review 继续被冲刺时间线、历史、成效与复发统计感知。本轮未新增 schema，未修改答案判定、干扰项、评分、FSRS 排程、备份或普通测验语义。

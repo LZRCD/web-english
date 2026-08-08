@@ -1747,7 +1747,12 @@ test("维度化处置：中译英同模式回流后淡出，其他维度保留�
     c2eCorrect1,
     c2eCorrect2,
   ]);
-  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildSprintTreatmentRecommendation(recovered), {
+    dimension: "quiz-choice",
+    mode: "meaning-choice",
+    label: "释义辨析",
+    wordIds: [10],
+  });
   assert.deepEqual(buildWordWeakSignals(10, recovered), ["辨析错1次"]);
 
   const relapsed = inputFor([
@@ -1789,4 +1794,121 @@ test("维度化处置：中译英只从推荐词集出题并使用中文提示",
   assert.equal(questions[0]?.mode, "chinese-to-english");
   assert.equal(questions[0]?.prompt, "目标");
   assert.equal(questions[0]?.answer, "target");
+});
+
+test("维度化处置：拼写、中译英恢复后辨析接管，复发维度按优先级重新抢占", () => {
+  const progress = {
+    10: {
+      wordId: 10,
+      lapseCount: 0,
+      lastRating: 2,
+      lastReviewedAt: "2026-07-20T00:00:00.000Z",
+      consecutiveSuccesses: 1,
+    },
+  } as unknown as WordProgressMap;
+  const attempt = (
+    id: string,
+    mode: QuizMode,
+    correct: boolean,
+    day: number,
+  ) => makeQuizAttempt(
+    id,
+    mode,
+    correct,
+    `2026-07-${String(day).padStart(2, "0")}T00:00:00.000Z`,
+  );
+  const spellingWrong = attempt("spelling-wrong", "listening-spelling", false, 20);
+  const c2eWrong = attempt("c2e-wrong", "chinese-to-english", false, 20);
+  const choiceWrong = attempt("choice-wrong", "meaning-choice", false, 20);
+  const spellingRecovered = [
+    attempt("spelling-correct-1", "listening-spelling", true, 21),
+    attempt("spelling-correct-2", "listening-spelling", true, 22),
+  ];
+  const c2eRecovered = [
+    attempt("c2e-correct-1", "chinese-to-english", true, 23),
+    attempt("c2e-correct-2", "chinese-to-english", true, 24),
+  ];
+  const choiceRecovered = [
+    attempt("choice-correct-1", "meaning-choice", true, 25),
+    attempt("choice-correct-2", "meaning-choice", true, 26),
+  ];
+  const inputFor = (quizAttempts: QuizAttempt[]) => baseInput({
+    quizAttempts,
+    wordProgress: progress,
+  });
+  const allWrong = [spellingWrong, c2eWrong, choiceWrong];
+
+  assert.equal(buildSprintTreatmentRecommendation(inputFor(allWrong))?.mode, "listening-spelling");
+  assert.equal(buildSprintTreatmentRecommendation(inputFor([
+    ...allWrong,
+    ...spellingRecovered,
+  ]))?.mode, "chinese-to-english");
+  assert.deepEqual(buildSprintTreatmentRecommendation(inputFor([
+    ...allWrong,
+    ...spellingRecovered,
+    ...c2eRecovered,
+  ])), {
+    dimension: "quiz-choice",
+    mode: "meaning-choice",
+    label: "释义辨析",
+    wordIds: [10],
+  });
+
+  const recovered = inputFor([
+    ...allWrong,
+    ...spellingRecovered,
+    ...c2eRecovered,
+    ...choiceRecovered,
+  ]);
+  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildWordWeakSignals(10, recovered), []);
+
+  const choiceRelapsed = inputFor([
+    ...recovered.quizAttempts,
+    attempt("choice-wrong-again", "meaning-choice", false, 27),
+  ]);
+  assert.equal(buildSprintTreatmentRecommendation(choiceRelapsed)?.mode, "meaning-choice");
+  assert.deepEqual(buildWordWeakSignals(10, choiceRelapsed), ["辨析错2次"]);
+
+  const spellingRelapsed = inputFor([
+    ...choiceRelapsed.quizAttempts,
+    attempt("spelling-wrong-again", "listening-spelling", false, 28),
+  ]);
+  assert.equal(buildSprintTreatmentRecommendation(spellingRelapsed)?.mode, "listening-spelling");
+  assert.deepEqual(buildWordWeakSignals(10, spellingRelapsed), [
+    "拼写测验错2次",
+    "辨析错2次",
+  ]);
+});
+
+test("维度化处置：辨析只限定目标弱词，干扰项仍来自全部已学词且答案唯一", () => {
+  const words: Word[] = [
+    { id: 10, word: "target", meaning: "n. 目标;目的" },
+    { id: 11, word: "other", meaning: "n. 其他" },
+    { id: 12, word: "example", meaning: "n. 示例" },
+    { id: 13, word: "contrast", meaning: "n. 对照" },
+  ];
+  const progress = Object.fromEntries(words.map((word) => [
+    word.id,
+    { wordId: word.id },
+  ])) as unknown as WordProgressMap;
+  const questions = buildQuizQuestions({
+    words,
+    progress,
+    mode: "meaning-choice",
+    candidateWordIds: [10],
+    count: 10,
+    seed: 1,
+  });
+
+  assert.deepEqual(questions.map((question) => question.wordId), [10]);
+  assert.equal(questions[0]?.mode, "meaning-choice");
+  assert.equal(questions[0]?.answer, "目的");
+  assert.equal(questions[0]?.options?.length, 4);
+  assert.equal(new Set(questions[0]?.options).size, 4);
+  assert.equal(
+    questions[0]?.options?.filter((option) => option === questions[0]?.answer).length,
+    1,
+  );
+  assert.deepEqual(new Set(questions[0]?.options), new Set(["目的", "其他", "示例", "对照"]));
 });

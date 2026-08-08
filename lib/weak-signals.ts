@@ -74,6 +74,12 @@ export type SprintTreatmentRecommendation =
       mode: "chinese-to-english";
       label: "中译英";
       wordIds: number[];
+    }
+  | {
+      dimension: "quiz-choice";
+      mode: "meaning-choice";
+      label: "释义辨析";
+      wordIds: number[];
     };
 
 /** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
@@ -899,6 +905,11 @@ export function buildSprintTreatmentRecommendation(
       dimension: "quiz-c2e",
       mode: "chinese-to-english",
       label: "中译英",
+    },
+    {
+      dimension: "quiz-choice",
+      mode: "meaning-choice",
+      label: "释义辨析",
     },
   ] as const;
   for (const treatment of priorities) {
