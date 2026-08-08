@@ -5,6 +5,12 @@ import {
   boundedText,
   readJsonBody,
 } from "../../../lib/api-guard";
+import {
+  chatCompletion,
+  getProviderConfig,
+  parseJsonContent,
+  withRetry,
+} from "../../../lib/ai-provider";
 
 type LookupRequest = {
   text?: string;
@@ -18,16 +24,6 @@ type LookupPayload = {
   meaning?: unknown;
   note?: unknown;
 };
-
-const MAX_ATTEMPTS = 2;
-
-function parseJsonContent(value: string) {
-  const normalized = value
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-  return JSON.parse(normalized) as LookupPayload;
-}
 
 function normalizeLookup(payload: LookupPayload, query: string) {
   if (
@@ -63,55 +59,39 @@ async function handlePost(request: NextRequest) {
     return NextResponse.json({ error: "请选择英文单词、短语或句子" }, { status: 400 });
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
+  const { apiKey } = getProviderConfig();
   if (!apiKey) {
     return NextResponse.json({ error: "未配置 DeepSeek API" }, { status: 503 });
   }
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
-  const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
 
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-        method: "POST",
-        signal: AbortSignal.timeout(12000),
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          thinking: { type: "disabled" },
-          response_format: { type: "json_object" },
-          temperature: 0.1,
-          max_tokens: 360,
-          messages: [
-            {
-              role: "system",
-              content: "你是严谨、简洁的英语词典编辑。只返回 JSON，字段必须是 query、kind、part、meaning、note，不要生成 phonetic 或任何音标字段。kind 只能是 word、phrase 或 sentence。单词需给出词性；短语或句子的 part 分别写“短语”或“句子”。meaning 用中文给出当前语境下最准确的含义，不超过 60 字；note 用一句话说明搭配、语气或语法，不超过 70 字。必须优先依据 context 判断词义，不捏造词源。",
-            },
-            {
-              role: "user",
-              content: JSON.stringify({ text, context }),
-            },
-          ],
-        }),
+  try {
+    return await withRetry(2, async () => {
+      const content = await chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content: "你是严谨、简洁的英语词典编辑。只返回 JSON，字段必须是 query、kind、part、meaning、note，不要生成 phonetic 或任何音标字段。kind 只能是 word、phrase 或 sentence。单词需给出词性；短语或句子的 part 分别写“短语”或“句子”。meaning 用中文给出当前语境下最准确的含义，不超过 60 字；note 用一句话说明搭配、语气或语法，不超过 70 字。必须优先依据 context 判断词义，不捏造词源。",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({ text, context }),
+          },
+        ],
+        temperature: 0.1,
+        maxTokens: 360,
+        timeoutMs: 12000,
+        thinking: { type: "disabled" },
+        responseFormat: { type: "json_object" },
+        maxBytes: 1024 * 1024,
+        errorMessage: (status) => `云端模型返回 ${status}`,
       });
-      if (!response.ok) throw new Error(`云端模型返回 ${response.status}`);
-      const data = await readJsonBody<{
-        choices?: Array<{ message?: { content?: string } }>;
-      }>(response, 1024 * 1024);
-      const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error("模型没有返回内容");
-      return NextResponse.json(normalizeLookup(parseJsonContent(content), text));
-    } catch (error) {
-      lastError = error;
-    }
+      return NextResponse.json(normalizeLookup(parseJsonContent<LookupPayload>(content), text));
+    });
+  } catch (lastError) {
+    console.error("[api/lookup] 划词查询失败", lastError);
+    return NextResponse.json({ error: "划词查询失败，请重新选择" }, { status: 502 });
   }
-
-  console.error("[api/lookup] 划词查询失败", lastError);
-  return NextResponse.json({ error: "划词查询失败，请重新选择" }, { status: 502 });
 }
 
 export async function POST(request: NextRequest) {

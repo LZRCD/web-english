@@ -5,6 +5,11 @@ import {
   boundedText,
   readJsonBody,
 } from "../../../../lib/api-guard";
+import {
+  chatCompletion,
+  getProviderConfig,
+  parseJsonContent,
+} from "../../../../lib/ai-provider";
 
 type ReviewRequest = {
   word?: string;
@@ -19,13 +24,6 @@ type ReviewPayload = {
   confidence?: unknown;
   note?: unknown;
 };
-
-function parseJsonContent(value: string) {
-  return JSON.parse(value
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim()) as ReviewPayload;
-}
 
 async function handlePost(request: NextRequest) {
   const raw = await readJsonBody<ReviewRequest>(request, 16 * 1024);
@@ -42,44 +40,31 @@ async function handlePost(request: NextRequest) {
     return NextResponse.json({ error: "缺少待审查例句字段" }, { status: 400 });
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
+  const { apiKey } = getProviderConfig();
   if (!apiKey) {
     return NextResponse.json({ error: "未配置云端模型，无法执行语义二审" }, {
       status: 503,
     });
   }
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
-  const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      signal: AbortSignal.timeout(12_000),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        thinking: { type: "disabled" },
-        response_format: { type: "json_object" },
-        temperature: 0,
-        max_tokens: 180,
-        messages: [
-          {
-            role: "system",
-            content: "你是英语词典例句质检员。只返回 JSON：matches（布尔值）、confidence（0到1）、note（不超过60字中文）。判断英文句子是否确实体现指定中文义项，翻译是否与句子一致。不要改写例句。",
-          },
-          { role: "user", content: JSON.stringify(body) },
-        ],
-      }),
+    const content = await chatCompletion({
+      messages: [
+        {
+          role: "system",
+          content: "你是英语词典例句质检员。只返回 JSON：matches（布尔值）、confidence（0到1）、note（不超过60字中文）。判断英文句子是否确实体现指定中文义项，翻译是否与句子一致。不要改写例句。",
+        },
+        { role: "user", content: JSON.stringify(body) },
+      ],
+      temperature: 0,
+      maxTokens: 180,
+      timeoutMs: 12_000,
+      thinking: { type: "disabled" },
+      responseFormat: { type: "json_object" },
+      maxBytes: 512 * 1024,
+      errorMessage: (status) => `云端模型返回 ${status}`,
     });
-    if (!response.ok) throw new Error(`云端模型返回 ${response.status}`);
-    const data = await readJsonBody<{
-      choices?: Array<{ message?: { content?: string } }>;
-    }>(response, 512 * 1024);
-    const content = data.choices?.[0]?.message?.content;
     if (!content) throw new Error("模型没有返回内容");
-    const result = parseJsonContent(content);
+    const result = parseJsonContent<ReviewPayload>(content);
     if (typeof result.matches !== "boolean") {
       throw new Error("模型未返回审查结论");
     }
