@@ -8,6 +8,7 @@ import {
   type WordProgressMap,
 } from "../lib/learning.ts";
 import type { LookupWord, Word } from "../lib/study.ts";
+import type { QuizAttempt, QuizMode } from "../lib/quiz.ts";
 import {
   buildSprintCsv,
   buildSprintEffectiveness,
@@ -85,6 +86,42 @@ function baseInput(overrides: Partial<WeakSignalInput> = {}): WeakSignalInput {
     wordProgress: {},
     ...overrides,
   };
+}
+
+function makeQuizAttempt(
+  id: string,
+  mode: QuizMode,
+  correct: boolean,
+  answeredAt: string,
+): QuizAttempt {
+  return {
+    id,
+    wordId: 10,
+    mode,
+    correct,
+    recallMs: 1000,
+    answeredAt,
+    appliedToSchedule: false,
+  };
+}
+
+function assertQuizModeLifecycle(mode: QuizMode, label: string, otherMode: QuizMode) {
+  const wrong = makeQuizAttempt("wrong-1", mode, false, "2026-07-20T00:00:00.000Z");
+  const oneCorrect = makeQuizAttempt("correct-1", mode, true, "2026-07-21T00:00:00.000Z");
+  const crossModeCorrect = makeQuizAttempt("other-correct", otherMode, true, "2026-07-22T00:00:00.000Z");
+  const twoCorrect = makeQuizAttempt("correct-2", mode, true, "2026-07-23T00:00:00.000Z");
+  const wrongAgain = makeQuizAttempt("wrong-2", mode, false, "2026-07-24T00:00:00.000Z");
+  const signalsFor = (quizAttempts: QuizAttempt[]) =>
+    buildWordWeakSignals(10, baseInput({ quizAttempts }));
+
+  assert.deepEqual(signalsFor([wrong]), [`${label}1次`]);
+  assert.deepEqual(signalsFor([wrong, oneCorrect]), [`${label}1次`]);
+  assert.deepEqual(signalsFor([wrong, oneCorrect, crossModeCorrect]), [`${label}1次`]);
+  assert.deepEqual(signalsFor([wrong, oneCorrect, crossModeCorrect, twoCorrect]), []);
+  assert.deepEqual(
+    signalsFor([wrong, oneCorrect, crossModeCorrect, twoCorrect, wrongAgain]),
+    [`${label}2次`],
+  );
 }
 
 test("薄弱画像：聚合查词/猜错/各模式测验/回忆/顽固/lapse 六类信号", () => {
@@ -235,6 +272,65 @@ test("慢回忆恢复实时跟随阈值，历史时间线与周趋势不被降�
     1,
   );
   assert.equal(wordRecallStats(input.reviews, 10)?.sampleCount, 3);
+});
+
+test("拼写测验标签：同模式连续两次答对后淡出，跨模式不替代且答错复发", () => {
+  assertQuizModeLifecycle("listening-spelling", "拼写测验错", "chinese-to-english");
+});
+
+test("中译英标签：同模式连续两次答对后淡出，跨模式不替代且答错复发", () => {
+  assertQuizModeLifecycle("chinese-to-english", "中译英错", "meaning-choice");
+});
+
+test("辨析标签：同模式连续两次答对后淡出，跨模式不替代且答错复发", () => {
+  assertQuizModeLifecycle("meaning-choice", "辨析错", "listening-spelling");
+});
+
+test("测验标签恢复按 answeredAt 稳定排序，重复 ID 不重复充当连续答对", () => {
+  const wrong = makeQuizAttempt("wrong", "listening-spelling", false, "2026-07-20T00:00:00.000Z");
+  const firstCorrect = makeQuizAttempt("correct-1", "listening-spelling", true, "2026-07-21T00:00:00.000Z");
+  const secondCorrect = makeQuizAttempt("correct-2", "listening-spelling", true, "2026-07-22T00:00:00.000Z");
+
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    quizAttempts: [secondCorrect, wrong, firstCorrect],
+  })), []);
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    quizAttempts: [wrong, firstCorrect, { ...firstCorrect }],
+  })), ["拼写测验错1次"]);
+
+  const sameTimeWrong = makeQuizAttempt("same-wrong", "listening-spelling", false, "2026-07-23T00:00:00.000Z");
+  const sameTimeCorrect = makeQuizAttempt("same-correct", "listening-spelling", true, "2026-07-23T00:00:00.000Z");
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    quizAttempts: [wrong, firstCorrect, secondCorrect, sameTimeWrong, sameTimeCorrect],
+  })), ["拼写测验错2次"]);
+});
+
+test("测验标签恢复拒绝无效时间证据，历史时间线与周统计保持历史口径", () => {
+  const wrong = makeQuizAttempt("wrong", "listening-spelling", false, "2026-07-28T08:00:00.000Z");
+  const firstCorrect = makeQuizAttempt("correct-1", "listening-spelling", true, "2026-07-29T08:00:00.000Z");
+  const secondCorrect = makeQuizAttempt("correct-2", "listening-spelling", true, "2026-07-30T08:00:00.000Z");
+  const invalidCorrect = makeQuizAttempt("invalid-correct", "listening-spelling", true, "invalid");
+  const invalidWrong = makeQuizAttempt("invalid-wrong", "listening-spelling", false, "invalid");
+
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    quizAttempts: [wrong, firstCorrect, invalidCorrect],
+  })), ["拼写测验错1次"]);
+  assert.deepEqual(buildWordWeakSignals(10, baseInput({
+    quizAttempts: [wrong, firstCorrect, secondCorrect, invalidWrong],
+  })), ["拼写测验错2次"]);
+
+  const recoveredInput = baseInput({ quizAttempts: [wrong, firstCorrect, secondCorrect] });
+  assert.deepEqual(buildWordWeakSignals(10, recoveredInput), []);
+  assert.equal(
+    buildWordSignalTimeline(10, recoveredInput)
+      .filter((event) => event.type === "quiz").length,
+    1,
+  );
+  assert.equal(
+    buildWeakDimensionTrend(recoveredInput, new Date(2026, 6, 30, 12))
+      .find((dimension) => dimension.key === "quiz-spelling")?.count,
+    1,
+  );
 });
 
 test("薄弱画像：无信号时返回空数组，划词查询按学习项 id 归并", () => {

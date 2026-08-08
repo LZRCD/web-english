@@ -141,6 +141,41 @@ function quizErrorCounts(attempts: readonly QuizAttempt[], wordId: number) {
   }, {});
 }
 
+/** 最近两次同模式作答均正确时，当前测验薄弱信号视为已恢复。 */
+function isQuizModeRecovered(
+  attempts: readonly QuizAttempt[],
+  wordId: number,
+  mode: QuizMode,
+) {
+  const seenIds = new Set<string>();
+  const ordered = attempts
+    .map((attempt, index) => ({
+      attempt,
+      index,
+      answeredAtMs: new Date(attempt.answeredAt).getTime(),
+    }))
+    .filter(({ attempt }) => {
+      if (attempt.wordId !== wordId || attempt.mode !== mode) return false;
+      const id = attempt.id.trim();
+      if (!id) return true;
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+      return true;
+    });
+  // 时间无效的答对不能充当恢复证据；时间无效的答错无法可靠排序，保守保留标签。
+  if (ordered.some(({ attempt, answeredAtMs }) =>
+    !Number.isFinite(answeredAtMs) && !attempt.correct)) {
+    return false;
+  }
+  const valid = ordered
+    .filter(({ answeredAtMs }) => Number.isFinite(answeredAtMs))
+    .sort((first, second) =>
+      first.answeredAtMs - second.answeredAtMs || first.index - second.index);
+  return valid.length >= 2
+    && valid[valid.length - 1].attempt.correct
+    && valid[valid.length - 2].attempt.correct;
+}
+
 function hasValidRecallMs(review: ReviewEvent): review is ReviewEvent & { recallMs: number } {
   return typeof review.recallMs === "number"
     && Number.isFinite(review.recallMs)
@@ -207,13 +242,22 @@ export function buildWordWeakSignals(
   const guessCount = input.guessMistakes[wordId] ?? 0;
   if (guessCount > 0) signals.push(`猜错${guessCount}次`);
   const quizErrors = quizErrorCounts(input.quizAttempts, wordId);
-  if (quizErrors["listening-spelling"]) {
+  if (
+    quizErrors["listening-spelling"]
+    && !isQuizModeRecovered(input.quizAttempts, wordId, "listening-spelling")
+  ) {
     signals.push(`拼写测验错${quizErrors["listening-spelling"]}次`);
   }
-  if (quizErrors["chinese-to-english"]) {
+  if (
+    quizErrors["chinese-to-english"]
+    && !isQuizModeRecovered(input.quizAttempts, wordId, "chinese-to-english")
+  ) {
     signals.push(`中译英错${quizErrors["chinese-to-english"]}次`);
   }
-  if (quizErrors["meaning-choice"]) {
+  if (
+    quizErrors["meaning-choice"]
+    && !isQuizModeRecovered(input.quizAttempts, wordId, "meaning-choice")
+  ) {
     signals.push(`辨析错${quizErrors["meaning-choice"]}次`);
   }
   const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
