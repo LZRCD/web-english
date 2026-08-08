@@ -1,44 +1,43 @@
-# 下一轮执行 Prompt：第 43 轮架构重构第二阶段（AI Provider 客户端合并）
+# 下一轮执行 Prompt：第 44 轮架构重构第三阶段（weak-signals God Module 拆分）
 
 ## 当前现场
 
-- 第 42 轮（任务 B）第一阶段架构重构已完成：信号结构化 key + 日期工具统一，提交 `305f059`，merge `aaa1a1e` 合回 `codex/follow-up-hardening`（HEAD，ahead 48，未 push）。
-- 第 43 轮候选审计已完成（子 Agent 8e62e9f2，只读）：**唯一目标 = AI Provider 客户端合并**。5 个 API 路由 × 7 类 Provider 逻辑重复（env 读取、/chat/completions 请求构造、Markdown JSON 清理、响应提取、错误解析、重试、失败日志），合并为单一 `lib/ai-provider.ts` 是当前最高价值断链（新增 Provider 现需改 7 个触点 → 1 个）。
+- 第 42 轮（任务 B）：信号结构化 key + 日期工具统一（305f059/aaa1a1e）；第 43 轮：AI Provider 客户端合并（484df63/b47ffde）。HEAD=`b47ffde`（codex/follow-up-hardening，ahead 50，未 push）。
+- 第 44 轮候选审计已完成（子 Agent 239af211，只读）：**唯一目标 = weak-signals.ts God Module 按职责拆分**。实测 1989 行 / 71 导出 / 11 职责组 / 8 消费端（page/HistoryView/WordCard/WordbookView/insights/session-summary + 2 测试），内部单向依赖（detection ← projection ← strategy），barrel 保持模块路径可零消费端改动。
 - 工作区仅剩受保护未跟踪项；端口 3000 无监听。
 
 ## 前置门槛
 
-- HEAD 必须为 `aaa1a1e`；从 `codex/follow-up-hardening` 切短命分支 `codex/refactor-stage2`，全部代码修改/测试/构建/提交只在本分支。
+- HEAD 必须为 `b47ffde`；从 `codex/follow-up-hardening` 切短命分支 `codex/refactor-stage3`，全部代码修改/测试/构建/提交只在本分支。
 - 全程使用 ZCode 接入的 DeepSeek V4 Flash（主 Agent 与子 Agent 均须外部证据确认，`zen-v4-flash=deepseek-v4-flash` 等价）；无法确认停止并如实报告。
-- 不修改受保护未跟踪项；不触碰任务 A/B 已提交内容；不推送远端。
+- 不修改受保护未跟踪项；不触碰既有轮次已提交内容；不推送远端。
 
 ## 唯一目标
 
-把 5 个 API 路由（app/api/coach、enrich、enrich/review、lookup、sense-frequency）重复实现的 Provider 客户端逻辑合并为唯一实现：
+`lib/weak-signals.ts`（1989 行 God Module）按职责物理拆分，行为零变化，barrel 保持契约：
 
-1. 新建 `lib/ai-provider.ts`：env 读取（`DEEPSEEK_API_KEY ?? OPENAI_API_KEY`、`OPENAI_BASE_URL ?? "https://api.deepseek.com"`、`OPENAI_MODEL ?? "deepseek-v4-flash"`）、参数化 `chatCompletion`（messages/temperature/maxTokens/timeoutMs/thinking/responseFormat/maxBytes）、`parseJsonContent`（Markdown 清理）、可选重试；参照 `lib/api-guard.ts` 的「唯一实现」模式。
-2. 改写 5 个路由：仅替换 Provider 逻辑段；**逐字节保持**各路由参数值（超时 coach/enrich 15000、review/lookup 12000、sense-frequency 20000；温度 0.7/0.2/0/0.1/0.2；max_tokens 260/1400/180/360/1200；thinking/response_format 开关按各路由原请求体；响应上限 1M/2M/512K/1M/2M；错误文案 `AI service unavailable`/`云端模型返回 ${status}` 等；重试仅 enrich/lookup/sense-frequency MAX_ATTEMPTS=2）。保留：no-key 分支与文案（coach `localAnswer` 本地兜底、其余 503）、系统提示词、boundedText 裁剪、normalize 校验、coach 静默 catch（不新增日志）。
-3. `tests/rendered-html.test.mjs:287` 断言 `assert.match(coach, /AbortSignal\.timeout\(15000\)/)` 合并后必红：按最小改动同步（改为断言新 `lib/ai-provider.ts` 源码中的等价特征），不得影响同文件其他断言。
-4. 新建 Provider 单测：**mock fetch**（不得真实云调用），覆盖 env 默认值、baseUrl 尾斜杠、Bearer 头、5 组超时/上限参数传递、choices 提取、Markdown 清理、错误抛错、重试；测试并入 `tests/api-guard.test.ts`（`npm test` 显式列出的既有 API 基础设施测试文件，**不修改 package.json scripts**）。
-5. 不修改：`lib/api-guard.ts`、`lib/enrichment.ts`、`lib/sense-frequency.ts`、`lib/learning.ts`、hooks、`README.md`、`vite.config.ts`、package.json scripts、E2E 文件；不引入新依赖。
+1. 新建目录与文件：`lib/weak-signals/types.ts`（全部 type 导出）、`lib/weak-signals/detection.ts`（阈值常量 + 检测/画像/候选/稳定性域）、`lib/weak-signals/projection.ts`（冲刺历史/成效/复发/保持/维度观察/趋势/时间线/展示常量域）、`lib/weak-signals/strategy.ts`（冲刺词集/顽固/治疗推荐/摘要/CSV 域）；`lib/weak-signals.ts` 保留为 barrel，**71 个导出逐一对应 re-export**（含 `export { DEFAULT_WEAK_THRESHOLDS, type WeakThresholds } from "./study.ts"` 等既有转发）。
+2. **逐字搬运**：函数体/常量/注释一字不改；仅调整文件归属与 import 头（兄弟文件用相对路径，type-only import 优先）。禁止顺手统一窗口、提取共享 helper、改变任何阈值/判定（冲刺/复发/达标时间窗口、猜错累计、慢回忆/lapse 单维判定、isQuizModeRecovered 双连对规则均为「不确定」口径，禁止固化或改变）。
+3. 依赖方向只允许 detection ← projection ← strategy；禁止反向或跨层循环（type-only import 除外）。第 42 轮 key 契约（WeakSignalKey/WeakSignalEntry/buildWordWeakSignalEntries 及 label 与 key 同源约束）不得因拆分改变。
+4. **8 个消费端零改动**：app/page.tsx、HistoryView、WordCard、WordbookView、lib/insights.ts、lib/session-summary.ts、两个测试文件的 import 路径与命名全部不变（barrel 保证）；不触碰 page.tsx/组件/hooks。
+5. 不修改：评分、FSRS、每日 Quiz 门禁、备份链路、package.json scripts、IndexedDB schema/StoredState、useStudyPersistence、E2E 文件。
 
 ## 强制安全规则
 
 - 禁止 `git reset --hard`、`git checkout --`、`git clean`、强制覆盖、删除 Git lock；禁止 `git add .`/`git add -A`/`git commit -am`。
 - 不删除、不覆盖用户已有修改；不自动清理既有轮次日志；不推送远端。
-- 严格「只搬运不改口径」：不得顺手统一超时/温度/上限/错误文案（那是行为变化）；业务含义不确定项保持现状。
-- 结论必须基于当前实际代码重新验证；不改评分、FSRS、每日 Quiz 门禁、备份、schema/StoredState、page.tsx、useStudyPersistence。
+- 结论必须基于当前实际代码重新验证；拆分正确性以「diff 只含文件移动与 import 头」为验收标准。
 
 ## 执行流程
 
-1. Round 0 只读基线（git 状态/HEAD/端口 3000）+ 主 Agent 模型证据；切分支 `codex/refactor-stage2`。
-2. 实施阶段单实施子 Agent（ZCode DeepSeek V4 Flash，记录模型验证块）：按上述边界实现 `lib/ai-provider.ts` + 5 路由替换 + rendered-html:287 断言同步 + api-guard.test.ts 并入新单测；子 Agent 不得提交。
-3. 主 Agent 审查全部 diff：逐路由核对参数值/文案/no-key 分支逐字节保持；核对 fetch 请求体与原实现逐字段一致（用 git diff 对照 5 个路由原样）。
-4. 分级验证：typecheck → 定向单测（api-guard/ai-provider 相关）→ `npm test` 全量（含 build，基线 217 + 新增）→ lint → build → signal-flow E2E（固定端口 3000，专属日志，验证后按证据关闭 PID，3000 释放）；build 生成的 build-info 恢复基线（安全补丁，不进入提交）。
-5. 创建第 43 轮唯一提交（`codex/refactor-stage2`）：只暂存任务 B 文件 + `lib/ai-provider.ts` + 测试 + `docs/iterations/round-43.md` + `docs/project-evolution.md`（第六十二次迭代）+ 本文件（覆盖为第 44 轮）。提交前展示 status/diff 自查。
+1. Round 0 只读基线（git 状态/HEAD/端口 3000）+ 主 Agent 模型证据；切分支 `codex/refactor-stage3`。
+2. 实施阶段单实施子 Agent（ZCode DeepSeek V4 Flash，记录模型验证块）：按上述边界完成拆分；子 Agent 不得提交。
+3. 主 Agent 审查：逐导出核对 barrel 完整性（对比拆分前后 `git diff` 应只含移动与 import）；核对依赖方向；抽查关键函数体逐字一致。
+4. 分级验证：typecheck → 定向单测（weak-signals/session-summary/insights）→ `npm test` 全量（含 build，基线 226）→ lint → build → signal-flow E2E（固定端口 3000，专属日志，验证后按证据关闭 PID，3000 释放）；build 生成的 build-info 恢复基线（安全补丁，不进入提交）。
+5. 创建第 44 轮唯一提交（`codex/refactor-stage3`）：只暂存拆分文件 + `docs/iterations/round-44.md` + `docs/project-evolution.md`（第六十三次迭代）+ 本文件（第 44 轮 prompt）。提交前展示 status/diff 自查。
 6. 合回 `codex/follow-up-hardening`（`git merge --no-ff`），合并后完整验证；不推送。
 
 ## 输出要求
 
-- 按第 42 轮报告格式输出：Round 0 基线、子 Agent 模型与分工、实际修改、兼容性说明、验证结果（实际数字）、Git 提交（哈希/message）、未解决问题、与既有轮次合并状态。
+- 按既有轮次报告格式输出：Round 0 基线、子 Agent 模型与分工、实际修改（文件归属表）、兼容性说明（barrel 契约/消费端零改动/不确定口径保持）、验证结果（实际数字）、Git 提交（哈希/message）、未解决问题、合并状态。
 - 最终汇报五要素简版（总长 ≤300 字）。

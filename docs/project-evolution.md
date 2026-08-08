@@ -1308,3 +1308,20 @@
 - `npm run typecheck`/`npm run lint` 通过（0 问题）；定向 21/21（api-guard 12 + rendered-html 9）；`npm test` 含生产构建 226/226（基线 217 + 新增 9：Provider env 回退、JSON 清理、请求体/信号/Bearer、字段有无、choices 缺失、非 2xx 文案、maxBytes、重试语义），单测 mock fetch、无真实云调用。
 - 固定 3000 signal-flow 18/18（46.5s），既有 18 条语义未改（E2E 无 API key 全走 no-key 分支）；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
 - 架构重构第二阶段完成：新增 Provider/调整超时/统一日志的改动点从 7 处收敛为 1 处；下一阶段为第 44 轮（候选：weak-signals 拆分、useSelectionLookup 拆分、正则测试替换、View model/CSS 拆分，需候选审计选定），阶段 E 审计最后执行。
+
+## 第六十三次迭代：架构重构第三阶段（weak-signals God Module 拆分）
+
+本次迭代：2026-08-09。
+
+### 实现与边界
+
+- `lib/weak-signals.ts`（1989 行、71 导出、8 消费端）按职责物理拆分：`lib/weak-signals/types.ts`（28 type + 2 类型派生常量）、`detection.ts`（阈值/会话 id/检测/画像/候选/稳定性）、`projection.ts`（冲刺历史/成效/复发/保持/维度观察/趋势/时间线/展示）、`strategy.ts`（冲刺词集/顽固/治疗推荐/摘要/CSV）；`lib/weak-signals.ts` 保留为 barrel，导出集合与拆分前完全一致（主 Agent 独立脚本验证：旧=新，无缺失/多余），8 个消费端 import 零改动。
+- 依赖方向 detection ← projection ← strategy，无循环；函数体逐字搬运（主 Agent 抽查 11 个关键函数 0 不一致）；第 42 轮 key 契约（WeakSignalKey/WeakSignalEntry/entries 与 label 同源）未变；3 个内部 helper 升格为兄弟域非 barrel 导出，公共面不变。
+- 未新增 schema/version/store/domain，未改评分、FSRS、每日 Quiz 门禁、备份、package scripts、推荐优先级、历史数据；未动 page.tsx/组件/hooks/E2E；不确定业务口径（冲刺/复发/达标窗口、猜错累计、慢回忆/lapse 单维判定等）逐字保持。
+- 第 44 轮文档见 `docs/iterations/round-44.md`；第 42/43 轮未回滚；阶段 E 边界只读审计仍顺延到最后。
+
+### 验证与阶段状态
+
+- `npm run typecheck`/`npm run lint` 通过（0 问题）；定向 107/107（weak-signals + session-summary + insights）；`npm test` 含生产构建 226/226（与基线持平，无新增/删除）；`npm run build` 通过。
+- 固定 3000 signal-flow 18/18（47.3s），既有 18 条语义未改；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
+- 架构重构第三阶段完成：业务 God Module 物理拆分为职责文件 + barrel 契约；下一阶段为第 45 轮（候选：useSelectionLookup 拆分【需先补测试】、行为测试替换正则测试、View model/CSS 拆分，需候选审计选定），阶段 E 审计最后执行。
