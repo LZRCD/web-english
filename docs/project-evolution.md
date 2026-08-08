@@ -859,3 +859,24 @@
 - `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 160/160 通过。
 - `tests/weak-signals.test.ts` 定向测试 43/43 通过。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮服务 PID 11240 及其子进程 7244、39944，端口无监听，日志与 PID 记录已清理。
+
+## 第四十次迭代：信号联动二十一轮（普通复习进入词级时间线）
+
+本次迭代：2026-08-08。
+
+### 修正
+
+- `buildWordSignalTimeline` 复用既有 review 日志：普通评分按 `reviewedAt` 进入词级时间线，显示“模糊/认识/熟练”四档中的对应语义；`rating=0` 继续复用既有“遗忘”事件，避免同一动作重复显示。
+- 冲刺 review 继续由既有 `sessionId.startsWith("sprint:")` 识别并显示“冲刺复习”；慢回忆、测验答错、查词首次/最近和顽固词事件保持原语义与升序展示。
+- 相同 review ID 只派生一次评分及其信号事件，避免重复导入或异常输入形成重复时间线条目；未新增持久化 schema，未改评分、排程或备份链路。
+- “猜错”经核实只有 `guessMistakes` 累计次数，没有可靠事件时间，本轮不伪造时间、不接入时间线，继续保留为明确缺口。
+- 刷新 `lib/build-info.generated.ts` 的生产构建信息，消除第 0 轮记录的旧第 17 轮构建标识漂移。
+
+### 测试
+
+- `tests/weak-signals.test.ts` 新增 2 个用例块并调整既有断言，覆盖四档评分语义、普通/冲刺文案、`rating=0` 与慢回忆既有语义、review ID 去重、时间排序和空输入，定向测试 45/45 通过。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 162/162 通过。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（17.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮父 PID 9008 与监听 PID 37452，端口无监听，日志与 PID 记录已清理。

@@ -701,15 +701,17 @@ const QUIZ_MODE_LABELS: Partial<Record<QuizMode, string>> = {
   "meaning-choice": "辨析",
 };
 
+const REVIEW_RATING_LABELS = ["忘记", "模糊", "认识", "熟练"] as const;
+
 /** 词级信号时间线中的单个事件 */
 export type WordSignalEvent = {
   at: string;
-  type: "slow-recall" | "lapse" | "quiz" | "lookup" | "stubborn";
+  type: "review" | "slow-recall" | "lapse" | "quiz" | "lookup" | "stubborn";
   detail: string;
 };
 
 /**
- * 该词的薄弱信号时间线：评分（回忆偏慢/lapse）、测验答错、查词、顽固词触发，
+ * 该词的信号时间线：普通评分、回忆偏慢/lapse、测验答错、查词、顽固词触发，
  * 全部由现有状态派生，按时间升序；无记录返回空数组。
  */
 export function buildWordSignalTimeline(
@@ -718,8 +720,19 @@ export function buildWordSignalTimeline(
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): WordSignalEvent[] {
   const events: WordSignalEvent[] = [];
+  const seenReviewIds = new Set<string>();
   for (const review of input.reviews) {
     if (review.wordId !== wordId) continue;
+    if (seenReviewIds.has(review.id)) continue;
+    seenReviewIds.add(review.id);
+    // rating=0 已由既有 lapse 事件表达，避免同一动作重复显示为普通复习。
+    if (review.rating !== 0) {
+      events.push({
+        at: review.reviewedAt,
+        type: "review",
+        detail: `${review.sessionId?.startsWith("sprint:") ? "冲刺复习" : "复习"} · ${REVIEW_RATING_LABELS[review.rating]}（评分 ${review.rating}）`,
+      });
+    }
     if (
       typeof review.recallMs === "number"
       && review.recallMs >= thresholds.slowRecallMs

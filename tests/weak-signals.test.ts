@@ -723,7 +723,7 @@ test("词级信号时间线：评分/测验/查词/顽固词各源提取并按�
   const input = baseInput({
     reviews: [
       makeReview(10, 0, "2026-07-27T01:00:00.000Z", 18_000), // 慢 + lapse
-      makeReview(10, 3, "2026-07-28T01:00:00.000Z", 5_000), // 正常，不入时间线
+      makeReview(10, 3, "2026-07-28T01:00:00.000Z", 5_000), // 普通正向复习进入时间线
     ],
     quizAttempts: [
       {
@@ -772,6 +772,54 @@ test("词级信号时间线：评分/测验/查词/顽固词各源提取并按�
     event.type === "lookup" && event.detail.includes("最近")));
   // 顽固词
   assert.ok(events.some((event) => event.type === "stubborn"));
+  // 普通正向复习
+  assert.ok(events.some((event) =>
+    event.type === "review" && event.detail === "复习 · 熟练（评分 3）"));
+});
+
+test("词级信号时间线：普通评分保留四档语义，冲刺复习沿用既有 session 标记", () => {
+  const forgotten = makeReview(10, 0, "2026-07-27T00:00:00.000Z", 5_000);
+  const input = baseInput({
+    reviews: [
+      forgotten,
+      makeReview(10, 1, "2026-07-27T01:00:00.000Z", 5_000),
+      makeReview(10, 2, "2026-07-27T02:00:00.000Z", 5_000),
+      {
+        ...makeReview(10, 3, "2026-07-27T03:00:00.000Z", 5_000),
+        sessionId: "sprint:2026-07-27T03:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    buildWordSignalTimeline(10, input).map((event) => [event.type, event.detail]),
+    [
+      ["lapse", "遗忘（评分 0）"],
+      ["review", "复习 · 模糊（评分 1）"],
+      ["review", "复习 · 认识（评分 2）"],
+      ["review", "冲刺复习 · 熟练（评分 3）"],
+    ],
+  );
+});
+
+test("词级信号时间线：重复 review id 只形成一组事件且不破坏时间排序", () => {
+  const duplicate = makeReview(10, 2, "2026-07-28T02:00:00.000Z", 16_000);
+  const input = baseInput({
+    reviews: [
+      duplicate,
+      makeReview(10, 3, "2026-07-28T01:00:00.000Z", 5_000),
+      { ...duplicate },
+    ],
+  });
+
+  const events = buildWordSignalTimeline(10, input);
+  assert.deepEqual(events.map((event) => event.at), [
+    "2026-07-28T01:00:00.000Z",
+    "2026-07-28T02:00:00.000Z",
+    "2026-07-28T02:00:00.000Z",
+  ]);
+  assert.equal(events.filter((event) => event.type === "review").length, 2);
+  assert.equal(events.filter((event) => event.type === "slow-recall").length, 1);
 });
 
 test("词级信号时间线：无记录返回空，非目标词不混入", () => {
