@@ -1,6 +1,7 @@
 import type { QuizAttempt, QuizMode } from "./quiz.ts";
 import { learningWordId } from "./selection-lookup.ts";
 import {
+  isWeakProgress,
   type ExamPhase,
   type ReviewEvent,
   type StubbornWordMap,
@@ -187,8 +188,12 @@ export function buildWordWeakSignals(
   const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
   if (slowCount > 0) signals.push(`回忆偏慢${slowCount}次`);
   if (input.stubbornWords[wordId]?.active) signals.push("顽固词");
-  const lapseCount = input.wordProgress[wordId]?.lapseCount ?? 0;
-  if (lapseCount > 0) signals.push(`FSRS lapse ${lapseCount}`);
+  const progress = input.wordProgress[wordId];
+  const lapseCount = progress?.lapseCount ?? 0;
+  // 历史 lapse 计数保留不变；仅在既有进度判定仍弱时展示，恢复后自动淡出
+  if (lapseCount > 0 && isWeakProgress(progress)) {
+    signals.push(`FSRS lapse ${lapseCount}`);
+  }
   return signals;
 }
 

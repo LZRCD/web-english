@@ -880,3 +880,21 @@
 
 - `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 162/162 通过。
 - Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（17.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮父 PID 9008 与监听 PID 37452，端口无监听，日志与 PID 记录已清理。
+
+## 第四十一次迭代：信号联动二十二轮（FSRS lapse 薄弱标签降级）
+
+本次迭代：2026-08-08。
+
+### 修正
+
+- `buildWordWeakSignals` 的 lapse 分支复用既有 `isWeakProgress`：遗忘词仍弱时继续输出历史 lapse 标签，连续成功达到既有恢复条件或被显式解除后淡出；再次评分 0 时随进度重新转弱并恢复标签。
+- 历史 `lapseCount` 保持累计，不改 `applyRating`、FSRS 排程、`resolveWeakProgress`、评分、备份或持久化 schema；统一画像的学习卡、词书、冲刺和复发入口同步获得正确结果。
+- `tests/weak-signals.test.ts` 用真实评分流覆盖未恢复、两次连续成功恢复、再次遗忘及其他薄弱信号保留；新增咬合检查记录完整闭环。
+- 随生产构建刷新 `lib/build-info.generated.ts` 的起点提交与源码哈希。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 163/163 通过。
+- `tests/weak-signals.test.ts` 定向测试 46/46 通过。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（17.6s）；固定端口 3000 健康检查 200，结束后精确关闭本轮父 PID 13944 与监听 PID 6860，端口、日志与 PID 文件均已清理。
+- 本轮按边界未实现非查词类「已稳定」UI，也未处理慢回忆或测验信号降级。

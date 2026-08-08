@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  ReviewEvent,
-  StubbornWordMap,
-  WordProgressMap,
+import {
+  applyRating,
+  type ReviewEvent,
+  type StubbornWordMap,
+  type WordProgress,
+  type WordProgressMap,
 } from "../lib/learning.ts";
 import type { LookupWord, Word } from "../lib/study.ts";
 import {
@@ -137,6 +139,33 @@ test("薄弱画像：聚合查词/猜错/各模式测验/回忆/顽固/lapse 六
   const profiles = buildWeakProfiles(input);
   assert.equal(profiles[10].lookupCount, 5);
   assert.deepEqual(profiles[10].signals, buildWordWeakSignals(10, input));
+});
+
+test("lapse 标签随既有薄弱恢复淡出，再次遗忘后重新出现", () => {
+  const rate = (
+    previous: WordProgress | undefined,
+    rating: 0 | 2,
+    reviewedAt: string,
+  ) => applyRating(previous, {
+    wordId: 10,
+    word: "abandon",
+    rating,
+    reviewedAt,
+  }).progress;
+  const signalsFor = (progress: WordProgress) => buildWordWeakSignals(10, baseInput({
+    guessMistakes: { 10: 2 },
+    wordProgress: { 10: progress },
+  }));
+
+  const forgotten = rate(undefined, 0, "2026-07-20T00:00:00.000Z");
+  const oneSuccess = rate(forgotten, 2, "2026-07-21T00:00:00.000Z");
+  const recovered = rate(oneSuccess, 2, "2026-07-22T00:00:00.000Z");
+  const forgottenAgain = rate(recovered, 0, "2026-07-23T00:00:00.000Z");
+
+  assert.deepEqual(signalsFor(forgotten), ["猜错2次", "FSRS lapse 1"]);
+  assert.deepEqual(signalsFor(oneSuccess), ["猜错2次", "FSRS lapse 1"]);
+  assert.deepEqual(signalsFor(recovered), ["猜错2次"]);
+  assert.deepEqual(signalsFor(forgottenAgain), ["猜错2次", "FSRS lapse 2"]);
 });
 
 test("薄弱画像：无信号时返回空数组，划词查询按学习项 id 归并", () => {
