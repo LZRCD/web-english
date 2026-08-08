@@ -9,6 +9,7 @@ import {
 } from "../lib/learning.ts";
 import type { LookupWord, Word } from "../lib/study.ts";
 import type { QuizAttempt, QuizMode } from "../lib/quiz.ts";
+import { buildQuizQuestions } from "../lib/quiz.ts";
 import {
   buildSprintCsv,
   buildSprintEffectiveness,
@@ -18,6 +19,7 @@ import {
   buildSprintRelapse,
   buildSprintRelapseSeries,
   buildSprintSummary,
+  buildSprintTreatmentRecommendation,
   buildSprintWordIds,
   buildWeakCandidateSummary,
   buildScopedSprintWordIds,
@@ -1569,4 +1571,111 @@ test("统一已稳定维度：阈值变化不制造历史弱点，复发后立�
     ],
   };
   assert.deepEqual(buildWordStabilizedDimensions(10, relapsed, threshold15), []);
+});
+
+test("维度化处置：未恢复的拼写错误推荐听音拼写，恢复后退出且再错后重现", () => {
+  const progress = {
+    10: {
+      wordId: 10,
+      lapseCount: 0,
+      lastRating: 2,
+      lastReviewedAt: "2026-07-20T00:00:00.000Z",
+      consecutiveSuccesses: 1,
+    },
+  } as unknown as WordProgressMap;
+  const spellingWrong = makeQuizAttempt(
+    "spelling-wrong-1",
+    "listening-spelling",
+    false,
+    "2026-07-20T00:00:00.000Z",
+  );
+  const c2eWrong = makeQuizAttempt(
+    "c2e-wrong-1",
+    "chinese-to-english",
+    false,
+    "2026-07-20T01:00:00.000Z",
+  );
+  const spellingCorrect1 = makeQuizAttempt(
+    "spelling-correct-1",
+    "listening-spelling",
+    true,
+    "2026-07-21T00:00:00.000Z",
+  );
+  const spellingCorrect2 = makeQuizAttempt(
+    "spelling-correct-2",
+    "listening-spelling",
+    true,
+    "2026-07-22T00:00:00.000Z",
+  );
+  const spellingWrongAgain = makeQuizAttempt(
+    "spelling-wrong-2",
+    "listening-spelling",
+    false,
+    "2026-07-23T00:00:00.000Z",
+  );
+  const inputFor = (quizAttempts: QuizAttempt[]) => baseInput({
+    quizAttempts,
+    wordProgress: progress,
+  });
+
+  assert.deepEqual(
+    buildSprintTreatmentRecommendation(inputFor([
+      spellingWrong,
+      c2eWrong,
+      spellingCorrect1,
+    ])),
+    {
+      dimension: "quiz-spelling",
+      mode: "listening-spelling",
+      label: "听音拼写",
+      wordIds: [10],
+    },
+  );
+
+  const recovered = inputFor([
+    spellingWrong,
+    c2eWrong,
+    spellingCorrect1,
+    spellingCorrect2,
+  ]);
+  assert.equal(buildSprintTreatmentRecommendation(recovered), null);
+  assert.deepEqual(buildWordWeakSignals(10, recovered), ["中译英错1次"]);
+
+  const relapsed = inputFor([
+    spellingWrong,
+    c2eWrong,
+    spellingCorrect1,
+    spellingCorrect2,
+    spellingWrongAgain,
+  ]);
+  assert.equal(
+    buildSprintTreatmentRecommendation(relapsed)?.mode,
+    "listening-spelling",
+  );
+  assert.deepEqual(buildWordWeakSignals(10, relapsed), [
+    "拼写测验错2次",
+    "中译英错1次",
+  ]);
+});
+
+test("维度化处置：听音拼写只从推荐词集出题", () => {
+  const words: Word[] = [
+    { id: 10, word: "target", meaning: "目标" },
+    { id: 11, word: "other", meaning: "其他" },
+  ];
+  const progress = {
+    10: { wordId: 10 },
+    11: { wordId: 11 },
+  } as unknown as WordProgressMap;
+  const questions = buildQuizQuestions({
+    words,
+    progress,
+    mode: "listening-spelling",
+    candidateWordIds: [10],
+    count: 10,
+    seed: 1,
+  });
+
+  assert.deepEqual(questions.map((question) => question.wordId), [10]);
+  assert.equal(questions[0]?.mode, "listening-spelling");
 });

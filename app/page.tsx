@@ -66,6 +66,7 @@ import {
   buildSprintRecordWordIds,
   buildSprintRelapseSeries,
   buildSprintSummary,
+  buildSprintTreatmentRecommendation,
   buildSprintWordIds,
   buildScopedSprintWordIds,
   buildWeakConcentration,
@@ -132,7 +133,7 @@ import {
 } from "../lib/performance-diagnostics";
 import { versionedDataUrl } from "../lib/data-version";
 import type { QuizQuestion, QuizAttempt, QuizSessionState } from "../lib/quiz";
-import { shouldApplyQuizToSchedule } from "../lib/quiz";
+import { createQuizSession, shouldApplyQuizToSchedule } from "../lib/quiz";
 import QuizView from "./components/QuizView";
 import {
   ACTIVITY_RANGE_LABELS as activityRangeLabels,
@@ -491,6 +492,10 @@ export default function Home() {
       weakThresholds,
     ),
     [reviews, weakSignalInput, clock, weakThresholds],
+  );
+  const sprintTreatment = useMemo(
+    () => buildSprintTreatmentRecommendation(weakSignalInput, weakThresholds),
+    [weakSignalInput, weakThresholds],
   );
   // 序列最后一项就是上个完整周，继续供既有复发词列表与再冲刺入口使用。
   const sprintRelapse = sprintRelapseSeries.at(-1)?.relapse ?? null;
@@ -1279,6 +1284,7 @@ export default function Home() {
     question: QuizQuestion,
     correct: boolean,
     recallMs: number,
+    sessionId?: string,
   ) {
     const word = question.word;
     if (!redbookReady || word.id === undefined) return;
@@ -1336,7 +1342,9 @@ export default function Home() {
       recallMs,
       section: word.section,
       unit: word.unit,
-      sessionId: `quiz:${question.mode}:${dateKey(nowIso)}`,
+      sessionId: sessionId?.startsWith("sprint:")
+        ? sessionId
+        : `quiz:${question.mode}:${dateKey(nowIso)}`,
     });
     setWordProgress((items) => ({ ...items, [word.id!]: result.progress }));
     if (correct && !isWeakProgress(result.progress)) {
@@ -1506,6 +1514,17 @@ export default function Home() {
   }
 
   function startSprintSession() {
+    if (sprintTreatment) {
+      const now = new Date();
+      setActiveQuiz({
+        ...createQuizSession(sprintTreatment.mode, now.getTime(), now),
+        id: `sprint:${now.toISOString()}`,
+      });
+      clearSession();
+      setActiveView("quiz");
+      showToast(`已按拼写弱点推荐${sprintTreatment.label} · ${sprintTreatment.wordIds.length} 词`, 1800);
+      return;
+    }
     startSession("sprint", "考前薄弱冲刺", sprintWordIds);
   }
 
@@ -2110,6 +2129,11 @@ export default function Home() {
             onRecordResult={recordQuizResult}
             savedQuiz={activeQuiz}
             onQuizStateChange={setActiveQuiz}
+            candidateWordIds={
+              activeQuiz?.id.startsWith("sprint:")
+                ? sprintTreatment?.wordIds
+                : undefined
+            }
           />
         )}
 

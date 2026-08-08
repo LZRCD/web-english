@@ -61,6 +61,14 @@ export type WeakWordProfile = {
   recall?: WordRecallStats;
 };
 
+/** 本轮已接通的维度化处置建议；其余维度仍回退既有通用冲刺。 */
+export type SprintTreatmentRecommendation = {
+  dimension: "quiz-spelling";
+  mode: "listening-spelling";
+  label: "听音拼写";
+  wordIds: number[];
+};
+
 /** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
 export type StabilizedDimension = {
   key:
@@ -863,6 +871,29 @@ export function buildSprintWordIds(
       || second.lookupCount - first.lookupCount
       || second.recallAvgMs - first.recallAvgMs)
     .map((item) => item.wordId);
+}
+
+/**
+ * 为统一冲刺入口选择当前已实现的最高优先级专项。
+ * 只读取结构化测验记录，不通过标签文案反推维度；已连续答对恢复的词自动退出。
+ */
+export function buildSprintTreatmentRecommendation(
+  input: WeakSignalInput,
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): SprintTreatmentRecommendation | null {
+  const wordIds = buildSprintWordIds(input, thresholds).filter((wordId) => {
+    const errors = quizErrorCounts(input.quizAttempts, wordId);
+    return Boolean(errors["listening-spelling"])
+      && !isQuizModeRecovered(input.quizAttempts, wordId, "listening-spelling");
+  });
+  return wordIds.length
+    ? {
+        dimension: "quiz-spelling",
+        mode: "listening-spelling",
+        label: "听音拼写",
+        wordIds,
+      }
+    : null;
 }
 
 /** 冲刺范围：按词本分册/单元过滤（unit 统一按字符串匹配） */

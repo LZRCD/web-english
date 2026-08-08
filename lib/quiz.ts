@@ -122,7 +122,8 @@ export function restoreQuizQuestions(
     | "lookupStats"
     | "lookupWords"
     | "senseFrequency"
-    | "stubbornWords">,
+    | "stubbornWords"
+    | "candidateWordIds">,
 ) {
   return buildQuizQuestions({
     words,
@@ -330,6 +331,8 @@ export function buildQuizQuestions(input: {
   senseFrequency?: SenseFrequencyMap;
   /** 顽固词：活跃顽固词优先出题 */
   stubbornWords?: StubbornWordMap;
+  /** 维度化处置限定词集；干扰项仍可复用全部已学词。 */
+  candidateWordIds?: readonly number[];
 }) {
   const count = Math.max(1, Math.min(30, Math.trunc(input.count ?? 10)));
   const seed = Number.isFinite(input.seed) ? Math.trunc(input.seed!) : Date.now();
@@ -340,7 +343,16 @@ export function buildQuizQuestions(input: {
     senseFrequency: input.senseFrequency,
     stubbornWords: input.stubbornWords,
   };
-  const candidates = shuffled(learnedWords, seed, (word) => String(word.id))
+  const candidateWordIds = input.candidateWordIds
+    ? new Set(input.candidateWordIds)
+    : undefined;
+  const candidates = shuffled(
+    candidateWordIds
+      ? learnedWords.filter((word) => candidateWordIds.has(word.id))
+      : learnedWords,
+    seed,
+    (word) => String(word.id),
+  )
     .sort((first, second) =>
       candidatePriority(second, input.progress, signals)
       - candidatePriority(first, input.progress, signals));

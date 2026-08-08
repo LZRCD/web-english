@@ -138,6 +138,120 @@ function sprintSeedState() {
   });
 }
 
+function spellingTreatmentSeedState() {
+  const examDate = new Date(Date.now() + 5 * 86_400_000)
+    .toISOString().slice(0, 10);
+  const learnedAt = daysAgo(4, 8, 0);
+  return createState({
+    examDate,
+    reviews: [{
+      id: "spelling-learned",
+      wordId: 1,
+      word: "radiate",
+      rating: 2,
+      kind: "new",
+      intervalMs: 86_400_000,
+      dueAt: daysAgo(3, 8, 0),
+      reviewedAt: learnedAt,
+      recallMs: 4_000,
+      section: "必考词",
+      unit: 1,
+    }],
+    quizAttempts: [
+      {
+        id: "spelling-wrong",
+        wordId: 1,
+        mode: "listening-spelling",
+        correct: false,
+        recallMs: 7_000,
+        answeredAt: daysAgo(3, 8, 0),
+        appliedToSchedule: false,
+      },
+      {
+        id: "c2e-wrong",
+        wordId: 1,
+        mode: "chinese-to-english",
+        correct: false,
+        recallMs: 6_000,
+        answeredAt: daysAgo(3, 9, 0),
+        appliedToSchedule: false,
+      },
+      {
+        id: "spelling-correct-once",
+        wordId: 1,
+        mode: "listening-spelling",
+        correct: true,
+        recallMs: 5_000,
+        answeredAt: daysAgo(2, 8, 0),
+        appliedToSchedule: false,
+      },
+    ],
+    started: true,
+  });
+}
+
+test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结果", async ({ context, page }) => {
+  await installStateSeed(context, spellingTreatmentSeedState());
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "重新播放本题发音" })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "你的答案" }).fill("radiate");
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("回答正确");
+
+  await expect.poll(async () => page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const store = transaction.objectStore("state-domains");
+      const attemptsRequest = store.get("quiz-attempts");
+      const reviewsRequest = store.get("reviews");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const attempt = attemptsRequest.result?.value?.at(-1);
+        const review = reviewsRequest.result?.value?.at(-1);
+        database.close();
+        resolve({
+          mode: attempt?.mode,
+          correct: attempt?.correct,
+          recallTimed: Number.isFinite(attempt?.recallMs)
+            && attempt.recallMs >= 0
+            && attempt.recallMs < 60_000,
+          sprintAttributed: review?.sessionId?.startsWith("sprint:") ?? false,
+        });
+      };
+    };
+  }))).toEqual({
+    mode: "listening-spelling",
+    correct: true,
+    recallTimed: true,
+    sprintAttributed: true,
+  });
+
+  await page.getByRole("button", { name: "查看结果" }).click();
+  await page.getByRole("button", { name: "再来一组" }).click();
+  await page.getByRole("textbox", { name: "你的答案" }).fill("wrong");
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("已加入薄弱词");
+
+  await page.getByRole("button", { name: "查看结果" }).click();
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
+});
+
 test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({ context, page }) => {
   await installStateSeed(context, sprintSeedState());
   await openApp(page);

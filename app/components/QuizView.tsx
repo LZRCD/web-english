@@ -41,9 +41,12 @@ type QuizViewProps = {
     question: QuizQuestion,
     correct: boolean,
     recallMs: number,
+    sessionId?: string,
   ) => void;
   savedQuiz?: QuizSessionState;
   onQuizStateChange: (session: QuizSessionState | undefined) => void;
+  /** 维度化处置限定词集；未提供时保持普通测验选题。 */
+  candidateWordIds?: number[];
 };
 
 type AnswerResult = {
@@ -64,11 +67,13 @@ export default function QuizView({
   onRecordResult,
   savedQuiz,
   onQuizStateChange,
+  candidateWordIds,
 }: QuizViewProps) {
   const learnedCount = Object.keys(wordProgress).length;
   const weakCount = Object.values(wordProgress).filter(isWeakProgress).length;
   const [mode, setMode] = useState<QuizMode>();
   const [seed, setSeed] = useState(0);
+  const [sessionId, setSessionId] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
@@ -89,7 +94,7 @@ export default function QuizView({
   ), [learnedCount]);
 
   // 恢复上次未完成的测验：用同一 seed 重建题目与进度（render 期调整派生状态）
-  const [previousSavedQuiz, setPreviousSavedQuiz] = useState(savedQuiz);
+  const [previousSavedQuiz, setPreviousSavedQuiz] = useState<QuizSessionState>();
   if (savedQuiz !== previousSavedQuiz) {
     setPreviousSavedQuiz(savedQuiz);
     if (savedQuiz && !mode && !questions.length) {
@@ -98,11 +103,18 @@ export default function QuizView({
         words,
         wordProgress,
         familiarMeanings,
-        { lookupStats, lookupWords, senseFrequency, stubbornWords },
+        {
+          lookupStats,
+          lookupWords,
+          senseFrequency,
+          stubbornWords,
+          candidateWordIds,
+        },
       );
       if (restored.length) {
         setMode(savedQuiz.mode);
         setSeed(savedQuiz.seed);
+        setSessionId(savedQuiz.id);
         setQuestions(restored);
         setQuestionIndex(Math.min(savedQuiz.index, restored.length - 1));
         setCorrectCount(savedQuiz.correctCount);
@@ -123,7 +135,7 @@ export default function QuizView({
   useEffect(() => {
     if (!mode || !questions.length) return;
     onQuizStateChange({
-      id: `quiz:${mode}:${seed}`,
+      id: sessionId || `quiz:${mode}:${seed}`,
       mode,
       seed,
       startedAt: quizStartedAtRef.current,
@@ -132,7 +144,7 @@ export default function QuizView({
       answers,
       complete,
     });
-  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions.length, seed]);
+  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions.length, seed, sessionId]);
 
   const startQuiz = (nextMode: QuizMode) => {
     const nextSeed = new Date().getTime();
@@ -144,12 +156,14 @@ export default function QuizView({
       lookupWords,
       senseFrequency,
       stubbornWords,
+      candidateWordIds,
       mode: nextMode,
       count: 10,
       seed: nextSeed,
     });
     setMode(nextMode);
     setSeed(nextSeed);
+    setSessionId(`quiz:${nextMode}:${nextSeed}`);
     setQuestions(nextQuestions);
     setQuestionIndex(0);
     setAnswer("");
@@ -157,6 +171,7 @@ export default function QuizView({
     setCorrectCount(0);
     setComplete(false);
     quizStartedAtRef.current = new Date().toISOString();
+    questionStartedAt.current = new Date().getTime();
     const first = nextQuestions[0];
     if (first?.mode === "listening-spelling" && soundOn) {
       onSpeak(first.word.word, first.wordId);
@@ -177,7 +192,7 @@ export default function QuizView({
       [currentQuestion.id]: { answer: normalized, correct },
     }));
     if (correct) setCorrectCount((count) => count + 1);
-    onRecordResult(currentQuestion, correct, recallMs);
+    onRecordResult(currentQuestion, correct, recallMs, sessionId || undefined);
   };
 
   const submitTextAnswer = (event: FormEvent<HTMLFormElement>) => {
@@ -194,6 +209,7 @@ export default function QuizView({
     const next = questions[nextIndex];
     setQuestionIndex(nextIndex);
     setAnswer("");
+    questionStartedAt.current = new Date().getTime();
     if (next.mode === "listening-spelling" && soundOn) {
       onSpeak(next.word.word, next.wordId);
     }
@@ -202,6 +218,7 @@ export default function QuizView({
   const returnToModes = () => {
     onQuizStateChange(undefined);
     setMode(undefined);
+    setSessionId("");
     setQuestions([]);
     setComplete(false);
     setAnswer("");
