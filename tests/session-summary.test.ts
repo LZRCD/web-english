@@ -325,6 +325,94 @@ test("冲刺完成总结：统计当场达标/仍需关注、回忆对比与薄�
   assert.equal(stubborn?.count, 1);
 });
 
+test("冲刺维度归类：guess/测验/慢回忆五维盲区按结构化 key 正确计数", () => {
+  const session = {
+    ...createStudySession(
+      "sprint",
+      "考前薄弱冲刺",
+      [1, 2, 3, 4, 5],
+      new Date("2026-08-10T08:00:00.000Z"),
+    ),
+    id: "sprint:2026-08-10-multi",
+    index: 5,
+  };
+  // 词 1 猜错；词 2 拼写测验答错；词 3 中译英答错；词 4 辨析答错；词 5 回忆偏慢
+  const reviews = [
+    review(1, 1, "2026-08-10T08:01:00.000Z", {
+      sessionId: session.id,
+      recallMs: 8_000,
+    }),
+    review(2, 1, "2026-08-10T08:02:00.000Z", {
+      sessionId: session.id,
+      recallMs: 8_000,
+    }),
+    review(3, 1, "2026-08-10T08:03:00.000Z", {
+      sessionId: session.id,
+      recallMs: 8_000,
+    }),
+    review(4, 1, "2026-08-10T08:04:00.000Z", {
+      sessionId: session.id,
+      recallMs: 8_000,
+    }),
+    review(5, 1, "2026-08-10T08:05:00.000Z", {
+      sessionId: session.id,
+      recallMs: 20_000,
+    }),
+  ];
+  const weakSignals: WeakSignalInput = {
+    lookupStats: {},
+    lookupWords: [],
+    guessMistakes: { 1: 2 },
+    quizAttempts: [
+      { id: "q-spelling", wordId: 2, mode: "listening-spelling", correct: false, recallMs: 3_000, answeredAt: "2026-08-10T08:02:00.000Z", appliedToSchedule: false },
+      { id: "q-c2e", wordId: 3, mode: "chinese-to-english", correct: false, recallMs: 3_000, answeredAt: "2026-08-10T08:03:00.000Z", appliedToSchedule: false },
+      { id: "q-choice", wordId: 4, mode: "meaning-choice", correct: false, recallMs: 3_000, answeredAt: "2026-08-10T08:04:00.000Z", appliedToSchedule: false },
+    ],
+    reviews,
+    stubbornWords: {},
+    wordProgress: {},
+  };
+
+  const summary = buildSprintCompletionSummary({
+    session,
+    reviews,
+    weakSignals,
+  });
+
+  assert.equal(summary.reviewedCount, 5);
+  assert.equal(summary.resolvedCount, 0);
+  assert.equal(summary.stillWeakCount, 5);
+  // 8 个维度 key 的 count 各自正确（补充 guess/quiz-spelling/quiz-c2e/quiz-choice/slow-recall 盲区）
+  const byKey = new Map(
+    summary.dimensionCounts.map((row) => [row.key, row.count]),
+  );
+  assert.equal(byKey.get("lookup"), 0);
+  assert.equal(byKey.get("guess"), 1);
+  assert.equal(byKey.get("quiz-spelling"), 1);
+  assert.equal(byKey.get("quiz-c2e"), 1);
+  assert.equal(byKey.get("quiz-choice"), 1);
+  assert.equal(byKey.get("slow-recall"), 1);
+  assert.equal(byKey.get("stubborn"), 0);
+  assert.equal(byKey.get("lapse"), 0);
+  // 每个仍薄弱词都带结构化 signalKeys，且与展示标签同源同长
+  const byWord = new Map(
+    summary.stillWeakWords.map((item) => [item.wordId, item]),
+  );
+  for (const item of summary.stillWeakWords) {
+    assert.equal(item.signalKeys.length, item.signals.length);
+  }
+  assert.deepEqual(byWord.get(1)?.signalKeys, ["guess"]);
+  assert.deepEqual(byWord.get(1)?.signals, ["猜错2次"]);
+  assert.deepEqual(byWord.get(2)?.signalKeys, ["quiz-spelling"]);
+  assert.deepEqual(byWord.get(2)?.signals, ["拼写测验错1次"]);
+  assert.deepEqual(byWord.get(3)?.signalKeys, ["quiz-c2e"]);
+  assert.deepEqual(byWord.get(3)?.signals, ["中译英错1次"]);
+  assert.deepEqual(byWord.get(4)?.signalKeys, ["quiz-choice"]);
+  assert.deepEqual(byWord.get(4)?.signals, ["辨析错1次"]);
+  assert.deepEqual(byWord.get(5)?.signalKeys, ["slow-recall"]);
+  assert.deepEqual(byWord.get(5)?.signals, ["回忆偏慢1次"]);
+});
+
 test("冲刺维度与周报趋势联动：清零标记与本周对照", () => {
   const sprintCounts: WeakDimensionTrend[] = [
     { key: "lookup", label: "反复查词", count: 0, change: null },

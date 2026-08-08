@@ -16,6 +16,11 @@ import {
   type LookupStats,
   type LookupWord,
 } from "./study.ts";
+import {
+  addLocalDays,
+  localDateKey,
+  localWeekStart,
+} from "./date-utils.ts";
 
 /** 回忆偏慢阈值（毫秒，默认值来自 study.ts 的 WeakThresholds） */
 export const SLOW_RECALL_MS = DEFAULT_WEAK_THRESHOLDS.slowRecallMs;
@@ -266,6 +271,16 @@ export type WeakDimensionTrend = {
   change: number | null;
 };
 
+/** 薄弱信号稳定 key：与 WeakDimensionTrend.key 完全同源，作为领域通信协议 */
+export type WeakSignalKey = WeakDimensionTrend["key"];
+
+/** 结构化薄弱信号条目：稳定 key 与中文展示标签分离 */
+export type WeakSignalEntry = {
+  key: WeakSignalKey;
+  /** 展示标签（逐字保持现有中文文案，不得改写） */
+  label: string;
+};
+
 /** 词 id → 划词统计：通过划词记录把查询词关联回学习项 */
 function lookupStatByWordId(input: WeakSignalInput): Map<number, LookupStat> {
   const byId = new Map<number, LookupStat>();
@@ -376,16 +391,17 @@ function isSlowRecallRecovered(
 }
 
 /**
- * 聚合单个词的多维薄弱信号（查词/猜错/各模式测验/回忆/顽固/lapse）。
- * 信号按固定顺序排列，空数组表示当前没有薄弱信号。
+ * 聚合单个词的多维薄弱信号条目（查词/猜错/各模式测验/回忆/顽固/lapse）。
+ * 条目按固定顺序排列，空数组表示当前没有薄弱信号；
+ * key 为稳定通信协议（与 WeakDimensionTrend.key 同源），label 为展示文案。
  */
-export function buildWordWeakSignals(
+export function buildWordWeakSignalEntries(
   wordId: number,
   input: WeakSignalInput,
   lookupById = lookupStatByWordId(input),
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
-): string[] {
-  const signals: string[] = [];
+): WeakSignalEntry[] {
+  const entries: WeakSignalEntry[] = [];
   const lookupStat = lookupById.get(wordId);
   const lookupCount = lookupStat?.count ?? 0;
   // 答对且查询不再增长（isLookupDemoted）→ 查词标签淡出，与插队队列降级口径贯通
@@ -393,28 +409,37 @@ export function buildWordWeakSignals(
     lookupCount >= thresholds.lookupWeak
     && !(lookupStat && isLookupDemoted(wordId, lookupStat, input))
   ) {
-    signals.push(`查过${lookupCount}次`);
+    entries.push({ key: "lookup", label: `查过${lookupCount}次` });
   }
   const guessCount = input.guessMistakes[wordId] ?? 0;
-  if (guessCount > 0) signals.push(`猜错${guessCount}次`);
+  if (guessCount > 0) entries.push({ key: "guess", label: `猜错${guessCount}次` });
   const quizErrors = quizErrorCounts(input.quizAttempts, wordId);
   if (
     quizErrors["listening-spelling"]
     && !isQuizModeRecovered(input.quizAttempts, wordId, "listening-spelling")
   ) {
-    signals.push(`拼写测验错${quizErrors["listening-spelling"]}次`);
+    entries.push({
+      key: "quiz-spelling",
+      label: `拼写测验错${quizErrors["listening-spelling"]}次`,
+    });
   }
   if (
     quizErrors["chinese-to-english"]
     && !isQuizModeRecovered(input.quizAttempts, wordId, "chinese-to-english")
   ) {
-    signals.push(`中译英错${quizErrors["chinese-to-english"]}次`);
+    entries.push({
+      key: "quiz-c2e",
+      label: `中译英错${quizErrors["chinese-to-english"]}次`,
+    });
   }
   if (
     quizErrors["meaning-choice"]
     && !isQuizModeRecovered(input.quizAttempts, wordId, "meaning-choice")
   ) {
-    signals.push(`辨析错${quizErrors["meaning-choice"]}次`);
+    entries.push({
+      key: "quiz-choice",
+      label: `辨析错${quizErrors["meaning-choice"]}次`,
+    });
   }
   const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
   // 历史慢回忆仍保留在 review/时间线/统计中；仅当前标签在可靠恢复后淡出
@@ -422,16 +447,33 @@ export function buildWordWeakSignals(
     slowCount > 0
     && !isSlowRecallRecovered(input.reviews, wordId, thresholds.slowRecallMs)
   ) {
-    signals.push(`回忆偏慢${slowCount}次`);
+    entries.push({ key: "slow-recall", label: `回忆偏慢${slowCount}次` });
   }
-  if (input.stubbornWords[wordId]?.active) signals.push("顽固词");
+  if (input.stubbornWords[wordId]?.active) {
+    entries.push({ key: "stubborn", label: "顽固词" });
+  }
   const progress = input.wordProgress[wordId];
   const lapseCount = progress?.lapseCount ?? 0;
   // 历史 lapse 计数保留不变；仅在既有进度判定仍弱时展示，恢复后自动淡出
   if (lapseCount > 0 && isWeakProgress(progress)) {
-    signals.push(`FSRS lapse ${lapseCount}`);
+    entries.push({ key: "lapse", label: `FSRS lapse ${lapseCount}` });
   }
-  return signals;
+  return entries;
+}
+
+/**
+ * 聚合单个词的多维薄弱信号（查词/猜错/各模式测验/回忆/顽固/lapse）。
+ * 信号按固定顺序排列，空数组表示当前没有薄弱信号；
+ * 投影自 buildWordWeakSignalEntries，仅保留展示标签，消费端形状不变。
+ */
+export function buildWordWeakSignals(
+  wordId: number,
+  input: WeakSignalInput,
+  lookupById = lookupStatByWordId(input),
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): string[] {
+  return buildWordWeakSignalEntries(wordId, input, lookupById, thresholds)
+    .map((entry) => entry.label);
 }
 
 /** 全量词级薄弱画像：key 为学习项 wordId */
@@ -1800,32 +1842,9 @@ export function lookupPriorityWordIds(
     .map((item) => item.wordId);
 }
 
-function localDayStart(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function addLocalDays(value: Date, days: number) {
-  const result = new Date(value);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function localWeekStart(value: Date) {
-  const start = localDayStart(value);
-  const mondayOffset = (start.getDay() + 6) % 7;
-  return addLocalDays(start, -mondayOffset);
-}
-
 function inWindow(value: string | undefined, startMs: number, endMs: number) {
   const ms = value ? new Date(value).getTime() : Number.NaN;
   return Number.isFinite(ms) && ms >= startMs && ms < endMs;
-}
-
-function localDateKey(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 /** 单个维度的周级统计（startMs 所在周 vs 上一周） */

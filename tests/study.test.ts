@@ -31,6 +31,12 @@ import {
   combineStoredState,
   splitStoredState,
 } from "../lib/storage.ts";
+import {
+  addLocalDays,
+  localDateKey,
+  localDayStart,
+  localWeekStart,
+} from "../lib/date-utils.ts";
 
 function createReview(
   input: Omit<Review, "id" | "kind" | "intervalMs"> & Partial<Pick<Review, "id" | "kind" | "intervalMs">>,
@@ -750,4 +756,64 @@ test("评分日志追加写入，不再静默截断旧历史", () => {
   }));
   const state = parseStoredState(JSON.stringify({ schemaVersion: 5, reviews, wordProgress: {} }));
   assert.ok(state.reviews.length > 10000, `完整保留历史（实际 ${state.reviews.length} 条）`);
+})
+
+test("日期工具：localDateKey 本地自然日 YYYY-MM-DD，string 输入等价", () => {
+  // 本地构造器构造 2026-08-09，断言本地时区语义（不依赖 UTC 解析）
+  assert.equal(localDateKey(new Date(2026, 7, 9)), "2026-08-09");
+  assert.equal(localDateKey(new Date(2026, 0, 5)), "2026-01-05");
+  // string 输入按本地解析等价（本地构造器 toISOString 再解析回本地同日）
+  assert.equal(
+    localDateKey(new Date(2026, 7, 9, 23, 59).toISOString()),
+    "2026-08-09",
+  );
+})
+
+test("日期工具：localDayStart 本地午夜归零", () => {
+  const late = localDayStart(new Date(2026, 7, 9, 23, 59, 59));
+  const midnight = localDayStart(new Date(2026, 7, 9, 0, 0, 0));
+  assert.equal(late.getTime(), midnight.getTime());
+  assert.equal(late.getHours(), 0);
+  assert.equal(late.getMinutes(), 0);
+  assert.equal(late.getSeconds(), 0);
+})
+
+test("日期工具：addLocalDays 跨月、跨年与负数天数", () => {
+  // 7-31 +1 → 8-1（跨月）
+  const monthEnd = addLocalDays(new Date(2026, 6, 31), 1);
+  assert.equal(monthEnd.getMonth(), 7);
+  assert.equal(monthEnd.getDate(), 1);
+  // 12-31 +1 → 次年 1-1（跨年）
+  const yearEnd = addLocalDays(new Date(2026, 11, 31), 1);
+  assert.equal(yearEnd.getFullYear(), 2027);
+  assert.equal(yearEnd.getMonth(), 0);
+  assert.equal(yearEnd.getDate(), 1);
+  // 负数天数回退
+  const back = addLocalDays(new Date(2026, 7, 9), -9);
+  assert.equal(back.getMonth(), 6);
+  assert.equal(back.getDate(), 31);
+  // 不修改入参
+  const source = new Date(2026, 7, 9);
+  addLocalDays(source, 1);
+  assert.equal(source.getDate(), 9);
+})
+
+test("日期工具：localWeekStart 本地周一作为周起点", () => {
+  // 2026-08-09 是周日 → 回退到本周一 08-03
+  const sunday = localWeekStart(new Date(2026, 7, 9));
+  assert.equal(sunday.getDay(), 1);
+  assert.equal(sunday.getDate(), 3);
+  assert.equal(sunday.getMonth(), 7);
+  // 周一返回当天
+  const monday = localWeekStart(new Date(2026, 7, 3, 12));
+  assert.equal(monday.getDay(), 1);
+  assert.equal(monday.getDate(), 3);
+  // 边界 23:59:59 仍归到当日零点所在周的周一
+  const boundary = localWeekStart(new Date(2026, 7, 8, 23, 59, 59));
+  assert.equal(boundary.getDay(), 1);
+  assert.equal(boundary.getDate(), 3);
+  // 周六 → 本周一
+  const saturday = localWeekStart(new Date(2026, 7, 8, 8));
+  assert.equal(saturday.getDay(), 1);
+  assert.equal(saturday.getDate(), 3);
 })

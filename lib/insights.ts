@@ -16,6 +16,12 @@ import {
   type WeakSignalInput,
   type WeakThresholds,
 } from "./weak-signals.ts";
+import {
+  addLocalDays,
+  localDateKey,
+  localDayStart,
+  localWeekStart,
+} from "./date-utils.ts";
 
 export type LearningInsightReview = Pick<
   ReviewEvent,
@@ -71,29 +77,6 @@ type TimedReview = LearningInsightReview & {
 
 function normalizedDays(days: number) {
   return Number.isFinite(days) ? Math.max(0, Math.trunc(days)) : 0;
-}
-
-function localDayStart(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function addLocalDays(value: Date, days: number) {
-  const result = new Date(value);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function localWeekStart(value: Date) {
-  const start = localDayStart(value);
-  const mondayOffset = (start.getDay() + 6) % 7;
-  return addLocalDays(start, -mondayOffset);
-}
-
-function localDateKey(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function validTimedReviews(reviews: readonly LearningInsightReview[]) {

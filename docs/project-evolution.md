@@ -1273,3 +1273,21 @@
 - 定向 91/91（新增 6 条：归属/顽固不扁平/合计==全局/跨维截断/quiz 与无 session 随访/乱序稳定/空 null 与真实 0/活动跨维双计），lint/typecheck 通过，`npm test` 含生产构建 211/211。
 - signal-flow 新增第 18 条确定性 seed 复合链（known/unknown/generic/stubborn、9 行固定顺序、无样本与无随访文案、非因果披露）；固定 3000 全组 18/18（45.8s），既有 17 条语义保持。
 - 阶段 D 完成：分维度观察链（解析归属→活动/锚点双口径→独立分母→UI 披露）闭环；阶段 E 无既定定义，下一轮只读审计阶段 E 边界、真实样本门槛与剩余缺口（猜错无时间源、slow/lapse 单维判定、生产样本积累），不实现排行、权重、自适应或比较结论。
+
+## 第六十一次迭代：第一阶段架构重构（信号结构化 + 日期统一）
+
+本次迭代：2026-08-09。
+
+### 实现与边界
+
+- 薄弱信号改为结构化稳定 key：`WeakSignalKey`（8 元 union，与 `WeakDimensionTrend["key"]` 同源）与 `WeakSignalEntry{key,label}`；`buildWordWeakSignals` 保留 `string[]` 返回形状（label 投影），新增 `buildWordWeakSignalEntries` 供领域消费；`session-summary.ts` 删除 8 条 `startsWith` 中文前缀解析链，`sprintDimensionCounts` 改按 `signalKeys` 归类。中文标签逐字保持（含 CSV、复制文本、E2E 文案），统计结果不变，信号从不持久化、历史数据自动兼容。
+- 日期工具唯一化：新建 `lib/date-utils.ts`（`localDateKey`/`localDayStart`/`addLocalDays`/`localWeekStart`），逐字符复制既有实现；`study.dateKey` 双语句 re-export 保持 14 处调用点零改动；quiz/insights/weak-signals/session-summary 的重复实现收敛为一份。`shouldApplyQuizToSchedule` 契约（只查当天已作答、本地/UTC 混合比较等现状）原样固定。
+- 未新增 schema/version/store/domain，未改评分、FSRS、每日 Quiz 门禁、备份、package scripts、推荐优先级、历史 reviews/quizAttempts；未动 `page.tsx`、组件、hooks、`learning.ts`、`storage.ts`；业务不确定项（到期词首次无实现、时区混合、答错写入、ms 窗口、5000 条裁剪）全部保持现状并登记。
+- 第 42 轮文档见 `docs/iterations/round-42.md`；任务 A（第 39~41 轮）未回滚；阶段 E 边界只读审计顺延到最后。
+
+### 验证与阶段状态
+
+- 定向单测 150/150，`npm run typecheck`/`npm run lint` 通过（0 问题），`npm test` 含生产构建 217/217（基线 211 + 新增 6：key↔label 映射、五维盲区归类、日期边界 4），`npm run build` 通过。
+- 固定 3000 signal-flow 18/18（47.1s），既有 18 条语义未改；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
+- `lib/` 下无中文文案解析信号类型残留；日期函数唯一实现在 `lib/date-utils.ts`。
+- 任务 B（第 42 轮）完成并合回 `codex/follow-up-hardening`；下一阶段为架构重构第二阶段（候选：AI Provider 客户端合并等），阶段 E 审计最后执行。

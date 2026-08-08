@@ -23,6 +23,7 @@ import {
   type QuizAttempt,
   type QuizSessionState,
 } from "./quiz.ts";
+import { localDateKey as dateKey } from "./date-utils.ts";
 
 export type {
   Rating,
@@ -1205,13 +1206,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
   };
 }
 
-export function dateKey(value: string | Date) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+export { dateKey };
 
 function reviewKey(review: Review) {
   return review.wordId

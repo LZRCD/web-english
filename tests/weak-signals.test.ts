@@ -45,6 +45,7 @@ import {
   buildWeakProfiles,
   buildWordStabilizedDimensions,
   buildWordSignalTimeline,
+  buildWordWeakSignalEntries,
   buildWordWeakSignals,
   DEFAULT_WEAK_THRESHOLDS,
   emphasizedWeakDimensions,
@@ -395,6 +396,75 @@ test("薄弱画像：聚合查词/猜错/各模式测验/回忆/顽固/lapse 六
   const profiles = buildWeakProfiles(input);
   assert.equal(profiles[10].lookupCount, 5);
   assert.deepEqual(profiles[10].signals, buildWordWeakSignals(10, input));
+});
+
+test("结构化信号条目：key 与展示标签同源映射完整且顺序固定", () => {
+  const input = baseInput({
+    lookupStats: {
+      abandon: {
+        count: 4,
+        firstAt: "2026-07-01T00:00:00.000Z",
+        lastAt: "2026-07-28T00:00:00.000Z",
+      },
+    },
+    lookupWords: [lookupWord("abandon", 10)],
+    guessMistakes: { 10: 2 },
+    quizAttempts: [
+      makeQuizAttempt("q-spelling", "listening-spelling", false, "2026-07-27T00:00:00.000Z"),
+      makeQuizAttempt("q-c2e", "chinese-to-english", false, "2026-07-27T01:00:00.000Z"),
+      makeQuizAttempt("q-choice", "meaning-choice", false, "2026-07-27T02:00:00.000Z"),
+    ],
+    reviews: [makeReview(10, 1, "2026-07-27T00:00:00.000Z", 18_000)],
+    stubbornWords: {
+      10: {
+        wordId: 10,
+        active: true,
+        reason: "again-3",
+        triggeredAt: "2026-07-26T00:00:00.000Z",
+        lastChangedAt: "2026-07-26T00:00:00.000Z",
+        triggerCount: 1,
+      },
+    },
+    wordProgress: {
+      10: {
+        wordId: 10,
+        lapseCount: 1,
+        lastRating: 1,
+        lastReviewedAt: "2026-07-27T00:00:00.000Z",
+      },
+    } as unknown as WordProgressMap,
+  });
+
+  const entries = buildWordWeakSignalEntries(10, input);
+  // 8 类信号的 key 固定顺序与标签文案逐字一致
+  assert.deepEqual(
+    entries.map((entry) => entry.key),
+    [
+      "lookup",
+      "guess",
+      "quiz-spelling",
+      "quiz-c2e",
+      "quiz-choice",
+      "slow-recall",
+      "stubborn",
+      "lapse",
+    ],
+  );
+  assert.deepEqual(entries.map((entry) => entry.label), [
+    "查过4次",
+    "猜错2次",
+    "拼写测验错1次",
+    "中译英错1次",
+    "辨析错1次",
+    "回忆偏慢1次",
+    "顽固词",
+    "FSRS lapse 1",
+  ]);
+  // 标签投影与既有 buildWordWeakSignals 输出同源一致
+  assert.deepEqual(
+    entries.map((entry) => entry.label),
+    buildWordWeakSignals(10, input),
+  );
 });
 
 test("lapse 标签随既有薄弱恢复淡出，再次遗忘后重新出现", () => {
