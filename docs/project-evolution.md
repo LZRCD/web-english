@@ -822,3 +822,20 @@
 - `npm run lint`、`npm run typecheck` 通过；生产构建成功。
 - 单元测试 155/155 通过（+3：isLookupDemoted 三态）。
 - Playwright E2E 8/8 通过（22.2s）：复用 3000 端口既有本项目 dev server（node 49328，日志 .dev-3000-20260808-021153.log，非本轮启动、跑后不关闭），既有 8 条断言全部未受影响。
+
+## 第三十八次迭代：信号联动十九轮（全态薄弱入口口径统一）
+
+本次迭代：2026-08-08。
+
+### 修正
+
+- 词书薄弱数量与单元分布改为消费页面既有 `buildWeakProfiles` 实时画像，不再独立使用 `isWeakProgress` 判定，与学习卡、词本标签、集中区和复发入口保持一致。
+- 划词薄弱候选由 `lookupWeakCandidateIds(input, thresholds)` 统一派生后传入词本，移除组件内固定“查询 2 次+”判定；候选实时跟随设置阈值，纯查词且已降级的词不再标记或进入一键学习。
+- 冲刺候选改为以 `buildWordWeakSignals` 非空作为唯一入选条件；保留既有已学限制和排序，已降级且无其他信号的词退出，有猜错、测验错、回忆偏慢、顽固或 lapse 等信号时仍保留。
+- 未新增持久化 schema，未改评分、排程、备份、时间线与稳定提示链路。
+
+### 验证
+
+- `npm run lint`、`npm run typecheck` 通过；`npm test` 含生产构建成功，单元/结构测试 156/156 通过。
+- `tests/weak-signals.test.ts` 定向测试 39/39 通过，新增统一入口用例并补充阈值同步断言。
+- Playwright `tests/e2e/signal-flow.spec.mjs` 既有 8/8 通过（18.1s）；固定端口 3000 启动前确认无监听，结束后精确关闭本轮父/监听 PID，未批量终止 Node，日志与 PID 记录已清理。

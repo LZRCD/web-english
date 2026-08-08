@@ -2041,6 +2041,7 @@ export default function Home() {
             sectionMeta={SECTION_META}
             redbookWords={redbookWords}
             wordProgress={wordProgress}
+            weakSignalsByWordId={weakSignalsByWordId}
             learningItemCount={learningItemCount}
             clock={clock}
             onSelectBook={(section, unit) => {
@@ -2063,6 +2064,7 @@ export default function Home() {
             stubbornWordList={stubbornWordList}
             lookupWords={lookupWords}
             lookupStats={lookupStats}
+            lookupWeakCandidateIds={weakLookupCandidateIds}
             weakSignalsByWordId={weakSignalsByWordId}
             weakRecallByWordId={weakRecallByWordId}
             ratingLabels={ratingLabels}

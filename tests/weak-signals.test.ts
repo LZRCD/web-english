@@ -182,8 +182,8 @@ test("划词补漏：≥3 次进插队队列，答对且查询不再增长自动
 
   // 11(4次)、12(3次) 插队；13 仅 2 次不足；14 答对且查询不再增长 → 降级
   assert.deepEqual(lookupPriorityWordIds(input), [11, 12]);
-  // 薄弱候选按 ≥2 次标注，不参与降级（同次数保持插入顺序）
-  assert.deepEqual(lookupWeakCandidateIds(input), [11, 12, 14, 13]);
+  // 薄弱候选同样复用全态画像：14 已降级且无其他信号，不再入选
+  assert.deepEqual(lookupWeakCandidateIds(input), [11, 12, 13]);
 });
 
 test("周报薄弱维度趋势：按本地周一统计本周数量与变化", () => {
@@ -362,6 +362,9 @@ test("薄弱阈值参数化：不同阈值产出不同薄弱画像", () => {
   const strict: WeakThresholds = { lookupWeak: 5, lookupPriority: 6, slowRecallMs: 20_000 };
   const strictSignals = buildWordWeakSignals(1, input, undefined, strict);
   assert.equal(strictSignals.length, 0);
+  // 划词候选与画像使用同一可调阈值
+  assert.deepEqual(lookupWeakCandidateIds(input), [1]);
+  assert.deepEqual(lookupWeakCandidateIds(input, strict), []);
   // 冲刺候选也随阈值变化
   assert.deepEqual(buildSprintWordIds(input), [1]);
   assert.deepEqual(buildSprintWordIds(input, strict), []);
@@ -910,6 +913,30 @@ test("薄弱降级贯通：答对且查询不再增长 → 查词标签消失，
   });
   // lastRating 3 且 lastReviewedAt(07-28) >= lastAt(07-25) → 降级：查词标签消失，猜错保留
   assert.deepEqual(buildWordWeakSignals(1, input), ["猜错2次"]);
+});
+
+test("全态入口统一：纯查词降级词退出画像/划词候选/冲刺，其他薄弱信号仍保留", () => {
+  const input = baseInput({
+    lookupStats: {
+      "word-1": { count: 5, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+      "word-2": { count: 4, firstAt: "2026-07-01T00:00:00.000Z", lastAt: "2026-07-25T00:00:00.000Z" },
+    },
+    lookupWords: [lookupWord("word-1", 1), lookupWord("word-2", 2)],
+    guessMistakes: { 2: 1 },
+    wordProgress: {
+      1: { wordId: 1, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+      2: { wordId: 2, lapseCount: 0, lastRating: 3, lastReviewedAt: "2026-07-28T00:00:00.000Z" },
+    } as unknown as WordProgressMap,
+  });
+
+  const profiles = buildWeakProfiles(input);
+  const weakProfileIds = Object.entries(profiles)
+    .filter(([, profile]) => profile.signals.length > 0)
+    .map(([wordId]) => Number(wordId));
+  assert.deepEqual(weakProfileIds, [2]);
+  assert.deepEqual(profiles[2].signals, ["猜错1次"]);
+  assert.deepEqual(lookupWeakCandidateIds(input), [2]);
+  assert.deepEqual(buildSprintWordIds(input), [2]);
 });
 
 test("薄弱降级贯通：查询仍增长（最近查询晚于评分）不降级", () => {

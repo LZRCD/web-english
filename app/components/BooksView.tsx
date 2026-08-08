@@ -1,7 +1,7 @@
 "use client";
 
 import type { WordProgressMap } from "../../lib/learning";
-import { dueWordIds, isWeakProgress } from "../../lib/learning";
+import { dueWordIds } from "../../lib/learning";
 import { isPrimaryLearningWord } from "../../lib/redbook";
 import type { Word } from "../../lib/study";
 
@@ -17,6 +17,7 @@ type BooksViewProps = {
   sectionMeta: SectionMeta[];
   redbookWords: Word[];
   wordProgress: WordProgressMap;
+  weakSignalsByWordId: Record<number, string[]>;
   learningItemCount: number;
   clock: number;
   onSelectBook: (section: string, unit: number | string) => void;
@@ -27,6 +28,7 @@ export default function BooksView({
   sectionMeta,
   redbookWords,
   wordProgress,
+  weakSignalsByWordId,
   learningItemCount,
   clock,
   onSelectBook,
@@ -52,10 +54,10 @@ export default function BooksView({
           const learned = bookWordIds.filter((wordId) => wordProgress[wordId]).length;
           const mastered = bookWordIds.filter((wordId) => wordProgress[wordId]?.status === "mastered").length;
           const dueCount = bookWordIds.filter((wordId) => due.has(wordId)).length;
-          // 薄弱词数：isWeakProgress 判定（lastRating≤1 / lapse 未连续成功 / 未 resolve）
+          // 薄弱词数：复用全态薄弱画像，避免与学习卡/集中区/复发入口口径分叉
           const weakCount = bookWordIds.filter((wordId) =>
-            isWeakProgress(wordProgress[wordId])).length;
-          // 薄弱单元分布：isWeakProgress 口径按 unit 分组（与集中区六类信号口径区分）
+            (weakSignalsByWordId[wordId]?.length ?? 0) > 0).length;
+          // 薄弱单元分布与词书总数使用同一画像
           const weakUnits = (() => {
             const counts = new Map<string, number>();
             for (const word of redbookWords) {
@@ -64,7 +66,7 @@ export default function BooksView({
                 || word.id === undefined
                 || !isPrimaryLearningWord(word.id)
               ) continue;
-              if (!isWeakProgress(wordProgress[word.id])) continue;
+              if (!(weakSignalsByWordId[word.id]?.length ?? 0)) continue;
               const unitKey = word.unit === undefined ? "未分单元" : `Unit ${word.unit}`;
               counts.set(unitKey, (counts.get(unitKey) ?? 0) + 1);
             }

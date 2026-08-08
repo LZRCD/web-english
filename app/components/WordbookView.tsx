@@ -18,6 +18,8 @@ type WordbookViewProps = {
   stubbornWordList: StubbornWordItem[];
   lookupWords: LookupWord[];
   lookupStats: LookupStats;
+  /** 按当前阈值与统一薄弱画像派生的划词候选 id */
+  lookupWeakCandidateIds: number[];
   /** 薄弱画像标签：key 为学习项 wordId */
   weakSignalsByWordId: Record<number, string[]>;
   /** 词级回忆耗时统计：key 为学习项 wordId */
@@ -46,6 +48,7 @@ export default function WordbookView({
   stubbornWordList,
   lookupWords,
   lookupStats,
+  lookupWeakCandidateIds,
   weakSignalsByWordId,
   weakRecallByWordId,
   ratingLabels,
@@ -65,19 +68,16 @@ export default function WordbookView({
 }: WordbookViewProps) {
   const now = new Date(clock);
   const todayKey = dateKey(now);
-  // 划词薄弱候选：查询 ≥2 次的词自动标注，可只看候选
+  // 划词薄弱候选：直接消费页面统一派生，可只看候选
   const [weakLookupOnly, setWeakLookupOnly] = useState(false);
-  const isLookupWeakCandidate = (query: string) =>
-    (lookupStats[query.trim().toLowerCase()]?.count ?? 0) >= 2;
+  const lookupWeakCandidateSet = new Set(lookupWeakCandidateIds);
+  const isLookupWeakCandidate = (item: LookupWord) =>
+    lookupWeakCandidateSet.has(item.linkedWordId ?? item.id);
   const lookupWeakCandidateCount = lookupWords
-    .filter((item) => isLookupWeakCandidate(item.query)).length;
+    .filter(isLookupWeakCandidate).length;
   const visibleLookupWords = weakLookupOnly
-    ? lookupWords.filter((item) => isLookupWeakCandidate(item.query))
+    ? lookupWords.filter(isLookupWeakCandidate)
     : lookupWords;
-  // 划词薄弱候选一键学习：查询 ≥2 次的词批量进入复习会话
-  const lookupWeakCandidateIds = lookupWords
-    .filter((item) => isLookupWeakCandidate(item.query))
-    .map((item) => item.linkedWordId ?? item.id);
   // 词级回忆耗时标签（中性色，与薄弱信号区分）
   const recallTag = (wordId: number) => {
     const recall = weakRecallByWordId[wordId];
@@ -315,7 +315,7 @@ export default function WordbookView({
                   checked={weakLookupOnly}
                   onChange={(event) => setWeakLookupOnly(event.target.checked)}
                 />
-                只看薄弱候选（{lookupWeakCandidateCount} 词查过 2 次+）
+                只看薄弱候选（{lookupWeakCandidateCount} 词 · 当前阈值）
               </label>
               <button
                 type="button"
@@ -380,7 +380,7 @@ export default function WordbookView({
                   return ` · 查询 ${stat.count} 次 · 最近 ${time}`;
                 })()}
               </small>
-              {isLookupWeakCandidate(item.query) && (
+              {isLookupWeakCandidate(item) && (
                 <span className="lookup-candidate-mark">薄弱候选</span>
               )}
               <div className="weak-signal-tags">

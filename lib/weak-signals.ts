@@ -1,7 +1,6 @@
 import type { QuizAttempt, QuizMode } from "./quiz.ts";
 import { learningWordId } from "./selection-lookup.ts";
 import {
-  isWeakProgress,
   type ExamPhase,
   type ReviewEvent,
   type StubbornWordMap,
@@ -279,8 +278,11 @@ export function lookupWeakCandidateIds(
   input: WeakSignalInput,
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
 ): number[] {
-  return [...lookupStatByWordId(input).entries()]
-    .filter(([, stat]) => (stat.count ?? 0) >= thresholds.lookupWeak)
+  const lookupById = lookupStatByWordId(input);
+  return [...lookupById.entries()]
+    .filter(([wordId, stat]) =>
+      (stat.count ?? 0) >= thresholds.lookupWeak
+      && buildWordWeakSignals(wordId, input, lookupById, thresholds).length > 0)
     .sort((first, second) => second[1].count - first[1].count)
     .map(([wordId]) => wordId);
 }
@@ -581,7 +583,7 @@ export function buildSprintRelapse(
   };
 }
 
-/** 考前薄弱冲刺候选：已学且命中任一薄弱信号的词 id，按薄弱程度排序 */
+/** 考前薄弱冲刺候选：已学且统一薄弱画像非空的词 id，按薄弱程度排序 */
 export function buildSprintWordIds(
   input: WeakSignalInput,
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
@@ -600,11 +602,7 @@ export function buildSprintWordIds(
     const lookupCount = lookupById.get(id)?.count ?? 0;
     const recall = wordRecallStats(input.reviews, id);
     const recallAvgMs = recall?.averageMs ?? 0;
-    const hitLookup = lookupCount >= thresholds.lookupWeak;
-    const hitLapse = progress.lapseCount >= 1;
-    const hitSlow = recallAvgMs >= thresholds.slowRecallMs;
-    const hitWeak = isWeakProgress(progress);
-    if (!hitLookup && !hitLapse && !hitSlow && !hitWeak) continue;
+    if (!buildWordWeakSignals(id, input, lookupById, thresholds).length) continue;
     items.push({
       wordId: id,
       lapseCount: progress.lapseCount,
