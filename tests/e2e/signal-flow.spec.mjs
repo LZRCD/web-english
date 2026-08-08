@@ -74,6 +74,51 @@ async function readLookupTreatmentSnapshot(page) {
   }));
 }
 
+async function readStubbornTreatmentSnapshot(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const store = transaction.objectStore("state-domains");
+      const reviewsRequest = store.get("reviews");
+      const attemptsRequest = store.get("quiz-attempts");
+      const settingsRequest = store.get("settings");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        const review = reviewsRequest.result?.value?.at(-1);
+        const attempt = attemptsRequest.result?.value?.at(-1);
+        const settings = settingsRequest.result?.value;
+        database.close();
+        resolve({
+          review: review && {
+            rating: review.rating,
+            sessionId: review.sessionId,
+            recallTimed: Number.isFinite(review.recallMs)
+              && review.recallMs >= 0
+              && review.recallMs < 60_000,
+          },
+          attempt: attempt && {
+            mode: attempt.mode,
+            correct: attempt.correct,
+            appliedToSchedule: attempt.appliedToSchedule,
+          },
+          activeSession: settings?.activeSession && {
+            id: settings.activeSession.id,
+            title: settings.activeSession.title,
+            wordIds: settings.activeSession.wordIds,
+          },
+          activeQuiz: settings?.activeQuiz && {
+            id: settings.activeQuiz.id,
+            mode: settings.activeQuiz.mode,
+          },
+        });
+      };
+    };
+  }));
+}
+
 function sprintSeedState() {
   const examDate = new Date(Date.now() + 5 * 86_400_000)
     .toISOString().slice(0, 10);
@@ -410,6 +455,28 @@ function lookupRecallTreatmentSeedState() {
   });
 }
 
+function stubbornTreatmentSeedState() {
+  const examDate = new Date(Date.now() + 5 * 86_400_000)
+    .toISOString().slice(0, 10);
+  return createState({
+    examDate,
+    reviews: [6, 5, 4].map((days, index) => ({
+      id: `stubborn-low-${index + 1}`,
+      wordId: 1,
+      word: "radiate",
+      rating: 0,
+      kind: index === 0 ? "new" : "review",
+      intervalMs: 600_000,
+      dueAt: new Date(new Date(daysAgo(days, 8, 0)).getTime() + 600_000).toISOString(),
+      reviewedAt: daysAgo(days, 8, 0),
+      recallMs: 8_000,
+      section: "必考词",
+      unit: 1,
+    })),
+    started: true,
+  });
+}
+
 test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结果", async ({ context, page }) => {
   await installStateSeed(context, spellingTreatmentSeedState());
   await openApp(page);
@@ -681,6 +748,70 @@ test("信号联动：查词薄弱进入主动回忆，真实评分淡出并在�
     .click();
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
+});
+
+test("信号联动：顽固词按真实 review 跨主动回忆、听音拼写与中译英推进", async ({ context, page }) => {
+  await installStateSeed(context, stubbornTreatmentSeedState());
+  await openApp(page);
+  await openWordbook(page);
+  await page.getByRole("tab", { name: /顽固词/ }).click();
+  await page.getByRole("button", { name: "开始顽固词专项" }).click();
+
+  await expect(page.getByText(/顽固词多模式强化 · 词义主动回忆/).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "radiate" })).toBeVisible();
+  await expect(page.locator(".meaning-panel")).toHaveCount(0);
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).activeSession)
+    .toMatchObject({
+      title: "顽固词多模式强化 · 词义主动回忆",
+      wordIds: [1],
+    });
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).activeSession?.id)
+    .toMatch(/^sprint:stubborn:lookup-recall:/);
+
+  await page.reload();
+  await waitForApp(page);
+  await expect(page.getByText(/顽固词多模式强化 · 词义主动回忆/).first()).toBeVisible();
+  await expect(page.locator(".meaning-panel")).toHaveCount(0);
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await page.getByRole("button", { name: /认识/ }).click();
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).review)
+    .toMatchObject({ rating: 2, recallTimed: true });
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).review?.sessionId)
+    .toMatch(/^sprint:stubborn:lookup-recall:/);
+
+  await page.getByRole("button", { name: "返回词本" }).click();
+  await page.getByRole("button", { name: "开始顽固词专项" }).click();
+  await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).activeQuiz)
+    .toMatchObject({ mode: "listening-spelling" });
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).activeQuiz?.id)
+    .toMatch(/^sprint:stubborn:listening-spelling:/);
+
+  await page.reload();
+  await waitForApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /测验/ })
+    .click();
+  await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "你的答案" }).fill("radiate");
+  await page.getByRole("button", { name: "提交" }).click();
+  await expect(page.locator(".quiz-feedback")).toContainText("回答正确");
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).attempt)
+    .toEqual({ mode: "listening-spelling", correct: true, appliedToSchedule: true });
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).review?.sessionId)
+    .toMatch(/^sprint:stubborn:listening-spelling:/);
+
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(page.locator(".sprint-history")).toContainText("覆盖 1 个不同单词");
+  await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
+  await expect(page.getByText("中译英", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /散发/ })).toBeVisible();
+  await expect.poll(async () => (await readStubbornTreatmentSnapshot(page)).activeQuiz?.id)
+    .toMatch(/^sprint:stubborn:chinese-to-english:/);
 });
 
 test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({ context, page }) => {

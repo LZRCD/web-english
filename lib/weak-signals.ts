@@ -2,6 +2,7 @@ import type { QuizAttempt, QuizMode } from "./quiz.ts";
 import { learningWordId } from "./selection-lookup.ts";
 import {
   isWeakProgress,
+  rebuildStubbornWords,
   type ExamPhase,
   type ReviewEvent,
   type StubbornWordMap,
@@ -86,7 +87,53 @@ export type SprintTreatmentRecommendation =
       mode: "lookup-recall";
       label: "词义主动回忆";
       wordIds: number[];
+    }
+  | {
+      dimension: "stubborn";
+      mode: StubbornTreatmentMode;
+      label: "词义主动回忆" | "听音拼写" | "中译英";
+      wordIds: number[];
     };
+
+/** 顽固词的三步强化全部复用既有训练，阶段只由真实评分日志派生。 */
+export const STUBBORN_TREATMENT_SEQUENCE = [
+  "lookup-recall",
+  "listening-spelling",
+  "chinese-to-english",
+] as const;
+
+export type StubbornTreatmentMode =
+  typeof STUBBORN_TREATMENT_SEQUENCE[number];
+
+export const STUBBORN_SPRINT_SESSION_PREFIX = "sprint:stubborn:";
+
+const STUBBORN_TREATMENT_LABELS: Record<
+  StubbornTreatmentMode,
+  "词义主动回忆" | "听音拼写" | "中译英"
+> = {
+  "lookup-recall": "词义主动回忆",
+  "listening-spelling": "听音拼写",
+  "chinese-to-english": "中译英",
+};
+
+export function createStubbornSprintSessionId(
+  mode: StubbornTreatmentMode,
+  now = new Date(),
+) {
+  return `${STUBBORN_SPRINT_SESSION_PREFIX}${mode}:${now.toISOString()}`;
+}
+
+/** 解析结构化顽固词冲刺 id；旧记录或非法值安全回退。 */
+export function parseStubbornSprintSessionId(sessionId?: string) {
+  if (!sessionId?.startsWith(STUBBORN_SPRINT_SESSION_PREFIX)) return null;
+  const rest = sessionId.slice(STUBBORN_SPRINT_SESSION_PREFIX.length);
+  const mode = STUBBORN_TREATMENT_SEQUENCE.find((candidate) =>
+    rest.startsWith(`${candidate}:`));
+  if (!mode) return null;
+  const startedAt = rest.slice(mode.length + 1);
+  if (!Number.isFinite(new Date(startedAt).getTime())) return null;
+  return { mode, startedAt };
+}
 
 /** 已满足恢复条件、可在学习卡给出正向反馈的薄弱维度。 */
 export type StabilizedDimension = {
@@ -547,7 +594,8 @@ export function buildSprintHistory(
     groups.set(sessionId, items);
   }
   const records = [...groups.entries()].flatMap(([sessionId, items]) => {
-    const startedAt = sessionId.slice("sprint:".length);
+    const startedAt = parseStubbornSprintSessionId(sessionId)?.startedAt
+      ?? sessionId.slice("sprint:".length);
     if (!Number.isFinite(new Date(startedAt).getTime())) return [];
     const wordIds = new Set(
       items
@@ -892,6 +940,98 @@ export function buildSprintWordIds(
     .map((item) => item.wordId);
 }
 
+function activeStubbornRecordsAt(
+  input: WeakSignalInput,
+  at?: Date,
+): StubbornWordMap {
+  if (!at) return input.stubbornWords;
+  const cutoffMs = at.getTime();
+  if (!Number.isFinite(cutoffMs)) return input.stubbornWords;
+  const storedAtCutoff = Object.fromEntries(
+    Object.entries(input.stubbornWords).filter(([, record]) => {
+      const triggeredMs = new Date(record.triggeredAt).getTime();
+      const resolvedMs = record.resolvedAt
+        ? new Date(record.resolvedAt).getTime()
+        : Number.POSITIVE_INFINITY;
+      return Number.isFinite(triggeredMs)
+        && triggeredMs <= cutoffMs
+        && (!Number.isFinite(resolvedMs) || resolvedMs > cutoffMs);
+    }),
+  ) as StubbornWordMap;
+  const reviewsAtCutoff = input.reviews.filter((review) =>
+    new Date(review.reviewedAt).getTime() <= cutoffMs);
+  return {
+    ...storedAtCutoff,
+    ...rebuildStubbornWords(reviewsAtCutoff, at),
+  };
+}
+
+function stubbornTreatmentModeForWord(
+  input: WeakSignalInput,
+  wordId: number,
+  triggeredAt: string,
+  at?: Date,
+): StubbornTreatmentMode {
+  const cutoffMs = at?.getTime() ?? Number.POSITIVE_INFINITY;
+  const reviews = input.reviews
+    .filter((review) =>
+      review.wordId === wordId
+      && review.reviewedAt >= triggeredAt
+      && new Date(review.reviewedAt).getTime() <= cutoffMs)
+    .sort((first, second) => first.reviewedAt.localeCompare(second.reviewedAt));
+  // 旧版手工记录若没有对应低评分事件，不推导虚假的历史阶段。
+  if (!reviews.some((review) => review.rating <= 1)) {
+    return STUBBORN_TREATMENT_SEQUENCE[0];
+  }
+  let successStreak = 0;
+  for (let index = reviews.length - 1; index >= 0; index -= 1) {
+    if (reviews[index].rating <= 1) break;
+    successStreak += 1;
+  }
+  return STUBBORN_TREATMENT_SEQUENCE[Math.min(
+    successStreak,
+    STUBBORN_TREATMENT_SEQUENCE.length - 1,
+  )];
+}
+
+/**
+ * 顽固词按真实 review 的连续成功数分组；一次只启动一个模式，其他阶段继续保留。
+ * 传入 at 时按会话开始时刻重建候选，保证刷新后题组不因后续作答漂移。
+ */
+export function buildStubbornTreatmentRecommendation(
+  input: WeakSignalInput,
+  at?: Date,
+): Extract<SprintTreatmentRecommendation, { dimension: "stubborn" }> | null {
+  const records = activeStubbornRecordsAt(input, at);
+  const activeRecords = Object.values(records)
+    .filter((record) => record.active && Boolean(input.wordProgress[record.wordId]))
+    .sort((first, second) => {
+      const lapseDifference = (input.wordProgress[second.wordId]?.lapseCount ?? 0)
+        - (input.wordProgress[first.wordId]?.lapseCount ?? 0);
+      return lapseDifference || first.triggeredAt.localeCompare(second.triggeredAt);
+    });
+  for (const mode of STUBBORN_TREATMENT_SEQUENCE) {
+    const wordIds = activeRecords
+      .filter((record) =>
+        stubbornTreatmentModeForWord(
+          input,
+          record.wordId,
+          record.triggeredAt,
+          at,
+        ) === mode)
+      .map((record) => record.wordId);
+    if (wordIds.length) {
+      return {
+        dimension: "stubborn",
+        mode,
+        label: STUBBORN_TREATMENT_LABELS[mode],
+        wordIds,
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * 为统一冲刺入口选择当前已实现的最高优先级专项。
  * 只读取结构化测验/查词状态，不通过标签文案反推维度；已恢复的词自动退出。
@@ -945,7 +1085,7 @@ export function buildSprintTreatmentRecommendation(
       wordIds: lookupWordIds,
     };
   }
-  return null;
+  return buildStubbornTreatmentRecommendation(input);
 }
 
 /** 冲刺范围：按词本分册/单元过滤（unit 统一按字符串匹配） */

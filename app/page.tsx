@@ -67,6 +67,7 @@ import {
   buildSprintRelapseSeries,
   buildSprintSummary,
   buildSprintTreatmentRecommendation,
+  buildStubbornTreatmentRecommendation,
   buildSprintWordIds,
   buildScopedSprintWordIds,
   buildWeakConcentration,
@@ -79,7 +80,10 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  createStubbornSprintSessionId,
+  parseStubbornSprintSessionId,
   type WeakSignalInput,
+  type SprintTreatmentRecommendation,
   type StabilizedDimension,
   type WeakThresholds,
   type WordRecallStats,
@@ -497,6 +501,22 @@ export default function Home() {
     () => buildSprintTreatmentRecommendation(weakSignalInput, weakThresholds),
     [weakSignalInput, weakThresholds],
   );
+  const stubbornTreatment = useMemo(
+    () => buildStubbornTreatmentRecommendation(weakSignalInput),
+    [weakSignalInput],
+  );
+  const activeQuizCandidateWordIds = useMemo(() => {
+    if (!activeQuiz?.id.startsWith("sprint:")) return undefined;
+    const stubbornSession = parseStubbornSprintSessionId(activeQuiz.id);
+    if (!stubbornSession) return sprintTreatment?.wordIds;
+    const restoredTreatment = buildStubbornTreatmentRecommendation(
+      weakSignalInput,
+      new Date(stubbornSession.startedAt),
+    );
+    return restoredTreatment?.mode === activeQuiz.mode
+      ? restoredTreatment.wordIds
+      : undefined;
+  }, [activeQuiz, sprintTreatment, weakSignalInput]);
   // 序列最后一项就是上个完整周，继续供既有复发词列表与再冲刺入口使用。
   const sprintRelapse = sprintRelapseSeries.at(-1)?.relapse ?? null;
   const sprintRelapseWords = useMemo(
@@ -1448,12 +1468,14 @@ export default function Home() {
     title: string,
     wordIds: number[],
     originKind?: StudySession["originKind"],
+    sessionId?: string,
   ): boolean {
     if (!wordIds.length) {
       showToast("当前没有可加入学习队列的单词", 1800);
       return false;
     }
-    createActiveSession(kind, title, wordIds, originKind);
+    const session = createActiveSession(kind, title, wordIds, originKind);
+    if (session && sessionId) setActiveSession({ ...session, id: sessionId });
     if (ratingUndoTimerRef.current !== undefined) {
       window.clearTimeout(ratingUndoTimerRef.current);
       ratingUndoTimerRef.current = undefined;
@@ -1501,12 +1523,33 @@ export default function Home() {
     startSession("mistakes", "错词强化", weakWordIds(wordProgress));
   }
 
+  function startStubbornTreatment(
+    treatment: Extract<SprintTreatmentRecommendation, { dimension: "stubborn" }>,
+  ) {
+    const now = new Date();
+    const sessionId = createStubbornSprintSessionId(treatment.mode, now);
+    if (treatment.mode === "lookup-recall") {
+      return startSession(
+        "stubborn",
+        "顽固词多模式强化 · 词义主动回忆",
+        treatment.wordIds,
+        undefined,
+        sessionId,
+      );
+    }
+    setActiveQuiz({
+      ...createQuizSession(treatment.mode, now.getTime(), now),
+      id: sessionId,
+    });
+    clearSession();
+    setActiveView("quiz");
+    showToast(`已进入顽固词${treatment.label}阶段 · ${treatment.wordIds.length} 词`, 1800);
+    return true;
+  }
+
   function startStubbornSession() {
-    startSession(
-      "stubborn",
-      "顽固词专项",
-      stubbornWordIds(stubbornWords, wordProgress),
-    );
+    if (stubbornTreatment) startStubbornTreatment(stubbornTreatment);
+    else showToast("当前没有可强化的活跃顽固词", 1800);
   }
 
   function startLookupSession(wordIds = lookupWords.map(learningWordId)) {
@@ -1515,6 +1558,10 @@ export default function Home() {
 
   function startSprintSession() {
     if (sprintTreatment) {
+      if (sprintTreatment.dimension === "stubborn") {
+        startStubbornTreatment(sprintTreatment);
+        return;
+      }
       const now = new Date();
       if (sprintTreatment.mode === "lookup-recall") {
         startSession(
@@ -2137,11 +2184,7 @@ export default function Home() {
             onRecordResult={recordQuizResult}
             savedQuiz={activeQuiz}
             onQuizStateChange={setActiveQuiz}
-            candidateWordIds={
-              activeQuiz?.id.startsWith("sprint:")
-                ? sprintTreatment?.wordIds
-                : undefined
-            }
+            candidateWordIds={activeQuizCandidateWordIds}
           />
         )}
 

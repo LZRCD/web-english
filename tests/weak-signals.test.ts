@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyRating,
+  rebuildStubbornWords,
   type ReviewEvent,
   type StubbornWordMap,
   type WordProgress,
@@ -20,6 +21,7 @@ import {
   buildSprintRelapseSeries,
   buildSprintSummary,
   buildSprintTreatmentRecommendation,
+  buildStubbornTreatmentRecommendation,
   buildSprintWordIds,
   buildWeakCandidateSummary,
   buildScopedSprintWordIds,
@@ -37,6 +39,8 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  createStubbornSprintSessionId,
+  parseStubbornSprintSessionId,
   wordRecallStats,
   type WeakSignalInput,
   type WeakThresholds,
@@ -1998,4 +2002,149 @@ test("维度化处置：查词专项只含已学、未降级且无FSRS弱项的�
   assert.deepEqual(lookupWeakCandidateIds(input), [10, 11, 12]);
   assert.equal(buildSprintTreatmentRecommendation(input), null);
   assert.deepEqual(buildWordWeakSignals(11, input), ["猜错1次"]);
+});
+
+test("维度化处置：顽固词按真实 review 阶段分组，前四级仍优先", () => {
+  const lowReviews = [10, 11, 12].flatMap((wordId) => [1, 2, 3].map((day) =>
+    makeReview(wordId, 0, `2026-07-0${day}T0${wordId - 10}:00:00.000Z`)));
+  const stagedReviews = [
+    ...lowReviews,
+    makeReview(11, 2, "2026-07-04T01:00:00.000Z"),
+    makeReview(12, 2, "2026-07-04T02:00:00.000Z"),
+    makeReview(12, 2, "2026-07-05T02:00:00.000Z"),
+  ];
+  const progress = Object.fromEntries([10, 11, 12].map((wordId) => [
+    wordId,
+    { wordId, lapseCount: 0, lastRating: 2, lastReviewedAt: "2026-07-05T02:00:00.000Z" },
+  ])) as unknown as WordProgressMap;
+  const input = baseInput({
+    reviews: stagedReviews,
+    stubbornWords: rebuildStubbornWords(stagedReviews, new Date("2026-07-10T00:00:00.000Z")),
+    wordProgress: progress,
+  });
+
+  assert.deepEqual(buildStubbornTreatmentRecommendation(input), {
+    dimension: "stubborn",
+    mode: "lookup-recall",
+    label: "词义主动回忆",
+    wordIds: [10],
+  });
+  const firstAdvanced = baseInput({
+    ...input,
+    reviews: [...stagedReviews, makeReview(10, 2, "2026-07-04T00:00:00.000Z")],
+  });
+  assert.deepEqual(buildStubbornTreatmentRecommendation(firstAdvanced), {
+    dimension: "stubborn",
+    mode: "listening-spelling",
+    label: "听音拼写",
+    wordIds: [10, 11],
+  });
+
+  const spellingRelapsed = baseInput({
+    ...firstAdvanced,
+    quizAttempts: [{
+      ...makeQuizAttempt(
+        "stubborn-spelling-wrong",
+        "listening-spelling",
+        false,
+        "2026-07-06T00:00:00.000Z",
+      ),
+      wordId: 12,
+    }],
+  });
+  assert.deepEqual(buildSprintTreatmentRecommendation(spellingRelapsed), {
+    dimension: "quiz-spelling",
+    mode: "listening-spelling",
+    label: "听音拼写",
+    wordIds: [12],
+  });
+});
+
+test("维度化处置：顽固阶段只由真实 review 推进，刷新、重置、恢复与复发闭环", () => {
+  const lows = [1, 2, 3].map((day) =>
+    makeReview(10, 0, `2026-07-0${day}T00:00:00.000Z`));
+  const startedAt = new Date("2026-07-04T00:00:00.000Z");
+  const sessionId = createStubbornSprintSessionId("lookup-recall", startedAt);
+  assert.deepEqual(parseStubbornSprintSessionId(sessionId), {
+    mode: "lookup-recall",
+    startedAt: startedAt.toISOString(),
+  });
+  assert.equal(parseStubbornSprintSessionId("sprint:stubborn:broken"), null);
+
+  const activeInput = baseInput({
+    reviews: lows,
+    stubbornWords: rebuildStubbornWords(lows, startedAt),
+    wordProgress: {
+      10: { wordId: 10, lapseCount: 3, lastRating: 0, lastReviewedAt: lows.at(-1)!.reviewedAt },
+    } as unknown as WordProgressMap,
+  });
+  const blockedAttempt = {
+    ...makeQuizAttempt(
+      "same-day-no-review",
+      "listening-spelling",
+      true,
+      "2026-07-04T01:00:00.000Z",
+    ),
+    appliedToSchedule: false,
+  };
+  assert.equal(
+    buildStubbornTreatmentRecommendation(baseInput({
+      ...activeInput,
+      quizAttempts: [blockedAttempt],
+    }))?.mode,
+    "lookup-recall",
+  );
+
+  const firstSuccess = {
+    ...makeReview(10, 2, "2026-07-04T01:00:00.000Z"),
+    sessionId,
+  };
+  const advanced = baseInput({
+    ...activeInput,
+    reviews: [...lows, firstSuccess],
+  });
+  assert.equal(buildStubbornTreatmentRecommendation(advanced)?.mode, "listening-spelling");
+  assert.equal(
+    buildStubbornTreatmentRecommendation(advanced, startedAt)?.mode,
+    "lookup-recall",
+  );
+  assert.equal(buildSprintHistory(advanced.reviews).records[0]?.startedAt, startedAt.toISOString());
+
+  const reset = baseInput({
+    ...advanced,
+    reviews: [...advanced.reviews, makeReview(10, 1, "2026-07-05T00:00:00.000Z")],
+  });
+  assert.equal(buildStubbornTreatmentRecommendation(reset)?.mode, "lookup-recall");
+
+  const recoveryReviews = [
+    ...reset.reviews,
+    makeReview(10, 2, "2026-07-06T00:00:00.000Z"),
+    makeReview(10, 2, "2026-07-07T00:00:00.000Z"),
+    makeReview(10, 3, "2026-07-08T00:00:00.000Z"),
+  ];
+  const recovered = baseInput({
+    ...reset,
+    reviews: recoveryReviews,
+    stubbornWords: rebuildStubbornWords(recoveryReviews, new Date("2026-07-09T00:00:00.000Z")),
+  });
+  assert.equal(recovered.stubbornWords[10].active, false);
+  assert.equal(buildStubbornTreatmentRecommendation(recovered), null);
+
+  const relapseReviews = [
+    ...recoveryReviews,
+    makeReview(10, 0, "2026-07-09T00:00:00.000Z"),
+  ];
+  const relapsed = baseInput({
+    ...recovered,
+    reviews: relapseReviews,
+    stubbornWords: rebuildStubbornWords(relapseReviews, new Date("2026-07-10T00:00:00.000Z")),
+  });
+  assert.equal(relapsed.stubbornWords[10].active, true);
+  assert.equal(buildStubbornTreatmentRecommendation(relapsed)?.mode, "lookup-recall");
+
+  const legacy = baseInput({
+    ...activeInput,
+    reviews: [],
+  });
+  assert.equal(buildStubbornTreatmentRecommendation(legacy)?.mode, "lookup-recall");
 });

@@ -113,3 +113,30 @@
 | 查词频繁 | 结构化读取达到阈值、未被 `isLookupDemoted` 覆盖且无 FSRS 弱进度的查词词；不解析文案 | 考前薄弱冲刺；三类 Quiz 恢复后由 `lookup-recall` 接管 | 仅限本维候选，启动现有 `sprint` WordCard；初始隐藏释义，揭示后四档评分 | `rateWord` 写真实 `reviews/wordProgress/recallMs` 并保留 `sprint:*`；训练不写 `lookupStats` | 既有 `lastRating≥2 && lastReviewedAt≥lastAt` 后仅查词维度淡出 | 后续真实划词增加 count、更新 lastAt，标签与专项重新出现 | ✅ 已形成维度闭环 |
 
 本轮同时让既有 `lookupStats` 随 settings 分域持久化，并让 `sprint` 会话通过既有 `StudySession` 归一化，未新增 schema/version。冲刺 review 继续进入时间线、历史与成效统计；评分、FSRS、备份和普通入口未改。
+
+## 第 31 轮只读复核
+
+> 复核基线：`a038d48`。分支仅有用户文件 `1.txt` 未跟踪，固定端口 3000 无监听、无 PID/本轮日志；以下结论在修改前取得。
+
+| 核对项 | 当前实现 | 代码证据 | 是否可闭环 |
+|---|---|---|---|
+| 顽固触发与恢复 | `reviews` 30 天窗口内 3 次 0 或 5 次 ≤1 激活；任一低评分清零，连续 3 条 ≥2 恢复，末次低评 30 天后自然退出 | `rebuildStubbornWords` | ✅ 真实 review 可闭环 |
+| 自动/存量记录合并 | 状态归一化与页面都用重建记录覆盖存量同词记录；自动结果不另写阶段字段 | `normalizeStoredState` / `page.tsx#stubbornWords` | ✅ 可兼容 |
+| 词本与统一入口 | 词本顽固专项打开通用 WordCard；统一冲刺在前四级无建议时也回退通用卡 | `startStubbornSession` / `startSprintSession` | ❌ 无多模式路由 |
+| 低评分强化 | WordCard 的 0/1 先要求一次听写强化，完成后仍只按用户原评分写一条 review | `rateWord` / `reinforcementRating` | ✅ 不伪造成功 |
+| 可复用模式 | WordCard 主动回忆、听音拼写、中译英均可限定候选；`meaning-choice` 还要求至少 4 个可用已学词/唯一干扰项 | `WordCard` / `buildQuizQuestions` / `buildMeaningQuestion` | ✅ 前三者稳定可用 |
+| 结果与门禁 | WordCard 评分直接写真实 review；Quiz 每次写 attempt，但仅每日首次有效作答写 review/排程 | `rateWord` / `recordQuizResult` / `shouldApplyQuizToSchedule` | ✅ 职责明确 |
+| 阶段归因 | 修改前无顽固阶段；但 `reviews` 尾部连续成功数足以纯派生 0/1/2 阶段 | `rebuildStubbornWords` 的 `successStreak` | ❌ 缺结构化派生 |
+| 恢复、重置、复发 | 三条真实成功 review 淡出；低评分中断；恢复后窗口内新低评可按既有计数重新激活 | `rebuildStubbornWords` | ✅ 已具备 |
+| 冲刺时间线与成效 | 任何 `sessionId.startsWith("sprint:")` 的 review 都进入时间线/成效；历史列表修改前只接受冒号后直接 ISO | `buildWordSignalTimeline` / `buildSprintEffectiveness` / `buildSprintHistory` | ⚠️ 需兼容结构化时间 |
+| 刷新恢复 | `activeSession`、`activeQuiz` 已持久化；Quiz 候选需按会话开始时刻重建，避免作答后阶段变化导致题组漂移 | settings 分域 / `restoreQuizQuestions` | ⚠️ 需固定启动时候选 |
+
+只读结论：无需新增 schema 即可把“最近低评分后的连续成功 review 数”作为真实阶段源。同日仅新增 attempt、未写 review 时阶段不会推进。由于 `meaning-choice` 的最低已学词与干扰项约束无法保证所有顽固词可训练，最小可靠序列选择“主动回忆 WordCard → 听音拼写 → 中译英”；统一入口保持前三类 Quiz → 查词 → 顽固 → 通用，词本入口直接复用同一顽固推荐。
+
+## 第 31 轮实施后目标行
+
+| 薄弱维度 | 信号来源 | 当前入口 | 实际训练方式 | 结果写入位置 | 降级规则 | 复发规则 | 状态 |
+|---|---|---|---|---|---|---|---|
+| 顽固词 | 继续由 `rebuildStubbornWords(reviews)` 触发；阶段按触发后尾部真实成功 review 数纯派生，不解析文案 | 前四级恢复后接管统一冲刺；词本顽固专项复用同一结构化推荐 | 阶段 0 主动回忆 WordCard，阶段 1 听音拼写，阶段 2 中译英；不同阶段词分组，本次只训练一组 | WordCard 写 `reviews/wordProgress/recallMs`；Quiz 每次写 `quizAttempts`，仅既有门禁允许时写 review；均用 `sprint:stubborn:<mode>:<ISO>` | 只有真实 review 推进；连续 3 条 ≥2 后由既有重建规则淡出，同日被门禁拦截的 attempt 不推进 | 任一低评分重置阶段并保持 active；恢复后按既有 30 天低评分窗口重新激活 | ✅ 已形成维度闭环 |
+
+结构化 sessionId 未改变 ReviewEvent schema，旧/非法记录安全回退起始阶段；历史解析兼容内嵌模式后的 ISO，时间线与成效仍按 `sprint:*` 感知。刷新时用 session 开始时刻重建原候选组。评分、FSRS、每日门禁、备份、package scripts 和前三类 Quiz/查词处置均未修改。
