@@ -1,49 +1,44 @@
-# 下一轮执行 Prompt：第 42 轮第一阶段架构重构（信号结构化 + 日期统一）
+# 下一轮执行 Prompt：第 43 轮架构重构第二阶段（AI Provider 客户端合并）
 
 ## 当前现场
 
-- 第 41 轮阶段 D 已完成：分维度观察报告 `buildDimensionObservationReport`、定向 91/91、`npm test` 211/211、固定端口 3000 signal-flow 18/18（45.8s）。
-- 任务 A（第 39~41 轮）已停止，最终提交 `1a4d330`（分支 `codex/follow-up-hardening`，相对远端 ahead 46，未 push）。
-- 原始项目目录 `D:\me\小东西\单词` 工作区仅剩受保护未跟踪项（`1.txt`、`docs/architecture-analysis-2026-08-09.md`、第 38/40/41 轮日志、`.zcode/`）；端口 3000/3001 无监听。
+- 第 42 轮（任务 B）第一阶段架构重构已完成：信号结构化 key + 日期工具统一，提交 `305f059`，merge `aaa1a1e` 合回 `codex/follow-up-hardening`（HEAD，ahead 48，未 push）。
+- 第 43 轮候选审计已完成（子 Agent 8e62e9f2，只读）：**唯一目标 = AI Provider 客户端合并**。5 个 API 路由 × 7 类 Provider 逻辑重复（env 读取、/chat/completions 请求构造、Markdown JSON 清理、响应提取、错误解析、重试、失败日志），合并为单一 `lib/ai-provider.ts` 是当前最高价值断链（新增 Provider 现需改 7 个触点 → 1 个）。
+- 工作区仅剩受保护未跟踪项；端口 3000 无监听。
 
 ## 前置门槛
 
-- HEAD 必须仍为 `1a4d330`；若不一致停止并报告。
-- 从 `1a4d330` 切出短命分支 `codex/refactor-stage1`，任务 B 全部代码修改、测试、构建和提交只发生在本分支。
-- 全程使用 ZCode 接入的 DeepSeek V4 Flash（主 Agent 与子 Agent 均须以外部证据确认模型，配置别名 `zen-v4-flash=deepseek-v4-flash` 视为等价）；无法确认时停止并如实报告。
-- 不修改受保护未跟踪项；不触碰任务 A 已提交内容；不推送远端。
+- HEAD 必须为 `aaa1a1e`；从 `codex/follow-up-hardening` 切短命分支 `codex/refactor-stage2`，全部代码修改/测试/构建/提交只在本分支。
+- 全程使用 ZCode 接入的 DeepSeek V4 Flash（主 Agent 与子 Agent 均须外部证据确认，`zen-v4-flash=deepseek-v4-flash` 等价）；无法确认停止并如实报告。
+- 不修改受保护未跟踪项；不触碰任务 A/B 已提交内容；不推送远端。
 
 ## 唯一目标
 
-WordLoop 第一阶段架构重构，消除「中文字符串作为模块通信协议」的高风险边界，统一分散的日期工具：
+把 5 个 API 路由（app/api/coach、enrich、enrich/review、lookup、sense-frequency）重复实现的 Provider 客户端逻辑合并为唯一实现：
 
-1. 信号类型改为结构化稳定 key（`lookup`/`guess`/`quiz-spelling`/`quiz-c2e`/`quiz-choice`/`slow-recall`/`stubborn`/`lapse`），key、数值、证据与中文标签分离；统计逻辑只依赖结构化 key，不再解析中文前缀（`startsWith("查过")` 等）。
-2. 中文标签由独立 formatter/投影生成，逐字保持现有文案（含 CSV `词,信号列表`、复制文本、E2E 断言文案）；兼容投影保持 `signals: string[]` 形状（注意 `app/page.tsx:404` 的 `as Record<number, string[]>` 强转，严禁改变元素类型）。
-3. 识别并统一重复日期工具：`localDateKey`/`localDayStart`/`addLocalDays`/`localWeekStart` 收敛到新建 `lib/date-utils.ts`（逐字符复制现有实现，行为零变化；`study.dateKey` 双语句 re-export 保持调用点零改动；不抽取毫秒窗口、不修时区混合）。
-4. 补充行为测试（key↔label 映射、8 维归类、日期边界），确保重构前后结果一致；既有 E2E 语义不得改变。
-5. 不改变现有业务行为、统计结果、StoredState、IndexedDB schema、信号阈值、冲刺/达标/复发计算；不修改评分、FSRS、每日 Quiz 门禁、备份链路或 package.json scripts；不拆分 `page.tsx`、不重构 `useStudyPersistence`、不创建 God Module、不引入事件总线。
+1. 新建 `lib/ai-provider.ts`：env 读取（`DEEPSEEK_API_KEY ?? OPENAI_API_KEY`、`OPENAI_BASE_URL ?? "https://api.deepseek.com"`、`OPENAI_MODEL ?? "deepseek-v4-flash"`）、参数化 `chatCompletion`（messages/temperature/maxTokens/timeoutMs/thinking/responseFormat/maxBytes）、`parseJsonContent`（Markdown 清理）、可选重试；参照 `lib/api-guard.ts` 的「唯一实现」模式。
+2. 改写 5 个路由：仅替换 Provider 逻辑段；**逐字节保持**各路由参数值（超时 coach/enrich 15000、review/lookup 12000、sense-frequency 20000；温度 0.7/0.2/0/0.1/0.2；max_tokens 260/1400/180/360/1200；thinking/response_format 开关按各路由原请求体；响应上限 1M/2M/512K/1M/2M；错误文案 `AI service unavailable`/`云端模型返回 ${status}` 等；重试仅 enrich/lookup/sense-frequency MAX_ATTEMPTS=2）。保留：no-key 分支与文案（coach `localAnswer` 本地兜底、其余 503）、系统提示词、boundedText 裁剪、normalize 校验、coach 静默 catch（不新增日志）。
+3. `tests/rendered-html.test.mjs:287` 断言 `assert.match(coach, /AbortSignal\.timeout\(15000\)/)` 合并后必红：按最小改动同步（改为断言新 `lib/ai-provider.ts` 源码中的等价特征），不得影响同文件其他断言。
+4. 新建 Provider 单测：**mock fetch**（不得真实云调用），覆盖 env 默认值、baseUrl 尾斜杠、Bearer 头、5 组超时/上限参数传递、choices 提取、Markdown 清理、错误抛错、重试；测试并入 `tests/api-guard.test.ts`（`npm test` 显式列出的既有 API 基础设施测试文件，**不修改 package.json scripts**）。
+5. 不修改：`lib/api-guard.ts`、`lib/enrichment.ts`、`lib/sense-frequency.ts`、`lib/learning.ts`、hooks、`README.md`、`vite.config.ts`、package.json scripts、E2E 文件；不引入新依赖。
 
 ## 强制安全规则
 
 - 禁止 `git reset --hard`、`git checkout --`、`git clean`、强制覆盖、删除 Git lock；禁止 `git add .`/`git add -A`/`git commit -am`。
-- 不删除、不覆盖用户已有修改；不自动清理任务 A 日志；不推送远端。
-- 业务含义无法确认时标记「不确定」，不得自行定义产品规则；已知不确定项（到期词首次无实现、`answeredAt` 本地/UTC 混合、答错也写入 FSRS、ms 窗口 vs 日历天、attempt 5000 条裁剪）只固定现状，不改变。
-- 结论必须基于当前实际代码重新验证，不得把架构报告历史状态当现状。
+- 不删除、不覆盖用户已有修改；不自动清理既有轮次日志；不推送远端。
+- 严格「只搬运不改口径」：不得顺手统一超时/温度/上限/错误文案（那是行为变化）；业务含义不确定项保持现状。
+- 结论必须基于当前实际代码重新验证；不改评分、FSRS、每日 Quiz 门禁、备份、schema/StoredState、page.tsx、useStudyPersistence。
 
 ## 执行流程
 
-1. Round 0 只读基线：git status/HEAD/分支/log/diff、端口 3000 状态；记录主 Agent 模型外部证据（配置快照、启动命令、会话文件模型字段，至少两项一致）。
-2. 并行启动三个只读子 Agent（均为 ZCode DeepSeek V4 Flash，各自记录模型验证块）：
-   - B-1 薄弱信号契约审查（weak-signals/session-summary/insights 及调用者、测试）：中文协议位置、生产者/转换者/消费者、最小结构化信号模型、稳定 key 清单、中文文案兼容方法、历史持久化兼容分析。
-   - B-2 测验与日期口径审查（quiz/learning/study/insights/session-summary 及测试）：每日首次/到期词首次/本地自然日/日期 key/本周/上一窗口/跨午夜，标记一致与冲突，提出不改变行为的日期工具抽取边界。
-   - B-3 测试与回归边界审查（weak-signals/insights/session-summary/quiz 测试、signal-flow E2E、rendered-html）：行为契约清单、脆弱测试、最小回归集合、最小验证命令。
-3. 主 Agent 汇总并独立复核（不得照搬子 Agent 结论）：验证关键文件:行号，识别矛盾，输出实施前计划（修改文件/不动文件/信号映射/兼容策略/日期工具边界/测试/验证命令/回滚点/不确定规则）。
-4. 实施阶段默认单实施子 Agent（防止 session-summary 等文件并发冲突），按顺序：结构化 key 与类型 → 保留中文 formatter → 消费者改 key → 移除中文解析 → 补结构化测试 → 抽取日期工具 → 替换调用点 → 补日期测试；实施子 Agent 不得提交。
-5. 分级验证：typecheck → weak-signals/session-summary/insights/quiz 定向单测 → 日期边界测试 → `npm test` 全量（含 build）→ lint → build → signal-flow E2E（固定端口 3000，专属日志，验证后按证据关闭 PID，3000 释放）。新单测进入对应测试文件；日期测试并入 `tests/study.test.ts`（dateKey 原归属，不改 package scripts）；E2E 只进 `tests/e2e/signal-flow.spec.mjs` 且既有语义不变。build 生成的 build-info 恢复基线，不进入提交。
-6. 创建第 42 轮唯一提交（`codex/refactor-stage1`），提交前展示 status/diff，只暂存任务 B 文件；更新 `docs/iterations/round-42.md`、`docs/project-evolution.md`（第六十一次迭代）、覆盖本文件为下一阶段（第 43 轮）prompt。
-7. 合回 `codex/follow-up-hardening`（`git merge --no-ff`），合并后完整验证；不推送。
+1. Round 0 只读基线（git 状态/HEAD/端口 3000）+ 主 Agent 模型证据；切分支 `codex/refactor-stage2`。
+2. 实施阶段单实施子 Agent（ZCode DeepSeek V4 Flash，记录模型验证块）：按上述边界实现 `lib/ai-provider.ts` + 5 路由替换 + rendered-html:287 断言同步 + api-guard.test.ts 并入新单测；子 Agent 不得提交。
+3. 主 Agent 审查全部 diff：逐路由核对参数值/文案/no-key 分支逐字节保持；核对 fetch 请求体与原实现逐字段一致（用 git diff 对照 5 个路由原样）。
+4. 分级验证：typecheck → 定向单测（api-guard/ai-provider 相关）→ `npm test` 全量（含 build，基线 217 + 新增）→ lint → build → signal-flow E2E（固定端口 3000，专属日志，验证后按证据关闭 PID，3000 释放）；build 生成的 build-info 恢复基线（安全补丁，不进入提交）。
+5. 创建第 43 轮唯一提交（`codex/refactor-stage2`）：只暂存任务 B 文件 + `lib/ai-provider.ts` + 测试 + `docs/iterations/round-43.md` + `docs/project-evolution.md`（第六十二次迭代）+ 本文件（覆盖为第 44 轮）。提交前展示 status/diff 自查。
+6. 合回 `codex/follow-up-hardening`（`git merge --no-ff`），合并后完整验证；不推送。
 
 ## 输出要求
 
-- 按第十九节格式输出「第一阶段重构报告」：Round 0 基线、子 Agent 模型与分工、审查结论、实际修改、架构边界变化、兼容性说明、验证结果、Git 提交、未解决问题、合并状态。
-- 最终汇报五要素简版（总长 ≤300 字）：本轮目标、修改文件与关键联动、lint/typecheck/单测数字/E2E、commit hash 与 message、遗留问题与下一阶段建议。
+- 按第 42 轮报告格式输出：Round 0 基线、子 Agent 模型与分工、实际修改、兼容性说明、验证结果（实际数字）、Git 提交（哈希/message）、未解决问题、与既有轮次合并状态。
+- 最终汇报五要素简版（总长 ≤300 字）。

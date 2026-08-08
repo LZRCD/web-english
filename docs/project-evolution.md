@@ -1291,3 +1291,20 @@
 - 固定 3000 signal-flow 18/18（47.1s），既有 18 条语义未改；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
 - `lib/` 下无中文文案解析信号类型残留；日期函数唯一实现在 `lib/date-utils.ts`。
 - 任务 B（第 42 轮）完成并合回 `codex/follow-up-hardening`；下一阶段为架构重构第二阶段（候选：AI Provider 客户端合并等），阶段 E 审计最后执行。
+
+## 第六十二次迭代：架构重构第二阶段（AI Provider 客户端合并）
+
+本次迭代：2026-08-09。
+
+### 实现与边界
+
+- 新建唯一实现 `lib/ai-provider.ts`：`getProviderConfig`（env 回退）、`chatCompletion`（参数化 messages/temperature/maxTokens/timeoutMs/thinking/responseFormat/maxBytes，按「有则含无则不含」拼装请求体）、`parseJsonContent`（Markdown 围栏清理）、`withRetry`（原 MAX_ATTEMPTS 循环语义）；5 个 API 路由（coach/enrich/enrich/review/lookup/sense-frequency）的 7 类重复 Provider 逻辑（env 读取、请求构造、JSON 清理、响应提取、错误解析、重试、日志）收敛为 1 处。
+- 行为逐字节保持：各路由超时/温度/词数/thinking 与 response_format 有无/响应上限/错误文案/no-key 分支（coach localAnswer 兜底、其余 503）/重试范围全部按原实现；日志前缀 4 处逐字保留，coach 静默 catch 不新增日志；`rendered-html.test.mjs:287` 断言同步为新 lib 的等价断言。
+- 未新增 schema/version/store/domain，未改评分、FSRS、每日 Quiz 门禁、备份、package scripts、推荐优先级、历史数据；未动 api-guard/enrichment/sense-frequency/learning/hooks/README/vite.config/page.tsx/useStudyPersistence。
+- 第 43 轮文档见 `docs/iterations/round-43.md`；第 42 轮（任务 B）未回滚；阶段 E 边界只读审计仍顺延到最后。
+
+### 验证与阶段状态
+
+- `npm run typecheck`/`npm run lint` 通过（0 问题）；定向 21/21（api-guard 12 + rendered-html 9）；`npm test` 含生产构建 226/226（基线 217 + 新增 9：Provider env 回退、JSON 清理、请求体/信号/Bearer、字段有无、choices 缺失、非 2xx 文案、maxBytes、重试语义），单测 mock fetch、无真实云调用。
+- 固定 3000 signal-flow 18/18（46.5s），既有 18 条语义未改（E2E 无 API key 全走 no-key 分支）；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
+- 架构重构第二阶段完成：新增 Provider/调整超时/统一日志的改动点从 7 处收敛为 1 处；下一阶段为第 44 轮（候选：weak-signals 拆分、useSelectionLookup 拆分、正则测试替换、View model/CSS 拆分，需候选审计选定），阶段 E 审计最后执行。

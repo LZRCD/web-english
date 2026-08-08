@@ -5,6 +5,7 @@ import {
   boundedText,
   readJsonBody,
 } from "../../../lib/api-guard";
+import { chatCompletion, getProviderConfig } from "../../../lib/ai-provider";
 
 type CoachRequest = {
   word?: {
@@ -71,44 +72,31 @@ async function handlePost(request: NextRequest) {
   if (!body.word?.word || typeof body.prompt !== "string" || !body.prompt.trim()) {
     return NextResponse.json({ error: "缺少当前单词或问题" }, { status: 400 });
   }
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
-  const model = process.env.OPENAI_MODEL ?? "deepseek-v4-flash";
+  const { apiKey } = getProviderConfig();
 
   if (!apiKey) {
     return NextResponse.json({ answer: localAnswer(body), mode: "local", reason: "missing_key" });
   }
 
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.7,
-        max_tokens: 260,
-        messages: [
-          {
-            role: "system",
-            content: "你是一名简洁、准确的考研英语词汇教练。围绕2027考研英语红宝书当前单词，用考研阅读语境、熟词僻义、词根联想、近义词辨析和主动回忆帮助中文母语学习者。若输入含人工确认的 relation，必须遵守该关系，不把独立词义误判成普通词形变化。回答不超过180字，不照抄教材，不堆砌知识。",
-          },
-          {
-            role: "user",
-            content: JSON.stringify(body),
-          },
-        ],
-      }),
+    const content = await chatCompletion({
+      messages: [
+        {
+          role: "system",
+          content: "你是一名简洁、准确的考研英语词汇教练。围绕2027考研英语红宝书当前单词，用考研阅读语境、熟词僻义、词根联想、近义词辨析和主动回忆帮助中文母语学习者。若输入含人工确认的 relation，必须遵守该关系，不把独立词义误判成普通词形变化。回答不超过180字，不照抄教材，不堆砌知识。",
+        },
+        {
+          role: "user",
+          content: JSON.stringify(body),
+        },
+      ],
+      temperature: 0.7,
+      maxTokens: 260,
+      timeoutMs: 15000,
+      maxBytes: 1024 * 1024,
+      errorMessage: () => "AI service unavailable",
     });
-
-    if (!response.ok) throw new Error("AI service unavailable");
-    const data = await readJsonBody<{
-      choices?: Array<{ message?: { content?: string } }>;
-    }>(response, 1024 * 1024);
-    const answer = boundedText(data.choices?.[0]?.message?.content, 500, false);
+    const answer = boundedText(content, 500, false);
     return NextResponse.json({ answer: answer || localAnswer(body), mode: "cloud" });
   } catch {
     return NextResponse.json({ answer: localAnswer(body), mode: "local", reason: "upstream_error" });
