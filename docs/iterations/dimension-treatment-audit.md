@@ -2,6 +2,54 @@
 
 > 审计日期：2026-08-08 ｜ 只读基线：`6a4f725` ｜ 分支：`codex/follow-up-hardening`
 
+## 第 39 轮：阶段 C 未来 sessionId 归因审计
+
+> 审计日期：2026-08-09 ｜ 只读基线：`54ab960`。本节审计未来编码可行性；示例是第 40 轮拟写格式，不代表已经存在或允许回填的历史事实。
+
+### 完整入口证据矩阵
+
+| 处置入口 | 未来 sessionId 示例 | 当前创建函数 / 下一轮编码点 | 当前解析函数 / 下一轮解析点 | 显式唯一维度 | review 写入 | 刷新保持 | B 链连接 | 旧历史归因 | 歧义 | 审计结论 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 考前薄弱冲刺：听音拼写 | `sprint:treatment:listening-spelling:<ISO>` | `startSprintSession` 根据 `SprintTreatmentRecommendation.dimension=quiz-spelling, mode=listening-spelling` 创建 `activeQuiz`；下一轮调用统一编码器 | 当前只有顽固解析器；下一轮统一解析为 `dimension=listening-spelling` + startedAt | 是，推荐对象和 Quiz mode 同时明确 | `QuizView` → `recordQuizResult`；仅既有每日门禁通过时 `applyRating`，且 `sprint:*` 原样写入 | `activeQuiz.id/mode/startedAt/questionWordIds` 经分域与 normalize 保持 | 成功 review 可作锚点；后续任一 sprint 仍截断，`quiz:*` review 仍只作随访 | 旧 `sprint:<ISO>` 不可归因 | 当前三类专项共用普通 id | 第 40 轮直接接入新编码；不改 Quiz 门禁 |
+| 考前薄弱冲刺：中译英 | `sprint:treatment:chinese-to-english:<ISO>` | 同上，结构化推荐为 `quiz-c2e/chinese-to-english` | 统一解析为 `chinese-to-english` | 是 | 同上 | 同上 | 同上 | 不可 | 当前与其他普通 sprint 相同 | 可直接编码 |
+| 考前薄弱冲刺：释义辨析 | `sprint:treatment:meaning-choice:<ISO>` | 同上，结构化推荐为 `quiz-choice/meaning-choice` | 统一解析为 `meaning-choice` | 是 | 同上 | 同上 | 同上 | 不可 | 当前与其他普通 sprint 相同 | 可直接编码 |
+| 考前薄弱冲刺：查词主动回忆 | `sprint:treatment:lookup-recall:<ISO>` | `startSprintSession` 已拿到 `dimension=lookup, mode=lookup-recall`，但当前调用 `startSession("sprint")` 丢维度；下一轮把统一 id 传入已有可选 `sessionId` | 统一解析为 `lookup-recall` | 是；只含达到查词阈值、未降级且无 FSRS 弱进度的候选 | WordCard `rateWord` → `applyRating(activeSession.id)` | activeSession normalize/hydrate 原样保持 | 成功 review 可作锚点，规则不变 | 不可 | 当前与 slow/lapse/generic 同 id | 可直接编码 |
+| 考前 fallback：整组只含慢回忆 | `sprint:treatment:slow-recall:<ISO>` | 当前 `buildSprintWordIds` + `startSession("sprint")` 不携维度；下一轮只能由启动时结构化事实对完整词集做唯一性判定后编码 | 统一解析为 `slow-recall` | 当前否；下一轮只有每个目标均仅有慢回忆且无猜错/其他支持信号时才是 | WordCard `rateWord` 保留真实 `recallMs/sessionId` | activeSession 保持 | 可接 B 链 | 不可 | 不能解析 `buildWordWeakSignals` 中文标签；多信号即不唯一 | 支持未来唯一整组；否则 generic |
+| 考前 fallback：整组只含 lapse | `sprint:treatment:lapse:<ISO>` | 同上；启动时结构化检查 `reviews/wordProgress` 与完整候选 | 统一解析为 `lapse` | 当前否；下一轮只有完整词集均唯一属于 lapse 时才是 | WordCard 真实评分；不改 FSRS | activeSession 保持 | 可接 B 链 | 不可 | lapseCount、慢回忆、查词等可同时存在 | 支持未来唯一整组；否则 generic |
+| 考前 fallback：混合/多维/猜错/不可证明 | `sprint:treatment:generic-sprint:<ISO>` | `startSprintSession` fallback → 统一编码器 | 统一解析为 `generic-sprint` | 明确“不是单一可证明维度”，不是 unknown | WordCard 真实评分 | activeSession 保持 | 可接 B 链 | 旧记录仍 unknown，不能并入已知 generic | 同 session 可含不同弱因 | 必须写 generic，不追求虚假覆盖率 |
+| 分册/单元限定冲刺 | `sprint:treatment:generic-sprint:<ISO>` | `startScopedSprint` → `buildScopedSprintWordIds` → `startSession`；下一轮显式传 generic id | 统一解析 | 否；范围只是位置，不是处置维度 | WordCard 真实评分 | activeSession 保持 | 可接 B 链 | 不可 | 区域内可混合全部弱因 | 固定 generic |
+| 完成页“仍需关注”补漏 | `sprint:treatment:generic-sprint:<ISO>` | `startResprintSession` 按当前 `stillWeakWords` 开通用卡 | 统一解析 | 否 | WordCard 真实评分 | activeSession 保持 | 新 session 无条件截断旧锚点并建立自己的未来锚点 | 来源 session 维度不可自动继承 | 当前仍弱原因可能已变化/多维 | 固定 generic |
+| 当前仍薄弱词再冲刺 | `sprint:treatment:generic-sprint:<ISO>` | `startSprintFromRelapse` 按当前统一画像词集开通用卡 | 统一解析 | 否 | WordCard 真实评分 | activeSession 保持 | 新 sprint 截断旧观察 | 不可 | 指标本身不能区分从未恢复与复发，词集也可多维 | 固定 generic |
+| 冲刺历史“再跑一次” | `sprint:treatment:generic-sprint:<ISO>` | `startSprintFromHistory` 只用 `buildSprintRecordWordIds` 取词，随后开通用 WordCard | 统一解析新 id；原 id 仅用于精确取词 | 否；当前训练方式和当前弱因均未由原 id证明 | WordCard 真实评分 | activeSession 保持 | 新 sprint 截断旧观察 | 旧源 session 若 unknown 继续 unknown；即使新源已知也不自动继承 | 原会话可能是 Quiz，复跑却是 WordCard；当前状态也可能变化 | 固定 generic，禁止继承来源维度 |
+| 词本/统一入口：顽固主动回忆 | `sprint:stubborn:lookup-recall:<ISO>` | `startStubbornTreatment` → `createStubbornSprintSessionId` | `parseStubbornSprintSessionId` 已可取 mode/startedAt；统一解析器应委托并返回 `dimension=stubborn, submode=lookup-recall` | 是，主维度 stubborn + 子 mode | WordCard `rateWord` | activeSession 保持，启动时刻可重建阶段候选 | 可接 B 链 | 已有结构化历史可归因 stubborn | 不能扁平映射成普通 lookup-recall | 保留格式，统一解析，不迁移 |
+| 词本/统一入口：顽固听音拼写 | `sprint:stubborn:listening-spelling:<ISO>` | 同上，创建 activeQuiz | 同上，submode 为 listening-spelling | 是，主维度 stubborn | Quiz 首次有效结果原样写 id | activeQuiz + 题组快照保持 | 可接 B 链 | 已有结构化历史可归因 stubborn | 不能归到普通拼写专项 | 保留格式 |
+| 词本/统一入口：顽固中译英 | `sprint:stubborn:chinese-to-english:<ISO>` | 同上 | 同上，submode 为 chinese-to-english | 是，主维度 stubborn | 同上 | 同上 | 可接 B 链 | 已有结构化历史可归因 stubborn | 不能归到普通中译英专项 | 保留格式 |
+| 旧普通冲刺 | 历史实值 `sprint:<ISO>` | `createStudySession` 或旧 Quiz 覆盖 id；不再新写此格式 | 统一解析应返回合法 startedAt、`dimension=unknown`、legacy 格式 | 否 | 历史 review 保持原样 | normalize 保持 | 仍可作 B 链锚点/截断 | 只能显示“未标注/通用冲刺”，数据层是 unknown | 同一格式覆盖所有旧入口 | 不回填、不猜、不改写成 generic-sprint |
+| 非法/未知 sprint | 如 `sprint:broken`、`sprint:treatment:new-mode:<ISO>` | 非法或未来未知输入 | 统一解析安全返回 unknown；时间非法则 startedAt 缺省，不抛错 | 否 | `startsWith` 消费者仍可能把它视为 sprint review | 原字符串保持 | 若已在 reviews，B 链仍按 sprint 截断；不得因解析失败变普通 review | 不可 | 当前 `buildSprintHistory` 会过滤无有效时间记录 | 安全兼容，历史列表不伪造时间 |
+| 无 sessionId 的旧 review | 无 | 无 | 非 sprint / unknown，无 startedAt | 否 | review 本身是真实评分 | normalize 仍允许缺省 | 可作为锚点后的首次正常随访，不能作 sprint 锚点 | 不可 | 缺失不等于某种通用处置 | 保持 B 链现状 |
+
+### 编码、解析与 startedAt 统一边界
+
+- 当前唯一编码器只覆盖顽固：`createStubbornSprintSessionId`；唯一解析器也只覆盖顽固。普通 `createStudySession` 只按 kind 拼接 ISO，无法接收维度。
+- `buildSprintHistory` 是确定断链：它只先尝试顽固解析，否则执行 `sessionId.slice("sprint:".length)`。任何 `sprint:treatment:<dimension>:<ISO>` 都会把 `treatment:...` 当成日期并被过滤。
+- 第 40 轮应提供唯一公开编码器、解析器和 startedAt 提取，所有会话创建与日期消费者委托它；不允许每个入口自行拼字符串或每个统计自行切片。
+- 统一解析结果应显式区分 `dimension=unknown` 与 `dimension=generic-sprint`。前者表示证据缺失，后者表示启动时已经知道这是混合/通用处置。
+- 枚举至少覆盖 `listening-spelling`、`chinese-to-english`、`meaning-choice`、`lookup-recall`、`stubborn`、`slow-recall`、`lapse`、`generic-sprint`、`unknown`；顽固额外返回合法 `submode`，避免子模式与普通维度碰撞。
+
+### 刷新、消费者与第 38 轮 B 链
+
+- `ReviewEvent.sessionId` 经 `applyRating` 写入、`normalizeReview` 读取时原样保持；`activeSession.id` 经 `normalizeSession`，`activeQuiz.id` 经 `normalizeQuizSession` 原样保持。现有 `splitStoredState` 已把 activeSession/activeQuiz 放进 settings、reviews 放进 reviews 域，无需新 schema。
+- activeQuiz 的 `questionWordIds` 是实际题组快照。未来新 id 即使当前尚未被顽固专用解析器识别，快照仍可固定目标；第 40 轮统一解析不得削弱快照优先或旧会话安全回退。
+- 时间线、配对基线、周成效、当前仍薄弱 cohort 和 B 链都用 `startsWith("sprint:")`，因此新格式天然仍被视为 sprint。`buildSprintHistory` 的 startedAt 是唯一已确认会漏新格式的消费者。
+- `buildSprintRetentionSeries` 必须继续让任意下一 `sprint:*` 无条件截断；维度只附着成功锚点，不改变窗口、最近锚点、随访分母或 `(reviewedAtMs,id)` 总序。`quiz:*` review 可以是随访，但其 mode 不能倒推锚点维度。
+- `buildSprintRecordWordIds` 按完整 sessionId 精确匹配，天然支持新格式；历史复跑只能复用原词集，新会话写 generic，不能把源 id 维度冒充当前处置事实。
+
+### 阶段 C 审计结论
+
+现状是“部分可辨识”：顽固三阶段完整可辨识；三类 Quiz 与查词入口在启动瞬间有结构化维度，但普通 id 丢失该事实；slow-recall/lapse 只有在下一轮以结构化数据证明完整启动词集唯一时才可标注；其余混合入口必须 generic。旧普通 sprint 永远 unknown。
+
+因此本轮不允许先做偏样本分维度报告。第 40 轮唯一目标应是“最小统一未来 sessionId 编码纵向链”，先让创建、解析、startedAt、写入、刷新、历史、成效、B 链与再跑全部兼容；完成后再判断阶段 C 是否达到进入阶段 D 的门槛。
+
 ## 只读基线矩阵
 
 以下状态记录本轮修改前的真实数据流。入口按代码传入的结构化参数追踪，不按按钮名称或标签文案推断。

@@ -27,6 +27,7 @@
 | 2026-08-09 | 第 36 轮（本提交） | 将周报、4 周趋势与冲刺完成页统一为按 wordId 配对、跨词等权的回忆变化观察，并显式报告配对样本。 |
 | 2026-08-09 | 第 37 轮（本提交） | 将近 7 天全局指标收敛为评分事件达标占比，区分无样本、真实 0 与百分点差，阶段 A 完成。 |
 | 2026-08-09 | 第 38 轮（本提交） | 建立成功冲刺到下一次冲刺前首次正常 review 的 4 周保持观察，独立披露覆盖、保持、截断、间隔与配对测时，阶段 B 完成。 |
+| 2026-08-09 | 第 39 轮（本提交） | 只读审计全部冲刺入口的 sessionId 全链，确认现状仅部分可辨识，并确定下一轮统一未来编码、旧记录 unknown 与混合入口 generic 的边界。 |
 
 ## 原始理念
 
@@ -1217,3 +1218,23 @@
 - signal-flow 17/17（42.8s）：新增第 17 条稳定完整周 seed，覆盖保持成功/失败、未观察、成功下一 sprint 截断、覆盖/保持/间隔/null/paired recall、quiz review 与 quizAttempt 不干扰；既有 16 条语义保持。
 - 阶段 B 的 B1 cohort/截断、B2 覆盖/保持和 B3 配对回忆测时已完整闭环。下一轮只进入阶段 C“未来处置维度归因”只读审计，严格复用既有结构化 sprint sessionId，不新增 schema、不回填历史、不提前实现分维度或自适应。
 - 第 38 轮未触发停止门槛；阶段 B 完成后可自动串行进入第 39 轮“未来处置维度归因”只读审计，不提前做分维度实现。
+
+## 第五十八次迭代：证据驱动学习第六轮（未来处置维度归因只读审计）
+
+本次迭代：2026-08-09。
+
+### 只读审计
+
+- 从所有入口追到会话创建、真实 review 写入、IndexedDB 分域、normalize/hydrate、题组快照、时间线、历史、成效、当前仍薄弱 cohort、第 38 轮保持链与历史再跑。
+- 现有 `sprint:stubborn:<mode>:<ISO>` 可稳定辨识顽固主维度和三种子模式；三类 Quiz 与查词专项在启动时已有结构化推荐事实，但都写成 `sprint:<ISO>`，落入 review 后与通用、限定、补漏、当前仍薄弱再冲刺、历史再跑、slow-recall 和 lapse 不可区分。
+- `ReviewEvent.sessionId`、activeSession/activeQuiz 及现有分域都原样保留字符串，无需新增 schema/version/store/domain。所有统计和第 38 轮 B 链均以 `startsWith("sprint:")` 识别，未来新格式不会失去 sprint 身份。
+- 确认唯一直接兼容缺口是 `buildSprintHistory` 的 startedAt：它只解析顽固格式，否则把 `sprint:` 后整体当日期；拟议 `sprint:treatment:<dimension>:<ISO>` 会被过滤。因此下一轮必须同时统一编码、解析和 startedAt，不能只改入口拼串。
+- 旧 `sprint:<ISO>` 只能返回合法时间和 `dimension=unknown`，不得回填、不得按当前标签、Quiz 文案/attempt 或来源词集猜测。未来明确混合入口应写 `generic-sprint`，unknown 与 generic 必须分开。
+- slow-recall/lapse 当前没有独立推荐对象；只有启动时用结构化事实证明完整目标词集是单一维度时才可编码，否则写 generic。禁止解析 `buildWordWeakSignals` 中文标签。
+
+### 阶段结论与下一轮
+
+- 阶段 C 尚未完成，但现有字符串 sessionId 足以承载完整未来纵向链，未触发 schema、评分、FSRS、备份或历史伪造停止门槛。
+- 第 40 轮唯一目标是最小统一未来 sessionId 编码：覆盖三类 Quiz、lookup-recall、stubborn、slow-recall、lapse、generic-sprint、unknown；保留顽固旧格式，统一 startedAt，并验证写入、刷新、历史、成效、保持和再跑兼容。
+- 第 40 轮仍不实现分维度报告、排行或自适应。只有未来编码纵向链完整闭环后，才能判断阶段 C 完成并进入阶段 D。
+- 本轮只改审计与演进文档，不更新 `occlusion-table.md`，不启动服务或浏览器 E2E；定向静态验证数字见 `docs/iterations/round-39.md`。

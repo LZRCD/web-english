@@ -1,72 +1,129 @@
-# 下一轮执行 Prompt：第 39 轮阶段 C 未来处置维度归因只读审计
+# 下一轮执行 Prompt：第 40 轮最小统一未来 sessionId 编码纵向链
 
 ## 当前现场
 
 - 分支：`codex/follow-up-hardening`。
-- 第 38 轮提交前 HEAD：`2059922`；第 38 轮处于待提交状态，最终 HEAD 以包含本文件的最新中文提交为准。
-- 最新自动验证：`tests/weak-signals.test.ts` 81/81；lint、typecheck 通过；`npm test` 201/201，含生产构建。
-- signal-flow E2E 17/17（42.8s）：既有 16 条语义保持，第 38 轮新增 1 条稳定完整周 seed，覆盖保持成功/失败、未观察、成功下一 sprint 截断、覆盖/保持/间隔/null/paired recall、`quiz:*` review 与 quizAttempt 不干扰。
-- 工作区交接：用户未跟踪 `1.txt` 与并发文件 `docs/architecture-analysis-2026-08-09.md` 绝不修改或暂存；固定端口 3000/3001 无 LISTENING，本轮 PID 已精确清理。审批限制导致 `.codex-round38-20260809-010645.err.log` 与 `.out.log` 无法删除，两者保留为未跟踪且不得暂存。
+- 第 39 轮提交前 HEAD：`54ab960`；最终 HEAD 以包含本文件的最新中文提交为准。
+- 第 38 轮自动验证基线：`tests/weak-signals.test.ts` 81/81，lint/typecheck 通过，`npm test` 201/201，signal-flow E2E 17/17（42.8s）。
+- 第 39 轮是纯文档只读审计，实际定向静态验证数字见 `round-39.md`；未启动服务、未运行 E2E。
+- 工作区保护：`1.txt`、`docs/architecture-analysis-2026-08-09.md`、`.codex-round38-20260809-010645.err.log`、`.codex-round38-20260809-010645.out.log` 均为未跟踪用户/并发文件，绝不修改或暂存。
+- 固定端口 3000/3001 在第 39 轮初查与结束复查均应无监听；第 40 轮开始前重新核对，不沿用历史端口结论。
 
-## 已完成阶段与数据边界
+## 已完成阶段与第 39 轮结论
 
-- 阶段 A 已完成：冲刺活动量、当场达标、同词配对回忆观察、截至当前仍薄弱和近 7 天全局评分事件占比，均已明确分子、分母、窗口、权重、空样本与不能证明的结论。
-- 阶段 B 已完成：`buildSprintRetentionSeries` 在最近 4 个完整处置周内按每词窗口内最近成功 sprint review 建 cohort；下一 sprint 截断，首条非 sprint review（含 `quiz:*` review、无 sessionId 旧 review）是随访；覆盖/保持/未观察/截断/实际间隔与 paired recall 分母独立披露，quizAttempt 不参与。
-- 猜错仍只有累计次数，无真实事件时间、恢复或复发源；禁止伪造，但不阻止阶段 A/B 完成。
-- 第 39 轮只进入阶段 C 的“未来处置维度归因”只读审计，不预设现有 sessionId 一定足够，不实现分维度指标、自适应或 schema。
+- 阶段 A 已完成成效口径诚实化；阶段 B 已完成成功 sprint review 到下一 sprint 前首次正常 review 的覆盖、保持、截断、间隔和同词测时观察。
+- 第 39 轮确认当前只有顽固格式 `sprint:stubborn:<mode>:<ISO>` 可辨识；三类 Quiz、lookup、考前通用、限定、补漏、当前仍薄弱再冲刺、历史再跑、slow-recall 与 lapse 当前都落成 `sprint:<ISO>`。
+- `ReviewEvent.sessionId`、activeSession/activeQuiz、normalize/hydrate 和分域已原样保留字符串，不需要 schema/version/store/domain。
+- 所有 sprint 统计与第 38 轮 B 链均用 `startsWith("sprint:")`；新格式仍应被统一感知。唯一已确认日期断链是 `buildSprintHistory`：非顽固格式直接切片当日期，新 treatment 格式会被过滤。
+- 旧 `sprint:<ISO>` 只能是 `unknown`；未来明确混合/通用处置是 `generic-sprint`，两者不得混同。顽固主维度与子 mode 也不得扁平映射为普通 Quiz/lookup 维度。
+- 猜错仍只有累计次数，无真实事件时间、恢复或复发源；它只能迫使混合入口回退 generic，不能成为未来可归因维度。
 
-## 唯一目标
+## 第 40 轮唯一目标
 
-只读判断现有结构化 `sprint:*` sessionId 能否对“未来新发生的处置”无歧义标识处置维度，并与第 38 轮首次正常 review 链安全连接；形成逐模式证据矩阵和一个明确的实现/停止结论。除审计文档与下一轮 prompt 外不改业务代码。
+实现一条“启动时真实维度 → 唯一 sessionId 编码 → review 原样写入 → 刷新保持 → 统一解析/startedAt → 历史、时间线、成效、保持、再跑全部兼容”的最小纵向链，只标注未来新 session；不做分维度报告。
 
-## 只读审计顺序
+这是一个功能目标，不得拆成只写编码器或顺带进入阶段 D。
 
-1. 核对 Git 状态、分支、HEAD、最近历史、保护文件、端口 3000/3001、历史 PID/日志；确认第 38 轮提交与实际测试证据。
-2. 从所有创建入口追踪 sprint sessionId：通用冲刺、历史再跑、当前仍薄弱再冲刺、分册/单元冲刺、三类 Quiz 专项、查词主动回忆、顽固词三阶段；列出创建函数、编码格式、解析函数、刷新恢复、ReviewEvent 写入与历史消费者。
-3. 对每种未来处置模式验证：sessionId 是否显式编码维度、是否可稳定解析、是否会被旧通用 `sprint:<ISO>` 混淆、是否跨刷新保持、首次有效 review 是否沿用相同 id、同一 session 是否可能混入多个维度。
-4. 将可解析处置维度与 `buildSprintRetentionSeries` 的锚点/截断/随访规则逐项对照：最近成功锚点是否保留维度；下一 sprint 是否仍应无条件截断；`quiz:*` follow-up 是否只代表随访而不能倒推锚点维度；quizAttempt 是否仍不得替代 review。
-5. 用最小反例审计：旧通用 sprint、结构化顽固三阶段、三类专项、查词专项、历史再跑、同词跨模式/跨 session、同 session 多 review、同毫秒 id tie-break、刷新恢复、非法/未知模式、缺失 sessionId。
-6. 明确历史覆盖：只能讨论采用结构化 id 后未来产生的样本；禁止给旧通用 sprint 猜维度、禁止从词的当前薄弱标签/quizAttempt/题型反推历史处置、禁止回填或迁移历史 reviews。
+## 必须先做的只读核对
 
-## 必须产出的证据矩阵
+1. 核对 Git HEAD/分支/最近历史、完整 status/diff、四个保护文件、3000/3001 监听与历史 PID/日志；确认第 39 轮提交和实际验证数字。
+2. 重新追踪 `createStudySession`、`startSession`、`startSprintSession`、`startScopedSprint`、`startResprintSession`、`startSprintFromRelapse`、`startSprintFromHistory`、`startStubbornTreatment`、`recordQuizResult`、`rateWord`。
+3. 重新枚举 `sprint:*` 消费者：`buildSprintHistory`、`buildSprintRecordWordIds`、`buildPairedRecallChange`、`buildSprintEffectiveness(Series)`、`buildSprintRelapse(Series)`、`buildSprintRetentionSeries`、`buildWordSignalTimeline`、完成摘要及 activeSession/activeQuiz 恢复。
+4. 核对第 39 轮矩阵中的映射是否仍与代码一致；不得从按钮、标题、toast、中文标签、当前页面状态或历史 quizAttempt 反推维度。
 
-每行至少包含：处置入口、未来 sessionId 示例、创建函数、解析函数、是否显式唯一维度、review 写入路径、刷新后是否保持、能否连接首次正常 review、历史旧记录能否归因、冲突/歧义、结论。
+## 编码与解析契约
+
+### 维度枚举
 
 至少覆盖：
 
-- 通用冲刺与限定范围冲刺；
-- 历史再跑、当前仍薄弱词再冲刺；
-- 听音拼写、中译英、释义辨析专项；
-- 查词主动回忆；
-- 顽固词主动回忆/听音拼写/中译英三个阶段；
-- 无 sessionId 与旧 `sprint:<ISO>` 记录。
+- `listening-spelling`
+- `chinese-to-english`
+- `meaning-choice`
+- `lookup-recall`
+- `stubborn`
+- `slow-recall`
+- `lapse`
+- `generic-sprint`
+- `unknown`（解析结果；不得作为新的已知处置入口冒充事实）
 
-## 判定门槛
+顽固必须额外保留合法子 mode：`lookup-recall | listening-spelling | chinese-to-english`。
 
-- 只有未来所有拟报告维度都有显式、稳定、唯一、可往返解析的 sessionId，且同一 session 不混维度、review 写入不丢 id，才可判定进入下一轮最小“未来处置维度 cohort”实现。
-- 若只有部分模式可辨识，必须列出可辨识/不可辨识集合；不得先实现偏样本报告并把它写成全维度结论。下一 prompt 的唯一目标应是最小统一 sessionId 编码方案的只读设计审计，仍不得直接新增 schema。
-- 若完整链需要新增持久化 schema/version/store/domain、回填历史、从当前画像/quizAttempt 推断维度、改变第 38 轮锚点/截断规则，立即停止实现并只提交审计结论。
+### 格式
 
-## 严格边界
+- 新普通结构化格式使用一个明确版本的统一方案，例如 `sprint:treatment:<dimension>:<ISO>`；同轮不得出现多个新拼接规则。
+- 顽固继续兼容且可继续创建现有 `sprint:stubborn:<mode>:<ISO>`；统一解析器返回 `dimension=stubborn` 和 `submode`，不得迁移或回写历史。
+- 旧 `sprint:<ISO>` 返回 `dimension=unknown`、合法 startedAt 和 legacy 格式标记。
+- 未知 treatment 维度或非法顽固 mode 安全返回 `dimension=unknown`；若结构中仍有合法 ISO，应保留 startedAt 供历史排序。只有时间本身非法时 startedAt 才缺省。解析不得抛错，且 `startsWith("sprint:")` 的既有统计身份不能被误改成普通 review。
 
-- 复用现有 `sessionId` 字符串承载能力；本轮不新增 schema/version/store/domain，不修改或回填历史 reviews/quizAttempts。
-- 不改评分、FSRS、每日 Quiz 门禁、备份、package scripts、冲刺写入、阶段 A 指标、第 38 轮 cohort/覆盖/保持/间隔/paired recall、当前仍薄弱、再冲刺或薄弱画像。
-- 不实现分维度保持率、维度排行、维度好坏判断、推荐权重、自适应排程或因果结论。
-- 不把 quizAttempt 当 ReviewEvent，不把 `quiz:*` follow-up 的 mode 倒推为先前 sprint 处置维度，不跨下一 sprint，不把未观察算失败。
-- 文案不得使用“某模式导致提升/恢复/掌握”或比较样本稀少的维度优劣。
+### 唯一权威函数
 
-## 验收标准
+- 只保留一个公开未来编码器、一个公开解析器和一个统一 startedAt 提取路径；顽固旧 helper 可委托/兼容，但入口和消费者不得各自手写切片。
+- `buildSprintHistory` 必须改为使用统一 startedAt；旧、顽固、新 treatment 都可排序，非法时间仍不伪造历史记录。
+- 新增代码应复用现有类型/判断，不复制评分、画像、恢复或统计逻辑。
 
-- 新建 `docs/iterations/round-39.md`，完整记录现场、sessionId 全链、反例矩阵、历史覆盖、判定和停止门槛。
-- 更新 `docs/iterations/dimension-treatment-audit.md` 与 `learning-effectiveness-audit.md` 的未来归因边界；更新 `project-evolution.md` 和覆盖 `next-round-prompt.md`。
-- 只有咬合状态或关键证据发生变化才更新 `occlusion-table.md`；纯审计若没有新闭环不得虚增 ✅。
-- 审计为只读业务代码轮：执行至少 `npm run lint`、`npm run typecheck` 与审计涉及的现有定向测试；若文档外无代码变更，不为追数字重跑无关 E2E。若需要浏览器验证，仍必须固定 3000、HTTP 200、唯一 PID/日志、两次失败停止并精确清理。
-- 提交前把实际 diff、测试数字、保护文件、端口、边界和判定交回同一 `opencode/zen-v4-flash` 任务只读复核；处理意见后精确暂存。
+## 新入口接入规则
 
-## 文档、提交与停止门槛
+- 三类 Quiz：直接使用 `SprintTreatmentRecommendation` 的结构化 `dimension/mode` 创建对应新 id；`QuizView` 与 `recordQuizResult` 继续原样回传，不能改每日首次有效门禁。
+- 查词主动回忆：已有 `dimension=lookup, mode=lookup-recall`，把新 id 传入 `startSession` 的现有可选 sessionId；不改查词降级/复发。
+- 顽固三阶段：保留现有格式、阶段、候选和刷新逻辑；不得把顽固听写/中译英记成普通 Quiz 维度。
+- 考前 fallback：只有启动当下的完整目标词集用结构化事实证明为唯一 slow-recall 或唯一 lapse 时，才写对应维度；任一多维、跨维、猜错、lookup+FSRS 混合或不可证明情况写 `generic-sprint`。禁止解析 `buildWordWeakSignals` 文案。
+- 分册/单元限定、完成页补漏、当前仍薄弱再冲刺、历史再跑：固定写 `generic-sprint`。历史再跑只复用原 session 的词集，不能继承原维度。
+- 如果实现唯一 slow/lapse 判定会复制大量画像规则或无法对完整词集给出可靠结论，停止该映射并让这些入口统一 generic；不得为满足枚举覆盖而猜测。
 
-- 一个中文 commit，不 push；禁止 `git add .`、`git add -A`、`git commit -am`，不得暂存 `1.txt` 或 `docs/architecture-analysis-2026-08-09.md`。
-- 若审计证明现有编码完整且无歧义：下一轮唯一目标才是纯派生未来维度 cohort，不同时做 UI 排行/自适应。
-- 若证明部分或全部模式有歧义：下一轮唯一目标改为统一未来 sessionId 编码的最小设计/实现边界，旧记录继续“未知维度”，不得回填。
-- 若必须新增 schema、推断/伪造历史、改变评分排程或跨新冲刺才能成立，停止阶段 C 实现并提交阻断证据。
-- 第 38 轮未触发停止门槛：阶段 B 完成后可自动串行进入本轮只读审计；仍须先做现场核对，不得把只读审计扩成实现。
+## 时间线、历史、成效与保持不变量
+
+- 时间线继续把全部 `sprint:*` 识别为冲刺；本轮不新增维度展示文案。
+- 冲刺历史按完整 id 分组，startedAt 统一解析；活动量、当场达标和事件平均耗时口径不变。
+- `buildSprintRecordWordIds` 继续完整 id 精确匹配；新格式再跑可取原词集，但新会话仍按当前入口事实写 generic。
+- `buildPairedRecallChange` 继续排除全部 `sprint:*` 基线；`buildSprintEffectiveness(Series)` 和当前仍薄弱 cohort 继续纳入全部新旧 sprint，不按维度拆分。
+- `buildSprintRetentionSeries` 继续使用最近成功 sprint 锚点、`(reviewedAtMs,id)` 总序、任意下一 sprint 无条件截断、首条非 sprint review 随访；`quiz:*` review 与无 sessionId review 仍可随访，quizAttempt 仍不得参与。
+- 维度只附着锚点 session，不能改变 cohort、覆盖、保持、未观察、间隔、paired recall 的分子/分母或时间窗。
+
+## 刷新、持久化与写入验收
+
+- activeSession：新 id 经 `splitStoredState`、IndexedDB、`normalizeSession`、hydrate 后保持，WordCard 评分写相同 id。
+- activeQuiz：新 id/mode/startedAt/questionWordIds/进度经写盘刷新保持，作答后的首次有效 review 写相同 id；题组快照继续优先，不能因实时推荐变化漂移。
+- ReviewEvent normalize 往返不丢新/旧/顽固 id；不新增 schema/version/store/domain。
+- Quiz 每次 attempt 仍写真实 mode/correct/recallMs，只有既有门禁通过才写 review/FSRS；不得为维度归因伪造 review。
+
+## 测试与 E2E
+
+单测至少覆盖：
+
+- 新编码器/解析器/startedAt 的全部枚举；ISO 含冒号仍可稳定往返。
+- 旧 `sprint:<ISO>` → unknown + startedAt；三类合法顽固 → stubborn + submode；未知维度/非法 mode 但时间合法时仍保留 startedAt；非法时间安全回退且不伪造日期。
+- 三类 Quiz、lookup、顽固、唯一 slow、唯一 lapse、混合 generic 的启动映射；猜错/多维不得误标。
+- `buildSprintHistory` 同时保留旧、顽固、新 treatment，按时间倒序；非法时间过滤；总次数/覆盖词数不漏合法新格式。
+- 再跑按完整新 id 提取词集；时间线、周成效、当前仍薄弱 cohort和第 38 轮保持链继续把新格式当 sprint。
+- B 链明确覆盖：新维度成功锚点、下一不同维度 sprint 截断、`quiz:*` 随访、无 sessionId 随访、同毫秒 tie-break，不改变既有数字。
+- normalize / split-combine 往返保持 activeSession、activeQuiz 与 ReviewEvent 的新 id。
+
+E2E 只新增/扩展一个复合纵向链，进入 `tests/e2e/signal-flow.spec.mjs`：至少从真实三类专项之一和 WordCard 专项之一启动，证明页面入口创建新 id、写盘、刷新恢复、真实 review 写同 id、冲刺历史能看到、历史再跑取原词集且新跑写 generic；同时证明旧 session 不报错。不要为每个枚举复制 E2E。
+
+最终必须运行并报告实际数字：
+
+- `node --experimental-strip-types --test tests/weak-signals.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npx playwright test tests/e2e/signal-flow.spec.mjs --config playwright.config.mjs --reporter=line`
+
+若浏览器验证需要服务，严格复用固定端口 3000、唯一日志/PID和健康检查；不得自动换到 3001。连续两次浏览器验证失败则停止服务重试，按规则报告。
+
+## 红线与停止门槛
+
+- 不新增 schema/version/store/domain，不修改评分、FSRS、每日 Quiz 门禁、备份、package scripts、历史 reviews/quizAttempts。
+- 不回填旧维度，不从当前画像、标签、文案、toast、session title 或 quizAttempt 倒推历史。
+- 不把 unknown 并入 generic，不把顽固子 mode 扁平映射成普通维度。
+- 不改变第 38 轮锚点、下一 sprint 截断、随访、未观察和 paired recall 规则。
+- 不实现分维度报告、排行、模式优劣、自适应推荐、推荐权重或因果文案。
+- 如果需要上述任一越界、无法形成编码→写入→刷新→消费完整纵向链、固定端口被非项目进程占用或连续两次浏览器失败，立即停止并只提交阻断证据。
+
+## 文档、提交与交接
+
+- 创建 `docs/iterations/round-40.md`，更新 `dimension-treatment-audit.md`、`learning-effectiveness-audit.md`、`docs/project-evolution.md`、必要时 `occlusion-table.md`，并覆盖下一轮 prompt。
+- 提交前让同一 `opencode/zen-v4-flash` 任务复核实际 diff、编码/解析、旧格式、写入/刷新、所有消费者、测试/E2E、保护文件和红线；处理或以代码证据驳回意见。
+- 只能精确暂存本轮文件；禁止 `git add .`、`git add -A`、`git commit -am`，不得暂存四个保护文件。
+- 一次中文 commit，不 push。提交后报告 hash/message、测试数字、工作区残留、端口状态、下一 prompt 路径、阶段 C 是否完成及是否允许自动继续。
+- 只有未来编码、解析、startedAt、入口写入、刷新、历史、成效、B 链和再跑都被当前证据证明完整，才能宣布阶段 C 完成；否则继续阶段 C，不得提前进入阶段 D。
