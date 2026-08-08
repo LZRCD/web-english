@@ -21,6 +21,14 @@ import {
 
 type ActivityRange = 140 | 182 | 365;
 
+function formatSuccessRateDelta(delta: number | null, hasCurrent: boolean) {
+  if (!hasCurrent) return "当前窗无样本";
+  if (delta === null) return "无可比上窗";
+  const roundedDelta = Math.round(delta);
+  if (roundedDelta === 0) return "较上窗持平";
+  return `较上窗 ${roundedDelta > 0 ? "+" : ""}${roundedDelta} 个百分点`;
+}
+
 type HistoryViewProps = {
   stats: {
     newCount: number;
@@ -728,16 +736,22 @@ export default function HistoryView({
       <section className="insights-panel" aria-labelledby="insights-title">
         <div className="panel-title">
           <h2 id="insights-title">学习趋势</h2>
-          <small>近 7 天</small>
+          <small>近 7 天截至目前</small>
         </div>
         <div className="insights-grid">
           <div className="insight-card">
-            <span>成功率</span>
-            <strong>{Math.round(insights.successRate)}%</strong>
+            <span>评分达标占比</span>
+            <strong>
+              {insights.successRate === null
+                ? "—"
+                : `${Math.round(insights.successRate)}%`}
+            </strong>
+            <small>rating≥2 / 全部评分事件</small>
             <small>
-              {insights.successRateDelta !== null
-                ? `${insights.successRateDelta >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(insights.successRateDelta))}%`
-                : "—"}
+              {formatSuccessRateDelta(
+                insights.successRateDelta,
+                insights.successRate !== null,
+              )}
             </small>
           </div>
           <div className="insight-card">

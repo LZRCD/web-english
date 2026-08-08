@@ -553,6 +553,78 @@ function stubbornTreatmentSeedState() {
   });
 }
 
+function insightReview(id, days, rating, wordId) {
+  const reviewedAt = daysAgo(days, 8, wordId);
+  return {
+    id,
+    wordId,
+    word: wordId === 1 ? "radiate" : "objective",
+    rating,
+    kind: id.startsWith("new") ? "new" : "review",
+    sessionId: id.startsWith("sprint") ? `sprint:${id}` : undefined,
+    intervalMs: 600_000,
+    dueAt: new Date(new Date(reviewedAt).getTime() + 600_000).toISOString(),
+    reviewedAt,
+    recallMs: 4_000,
+    section: "必考词",
+    unit: 1,
+  };
+}
+
+test("信号联动：近七天评分达标占比区分无样本、真实零与上窗比较", async ({ browser, baseURL }) => {
+  const scenarios = [
+    {
+      reviews: [insightReview("previous-only", 8, 3, 1)],
+      value: "—",
+      comparison: "当前窗无样本",
+    },
+    {
+      reviews: [
+        insightReview("previous-success", 8, 3, 1),
+        insightReview("sprint-current-failure", 1, 0, 1),
+      ],
+      value: "0%",
+      comparison: "较上窗 -100 个百分点",
+    },
+    {
+      reviews: [
+        insightReview("new-previous-success", 8, 3, 1),
+        insightReview("previous-failure", 8, 0, 2),
+        insightReview("current-success", 1, 2, 1),
+        insightReview("current-failure", 1, 1, 2),
+      ],
+      value: "50%",
+      comparison: "较上窗持平",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const scenarioContext = await browser.newContext({ baseURL });
+    try {
+      await installStateSeed(
+        scenarioContext,
+        createState({ reviews: scenario.reviews, wordProgress: {} }),
+      );
+      const scenarioPage = await scenarioContext.newPage();
+      await openApp(scenarioPage);
+      await scenarioPage
+        .getByRole("complementary", { name: "主导航" })
+        .getByRole("button", { name: /轨迹/ })
+        .click();
+
+      const card = scenarioPage.locator(".insight-card").filter({
+        hasText: "评分达标占比",
+      });
+      await expect(scenarioPage.getByText("近 7 天截至目前", { exact: true })).toBeVisible();
+      await expect(card.getByText("rating≥2 / 全部评分事件", { exact: true })).toBeVisible();
+      await expect(card.getByText(scenario.value, { exact: true })).toBeVisible();
+      await expect(card.getByText(scenario.comparison, { exact: true })).toBeVisible();
+    } finally {
+      await scenarioContext.close();
+    }
+  }
+});
+
 test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结果", async ({ context, page }) => {
   await installStateSeed(context, spellingTreatmentSeedState());
   await openApp(page);

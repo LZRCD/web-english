@@ -26,9 +26,9 @@ export type LearningInsights = {
   activeDays: number;
   reviewCount: number;
   uniqueWordCount: number;
-  /** 当前窗口成功率，范围为 0–100。 */
-  successRate: number;
-  /** 相比上一窗口的成功率百分点差；任一窗口无评分时为 null。 */
+  /** 当前窗口评分达标事件占比，范围为 0–100；无评分事件时为 null。 */
+  successRate: number | null;
+  /** 相比上一窗口的评分达标占比百分点差；任一窗口无评分时为 null。 */
   successRateDelta: number | null;
   /** 合法回忆耗时的平均毫秒数；没有样本时为 null。 */
   averageRecallMs: number | null;
@@ -106,7 +106,7 @@ function validTimedReviews(reviews: readonly LearningInsightReview[]) {
 }
 
 function successRate(reviews: readonly TimedReview[]) {
-  if (!reviews.length) return 0;
+  if (!reviews.length) return null;
   const successes = reviews.filter((review) =>
     review.rating >= (2 satisfies Rating)).length;
   return (successes / reviews.length) * 100;
@@ -132,7 +132,7 @@ export function buildLearningInsights(
       activeDays: 0,
       reviewCount: 0,
       uniqueWordCount: 0,
-      successRate: 0,
+      successRate: null,
       successRateDelta: null,
       averageRecallMs: null,
     };
@@ -166,7 +166,7 @@ export function buildLearningInsights(
     reviewCount: currentReviews.length,
     uniqueWordCount: new Set(currentReviews.map(reviewWordKey)).size,
     successRate: currentSuccessRate,
-    successRateDelta: currentReviews.length && previousReviews.length
+    successRateDelta: currentSuccessRate !== null && previousSuccessRate !== null
       ? currentSuccessRate - previousSuccessRate
       : null,
     averageRecallMs: recallSamples.length

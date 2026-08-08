@@ -50,7 +50,7 @@ test("空数据返回稳定的学习洞察默认值", () => {
     activeDays: 0,
     reviewCount: 0,
     uniqueWordCount: 0,
-    successRate: 0,
+    successRate: null,
     successRateDelta: null,
     averageRecallMs: null,
   });
@@ -85,12 +85,116 @@ test("学习洞察按本地自然日窗口统计并与上一窗口比较", () =>
   assert.equal(insights.activeDays, 3);
   assert.equal(insights.reviewCount, 3);
   assert.equal(insights.uniqueWordCount, 2);
-  assert.ok(Math.abs(insights.successRate - (2 / 3) * 100) < 1e-10);
+  assert.ok(
+    insights.successRate !== null
+    && Math.abs(insights.successRate - (2 / 3) * 100) < 1e-10,
+  );
   assert.ok(
     insights.successRateDelta !== null
     && Math.abs(insights.successRateDelta - ((2 / 3) * 100 - 50)) < 1e-10,
   );
   assert.equal(insights.averageRecallMs, 2000);
+});
+
+test("评分达标占比区分当前无样本、真实零和上一窗无样本", () => {
+  const now = new Date(2026, 6, 28, 12);
+  const previousSuccess = review(localIso(2026, 7, 18, 8), 3, 1);
+
+  assert.deepEqual(
+    buildLearningInsights([previousSuccess], now, 7),
+    {
+      activeDays: 0,
+      reviewCount: 0,
+      uniqueWordCount: 0,
+      successRate: null,
+      successRateDelta: null,
+      averageRecallMs: null,
+    },
+  );
+
+  const zeroWithPrevious = buildLearningInsights([
+    previousSuccess,
+    review(localIso(2026, 7, 28, 8), 0, 1),
+  ], now, 7);
+  assert.equal(zeroWithPrevious.successRate, 0);
+  assert.equal(zeroWithPrevious.successRateDelta, -100);
+
+  const zeroWithoutPrevious = buildLearningInsights([
+    review(localIso(2026, 7, 28, 8), 1, 1),
+  ], now, 7);
+  assert.equal(zeroWithoutPrevious.successRate, 0);
+  assert.equal(zeroWithoutPrevious.successRateDelta, null);
+});
+
+test("评分达标占比按事件加权并混合 new、review 与 sprint 会话", () => {
+  const now = new Date(2026, 6, 28, 12);
+  const reviews: ReviewEvent[] = [
+    {
+      id: "new-1",
+      wordId: 1,
+      word: "same-word",
+      rating: 3,
+      kind: "new",
+      intervalMs: 1,
+      dueAt: localIso(2026, 7, 29),
+      reviewedAt: localIso(2026, 7, 28, 8),
+    },
+    {
+      id: "review-1",
+      wordId: 1,
+      word: "same-word",
+      rating: 0,
+      kind: "review",
+      intervalMs: 1,
+      dueAt: localIso(2026, 7, 29),
+      reviewedAt: localIso(2026, 7, 28, 9),
+    },
+    {
+      id: "sprint-1",
+      sessionId: "sprint:event-weighting",
+      wordId: 1,
+      word: "same-word",
+      rating: 2,
+      kind: "review",
+      intervalMs: 1,
+      dueAt: localIso(2026, 7, 29),
+      reviewedAt: localIso(2026, 7, 28, 10),
+    },
+    {
+      id: "review-2",
+      sessionId: "review:mixed",
+      wordId: 2,
+      word: "other-word",
+      rating: 1,
+      kind: "review",
+      intervalMs: 1,
+      dueAt: localIso(2026, 7, 29),
+      reviewedAt: localIso(2026, 7, 28, 11),
+    },
+  ];
+
+  const insights = buildLearningInsights(reviews, now, 7);
+  assert.equal(insights.reviewCount, 4);
+  assert.equal(insights.uniqueWordCount, 2);
+  assert.equal(insights.successRate, 50);
+});
+
+test("评分达标占比保留窗口边界并排除未来与无效时间", () => {
+  const now = new Date(2026, 6, 28, 12);
+  const insights = buildLearningInsights([
+    review(localIso(2026, 7, 14, 23, 59, 59), 0, 1),
+    review(localIso(2026, 7, 15), 3, 2),
+    review(localIso(2026, 7, 21, 23, 59, 59), 2, 4),
+    review(localIso(2026, 7, 22), 3, 5),
+    review(localIso(2026, 7, 28, 12), 3, 6),
+    review(localIso(2026, 7, 28, 12, 0, 1), 0, 7),
+    review(localIso(2026, 7, 29), 0, 8),
+    review("invalid", 0, 9),
+  ], now, 7);
+
+  assert.equal(insights.reviewCount, 2);
+  assert.equal(insights.successRate, 100);
+  assert.equal(insights.successRateDelta, 0);
 });
 
 test("平均回忆耗时忽略负数、NaN 和无穷值，但保留零", () => {
