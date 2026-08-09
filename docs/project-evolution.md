@@ -1325,3 +1325,21 @@
 - `npm run typecheck`/`npm run lint` 通过（0 问题）；定向 107/107（weak-signals + session-summary + insights）；`npm test` 含生产构建 226/226（与基线持平，无新增/删除）；`npm run build` 通过。
 - 固定 3000 signal-flow 18/18（47.3s），既有 18 条语义未改；验证后按证据关闭本项目 PID，3000 无监听；build 生成的 build-info 已恢复基线。
 - 架构重构第三阶段完成：业务 God Module 物理拆分为职责文件 + barrel 契约；下一阶段为第 45 轮（候选：useSelectionLookup 拆分【需先补测试】、行为测试替换正则测试、View model/CSS 拆分，需候选审计选定），阶段 E 审计最后执行。
+
+## 第六十四次迭代：架构重构第四阶段（划词纯业务边界）
+
+本次迭代：2026-08-09。
+
+### 实现与边界
+
+- 对第 42–44 轮做专业架构复核后，没有继续按文件行数拆分；第 45 轮只把 `useSelectionLookup` 中确定无副作用的红宝书映射、已知结果优先级、词条 upsert、查词统计和查询缓存裁剪提取到现有 `lib/selection-lookup.ts`。
+- hook 只改为委托纯函数，从 846 行降至 767 行；Selection/Range、DOM 坐标、React 生命周期、字典 Range/prefix、AI、Abort、localStorage、预取和性能 trace 顺序保持。
+- 新增 4 组行为测试，直接验证 exact/folded 与 saved/cache 优先级、音标来源、身份/时间保留、ID 冲突、统计和 120 项裁剪，不用源码正则证明重构。
+- 隔离干净 `3861aed` 并补齐同哈希 Git 忽略运行数据后，确认 learning E2E 的重复例句 strict locator 与活动题组状态假设均为既有基线问题；测试稳定化以独立提交 `b6eebdd` 完成，不混入业务重构。
+- 未新增 schema/version/store/domain，未改评分、FSRS、门禁、备份、AI Provider、package scripts、历史数据或用户可见行为。
+
+### 验证与后续
+
+- study 35/35，typecheck 通过，lint 0 error/1 个第 44 轮既有 warning，`npm test` 含生产构建 230/230。
+- 固定 3000 最终联合 E2E 35/35（learning 17/17 + signal-flow 18/18）；服务按监听 PID 精确关闭，端口与本轮日志清洁，build-info 恢复。
+- 下一轮不继续机械拆 767 行 hook；先只读审计剩余 I/O 状态机，只有找到不携带 React/DOM/多组 ref 且能保持请求时序的窄边界才继续实施，否则停止拆分并转向更高价值架构候选。

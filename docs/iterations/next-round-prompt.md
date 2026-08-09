@@ -1,43 +1,55 @@
-# 下一轮执行 Prompt：第 44 轮架构重构第三阶段（weak-signals God Module 拆分）
+# 第 46 轮 Prompt：useSelectionLookup 剩余 I/O 状态机只读审计
 
-## 当前现场
+## 现场基线
 
-- 第 42 轮（任务 B）：信号结构化 key + 日期工具统一（305f059/aaa1a1e）；第 43 轮：AI Provider 客户端合并（484df63/b47ffde）。HEAD=`b47ffde`（codex/follow-up-hardening，ahead 50，未 push）。
-- 第 44 轮候选审计已完成（子 Agent 239af211，只读）：**唯一目标 = weak-signals.ts God Module 按职责拆分**。实测 1989 行 / 71 导出 / 11 职责组 / 8 消费端（page/HistoryView/WordCard/WordbookView/insights/session-summary + 2 测试），内部单向依赖（detection ← projection ← strategy），barrel 保持模块路径可零消费端改动。
-- 工作区仅剩受保护未跟踪项；端口 3000 无监听。
-
-## 前置门槛
-
-- HEAD 必须为 `b47ffde`；从 `codex/follow-up-hardening` 切短命分支 `codex/refactor-stage3`，全部代码修改/测试/构建/提交只在本分支。
-- 全程使用 ZCode 接入的 DeepSeek V4 Flash（主 Agent 与子 Agent 均须外部证据确认，`zen-v4-flash=deepseek-v4-flash` 等价）；无法确认停止并如实报告。
-- 不修改受保护未跟踪项；不触碰既有轮次已提交内容；不推送远端。
+- 第 45 轮已把红宝书映射、已知结果解析、词条 upsert、查词统计和 120 项缓存裁剪提取为 `lib/selection-lookup.ts` 纯函数；hook 从 846 行降至 767 行。
+- 独立 E2E 稳定化提交：`b6eebdd test: 稳定划词与测验端到端定位`。
+- 第 45 轮最终证据：study 35/35、typecheck 通过、lint 0 error/1 个既有 warning、`npm test` 230/230、固定 3000 的 learning 17/17 与 signal-flow 18/18。
+- 受保护项：`1.txt`、`docs/architecture-analysis-2026-08-09.md`、`.zcode/` 与既有轮次日志；不得修改、删除、暂存。
 
 ## 唯一目标
 
-`lib/weak-signals.ts`（1989 行 God Module）按职责物理拆分，行为零变化，barrel 保持契约：
+严格只读审计 `app/hooks/useSelectionLookup.ts` 剩余 767 行的 I/O 状态机，回答“是否存在一个能在不改变异步时序的前提下继续提取的窄边界”。本轮默认不写业务代码；只有证据完整且边界不携带 React/DOM 状态时，才为下一轮写实施 Prompt。
 
-1. 新建目录与文件：`lib/weak-signals/types.ts`（全部 type 导出）、`lib/weak-signals/detection.ts`（阈值常量 + 检测/画像/候选/稳定性域）、`lib/weak-signals/projection.ts`（冲刺历史/成效/复发/保持/维度观察/趋势/时间线/展示常量域）、`lib/weak-signals/strategy.ts`（冲刺词集/顽固/治疗推荐/摘要/CSV 域）；`lib/weak-signals.ts` 保留为 barrel，**71 个导出逐一对应 re-export**（含 `export { DEFAULT_WEAK_THRESHOLDS, type WeakThresholds } from "./study.ts"` 等既有转发）。
-2. **逐字搬运**：函数体/常量/注释一字不改；仅调整文件归属与 import 头（兄弟文件用相对路径，type-only import 优先）。禁止顺手统一窗口、提取共享 helper、改变任何阈值/判定（冲刺/复发/达标时间窗口、猜错累计、慢回忆/lapse 单维判定、isQuizModeRecovered 双连对规则均为「不确定」口径，禁止固化或改变）。
-3. 依赖方向只允许 detection ← projection ← strategy；禁止反向或跨层循环（type-only import 除外）。第 42 轮 key 契约（WeakSignalKey/WeakSignalEntry/buildWordWeakSignalEntries 及 label 与 key 同源约束）不得因拆分改变。
-4. **8 个消费端零改动**：app/page.tsx、HistoryView、WordCard、WordbookView、lib/insights.ts、lib/session-summary.ts、两个测试文件的 import 路径与命名全部不变（barrel 保证）；不触碰 page.tsx/组件/hooks。
-5. 不修改：评分、FSRS、每日 Quiz 门禁、备份链路、package.json scripts、IndexedDB schema/StoredState、useStudyPersistence、E2E 文件。
+## 必须画清的链路
 
-## 强制安全规则
+1. 浏览器 Selection/Range → query/context/坐标 → popup 初始状态。
+2. 词典字母 range index → prefix promise/cache → Range 206/200/损坏/超时 fallback → phonetic 补全。
+3. 已知结果、本地词典、AI `/api/lookup` 三层优先级与性能 trace。
+4. AbortController、请求序号、关闭弹窗、快速 A→B 时的过期响应保护。
+5. localStorage lookup cache 的读取、写入、版本 key 与旧缓存清理。
+6. 后台预取的网络条件、预算、promise/cache 复用和 effect 清理。
 
-- 禁止 `git reset --hard`、`git checkout --`、`git clean`、强制覆盖、删除 Git lock；禁止 `git add .`/`git add -A`/`git commit -am`。
-- 不删除、不覆盖用户已有修改；不自动清理既有轮次日志；不推送远端。
-- 结论必须基于当前实际代码重新验证；拆分正确性以「diff 只含文件移动与 import 头」为验收标准。
+## 架构判断标准
 
-## 执行流程
+可继续提取的候选必须同时满足：
 
-1. Round 0 只读基线（git 状态/HEAD/端口 3000）+ 主 Agent 模型证据；切分支 `codex/refactor-stage3`。
-2. 实施阶段单实施子 Agent（ZCode DeepSeek V4 Flash，记录模型验证块）：按上述边界完成拆分；子 Agent 不得提交。
-3. 主 Agent 审查：逐导出核对 barrel 完整性（对比拆分前后 `git diff` 应只含移动与 import）；核对依赖方向；抽查关键函数体逐字一致。
-4. 分级验证：typecheck → 定向单测（weak-signals/session-summary/insights）→ `npm test` 全量（含 build，基线 226）→ lint → build → signal-flow E2E（固定端口 3000，专属日志，验证后按证据关闭 PID，3000 释放）；build 生成的 build-info 恢复基线（安全补丁，不进入提交）。
-5. 创建第 44 轮唯一提交（`codex/refactor-stage3`）：只暂存拆分文件 + `docs/iterations/round-44.md` + `docs/project-evolution.md`（第六十三次迭代）+ 本文件（第 44 轮 prompt）。提交前展示 status/diff 自查。
-6. 合回 `codex/follow-up-hardening`（`git merge --no-ff`），合并后完整验证；不推送。
+- 输入输出能用普通数据和显式依赖描述；
+- 不接收 React setter、SyntheticEvent、DOM Element/Range 或多组可变 ref；
+- 不改变请求发起顺序、缓存命中顺序、Abort/关闭语义、性能埋点或错误 UI；
+- 能复用现有 `lib/dictionary-range.ts`、`lib/performance-diagnostics.ts`、`lib/background-prefetch.ts`，不再造平行抽象；
+- 能用行为测试覆盖，不依赖源码字符串断言。
 
-## 输出要求
+若不存在满足条件的边界，结论应是“停止继续拆分”，并说明 hook 虽大但当前是合理 orchestration boundary。不要为了减少行数引入 controller 类、事件总线、状态管理库或巨大参数对象。
 
-- 按既有轮次报告格式输出：Round 0 基线、子 Agent 模型与分工、实际修改（文件归属表）、兼容性说明（barrel 契约/消费端零改动/不确定口径保持）、验证结果（实际数字）、Git 提交（哈希/message）、未解决问题、合并状态。
-- 最终汇报五要素简版（总长 ≤300 字）。
+## 只读验证
+
+- 核对 branch/HEAD/status/index、受保护项、3000/3001。
+- 读取 hook 与上述三个 lib 的真实调用图、相关单测及 learning E2E；不启动服务，不改文件。
+- 给出每个候选的收益、时序风险、现有测试护栏和预计修改面。
+- 最终只选择一个结论：
+  1. 一个最窄可实施边界及其下一轮 Prompt；或
+  2. 停止拆 hook，转向更高价值候选（显式 ProviderClient、WeakSignal 公共面收窄、日期语义决策），并给出选择依据。
+
+## 禁止
+
+- 不修改 schema/version/store/domain、评分、FSRS、每日 Quiz 门禁、备份、package scripts、历史数据。
+- 不改变查询优先级、缓存上限、音标来源、AI fallback、Range fallback、Abort 语义或埋点。
+- 不修改 `page.tsx`、`useStudyPersistence`、globals.css。
+- 不 stage、不 commit、不 merge、不 push；不启动 3000。
+- 不触碰受保护未跟踪项。
+
+## 交付物
+
+- `docs/iterations/round-46.md`：只读调用图、候选矩阵、唯一结论和证据。
+- 若选择可实施边界，覆写本文件为下一轮最小实施 Prompt；若选择停止拆分，覆写为下一个高价值候选的只读/实施 Prompt。
