@@ -1412,3 +1412,20 @@
 - 新增 5 项确定性测试：5001/10010 条 normalize、非法过滤、5001 条分域往返、备份导入规范化往返和第 5001 条追加。
 - 定向 study 40/40，typecheck 通过，lint 0 error/1 个既有 warning，`npm test` 含生产 build 235/235；build-info 生成漂移已恢复。
 - 页面仅复用已单测纯 helper，分域和备份由纯往返覆盖，因此未启动 3000 或 E2E。`quizAttempts` 固定裁剪高风险项解除，真实长历史性能与其他中风险项保持证据边界；下一轮进入阶段 F2 测试收敛只读审计。
+
+## 第六十九次迭代：阶段 F2 发布测试收敛只读审计
+
+本次迭代：2026-08-09。
+
+### 覆盖收敛
+
+- 从 `package.json`、schema/normalize、分域、备份、revision、fallback、activeQuiz 源码与现有测试建立风险覆盖表；确认 `npm test` 已同时承担 production build 和全部 Node 测试，因此删除定向单测与单独 build 的重复运行。
+- 发布清单保留 `typecheck`、`lint`、`npm test`、production smoke，以及 7 项互不替代的浏览器链：跨标签 revision、导入、指定恢复副本、IndexedDB 禁用、IndexedDB 损坏、双存储配额失败和 activeQuiz 刷新。
+- 不运行全目录 E2E；concurrency 性能样本、清空记录、旧缓存、视觉/响应式/音频/查词及其余信号流均不进入本轮数据发布清单。activeQuiz 现有复合 E2E 虽含后半信号流，但它是当前唯一断言题序、索引、答对数、答案、seed、startedAt 与 sessionId 刷新恢复的浏览器证据，无法在不改测试的前提下再裁剪。
+- `perf:baseline`/`perf:production` 使用空 reviews/quizAttempts 的合成 state，且没有获批真实长历史 SLA 或可比基线，故不运行并不将其数字冒充发布性能证据。
+
+### 证据边界与后续
+
+- 本轮仅做源码、测试源码、Git 与文档交叉核对，未运行 typecheck/lint/build/test/smoke/E2E，未启动服务，未访问浏览器 IndexedDB 或生产数据；历史 235/235 不冒充当前结果。
+- activeSession 孤儿 ID、非法记录行级隔离、重复 attempt ID、activeQuiz 非法时间、清空语义、备份容量和真实长历史性能仍保持中风险或当前不可证明；清单通过也不得宣称全部发布就绪。
+- 第 50 轮方向复核选择继续一次高价值验证而非继续加功能：下一轮只执行已经审计批准的最小清单。任一失败停止并请求单独诊断/修复授权；全部通过后再评估阶段 F 收尾。
