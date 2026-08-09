@@ -120,7 +120,6 @@ import WordbookView from "./components/WordbookView";
 import {
   clozeSentence,
   formatRecallTime,
-  maskWord,
   shuffleWithSeed,
   splitSenseItems,
 } from "../lib/word-utils";
@@ -1196,6 +1195,7 @@ export default function Home() {
     enrichmentLoading: enrichmentLoadingRef,
     undoStack: undoStackRef,
     aiOpen: aiOpenRef,
+    reinforcementRating: reinforcementRatingRef,
     searchOpen: searchOpenRef,
     selectionLookup: selectionLookupRef,
     sessionComplete: sessionCompleteRef,
@@ -1209,6 +1209,7 @@ export default function Home() {
     enrichmentLoading,
     undoStack,
     aiOpen,
+    reinforcementRating,
     searchOpen,
     selectionLookup,
     sessionComplete,
@@ -1245,7 +1246,10 @@ export default function Home() {
       },
       {
         key: "a",
-        when: () => startedRef.current && !sessionCompleteRef.current,
+        when: () =>
+          startedRef.current
+          && !sessionCompleteRef.current
+          && reinforcementRatingRef.current === null,
         action: () => setAiOpen((value) => !value),
       },
       {
@@ -1358,6 +1362,7 @@ export default function Home() {
       ? undefined
       : Math.max(0, new Date().getTime() - recallStartedAt);
     if (rating <= 1 && !skipReinforcement && reinforcementRating === null) {
+      setAiOpen(false);
       setReinforcementRating(rating as ReinforcementRating);
       setReinforcementInput("");
       setReinforcementFeedback("");
@@ -2005,7 +2010,9 @@ export default function Home() {
     const answer = reinforcementInput.trim().toLocaleLowerCase();
     const expected = current.word.trim().toLocaleLowerCase();
     if (answer !== expected) {
-      setReinforcementFeedback(`还差一点，按词形 ${maskWord(current.word)} 再拼一次`);
+      setReinforcementFeedback(
+        `你刚输入的是「${reinforcementInput.trim()}」，正确拼写是「${current.word}」。请对照后重试，也可以选择“暂时跳过”。`,
+      );
       reinforcementInputRef.current?.select();
       return;
     }
@@ -2068,9 +2075,25 @@ export default function Home() {
             </button>
           ))}
         </nav>
-        <button className="ai-rail-button" onClick={() => setAiOpen(true)}>
+        <button
+          className="ai-rail-button"
+          onClick={() => setAiOpen(true)}
+          disabled={reinforcementRating !== null}
+          aria-label={
+            reinforcementRating !== null
+              ? "强化拼写进行中，暂不能打开 AI 记忆教练"
+              : "打开 AI 记忆教练"
+          }
+          title={
+            reinforcementRating !== null
+              ? "请先完成强化拼写或暂时跳过，再使用 AI 记忆教练"
+              : undefined
+          }
+        >
           <span>AI</span>
-          <small>记忆教练</small>
+          <small>
+            {reinforcementRating !== null ? "强化时暂不可用" : "记忆教练"}
+          </small>
         </button>
       </aside>
 
@@ -2537,7 +2560,7 @@ export default function Home() {
       )}
 
       <CoachPanel
-        open={aiOpen}
+        open={aiOpen && reinforcementRating === null}
         word={current.word}
         meaning={currentMeaning.meaning}
         aiMode={aiMode}

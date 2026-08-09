@@ -196,6 +196,58 @@ test("评分写入后可以撤销，并把持久化进度恢复到评分前", as
   await expect.poll(() => readStoreCount(page, "reviews")).toBe(0);
 });
 
+test("低评分强化会关闭 AI 教练并在答错后给出完整对照", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  await openApp(page);
+
+  const wordFace = page.getByRole("button", { name: "显示单词释义" });
+  const wordHeading = wordFace.locator("h1");
+  const radiateAudio = page.getByRole("button", { name: /播放 radiate 的发音/ });
+  await expect(wordHeading).toHaveText("radiate");
+  await wordFace.click();
+
+  await page.getByRole("button", { name: "打开 AI 记忆教练" }).click();
+  const coach = page.getByRole("complementary", { name: "AI 记忆教练" });
+  await expect(coach).toBeVisible();
+  await expect(coach).toContainText("radiate");
+
+  await page.getByRole("button", { name: /忘记/ }).click();
+  await expect(coach).toBeHidden();
+  const disabledCoachEntry = page.getByRole("button", {
+    name: "强化拼写进行中，暂不能打开 AI 记忆教练",
+  });
+  await expect(disabledCoachEntry).toBeDisabled();
+  await expect(disabledCoachEntry).toHaveAttribute(
+    "title",
+    "请先完成强化拼写或暂时跳过，再使用 AI 记忆教练",
+  );
+
+  const reinforcement = page.locator(".reinforcement-panel");
+  await expect(reinforcement).toBeVisible();
+  await reinforcement.getByRole("textbox", { name: "输入完整单词" })
+    .fill("radio");
+  await reinforcement.getByRole("button", { name: "完成强化" }).click();
+
+  const feedback = reinforcement.locator("#reinforcement-feedback");
+  await expect(feedback).toContainText("你刚输入的是「radio」");
+  await expect(feedback).toContainText("正确拼写是「radiate」");
+  await expect(feedback).toContainText("请对照后重试");
+  await expect(feedback).toContainText("暂时跳过");
+  await expect(radiateAudio).toBeVisible();
+  await expect.poll(() => readStoreCount(page, "reviews")).toBe(0);
+  await expect.poll(async () => readStoreRecord(page, "word-progress", 1))
+    .toBeNull();
+
+  await reinforcement.getByRole("textbox", { name: "输入完整单词" })
+    .fill("radiate");
+  await reinforcement.getByRole("button", { name: "完成强化" }).click();
+  await expect(reinforcement).toHaveCount(0);
+  await expect.poll(() => readStoreCount(page, "reviews")).toBe(1);
+  await expect.poll(async () =>
+    (await readStoreRecord(page, "word-progress", 1))?.lastRating).toBe(0);
+  await expect(radiateAudio).toHaveCount(0);
+});
+
 test("刷新页面后仍可撤销最近评分", async ({ context, page }) => {
   await installStateSeed(context, createState());
   await openApp(page);
