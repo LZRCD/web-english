@@ -1343,3 +1343,21 @@
 - study 35/35，typecheck 通过，lint 0 error/1 个第 44 轮既有 warning，`npm test` 含生产构建 230/230。
 - 固定 3000 最终联合 E2E 35/35（learning 17/17 + signal-flow 18/18）；服务按监听 PID 精确关闭，端口与本轮日志清洁，build-info 恢复。
 - 下一轮不继续机械拆 767 行 hook；先只读审计剩余 I/O 状态机，只有找到不携带 React/DOM/多组 ref 且能保持请求时序的窄边界才继续实施，否则停止拆分并转向更高价值架构候选。
+
+## 第六十五次迭代：useSelectionLookup 剩余 I/O 状态机最终审计
+
+本次迭代：2026-08-09。
+
+### 只读审计与终局
+
+- 从 `WordCard` 的 mouse/pointer selection 追到 Range 几何、known 命中、本地词典 prefix/Range、AI fallback、音标补全、Abort 代次、localStorage、查词状态持久化、性能 trace、后台预取及 popup 清理，完成剩余 767 行 I/O 状态机调用图。
+- 当前没有数字请求序号；`AbortController` 信号与 `lookupAbortRef.current === controller` 共同充当请求代次。现有 learning E2E 已覆盖快速 A→B 与关闭后晚响应，结果接纳、业务保存、错误 UI 和 trace 时序不可分割搬移。
+- `lib/dictionary-range.ts` 已承接 206/200/损坏/网络/超时的高价值 Range 边界；`lib/selection-lookup.ts` 已承接 known 优先级、upsert、统计和 120 项裁剪纯投影；performance 与 background-prefetch 也已有职责边界。
+- 字典 prefix 完整提取需要四组可变 cache/promise 或新 controller；phonetic 完整提取需要 React/ref 与两个 guarded UI 写点；AI 完整接纳需要 controller、当前 popup 快照、多次有序写入和 trace；localStorage/request 窄包装虽可注入但收益仅是移动少量 I/O 行。所有候选至少违反“无 React/DOM/多组 ref、时序不变、高价值职责收敛”中的一项。
+- 唯一终局选择 B：停止继续拆分 `useSelectionLookup`，将其保留为合理 orchestration boundary；不创建 controller、事件总线、状态层或平行缓存抽象。
+
+### 边界与后续
+
+- 本轮只修改 `docs/iterations/round-46.md`、`docs/iterations/next-round-prompt.md` 与本演进记录；未修改业务代码、测试、配置、schema/version/store/domain、评分、FSRS、备份、package scripts 或运行数据。
+- 未启动 3000、浏览器或 E2E，未重跑 lint/typecheck/build/npm test；第 45 轮 230/230 与 learning 17/17、signal-flow 18/18 仅保留为历史基线，不冒充本轮证据。
+- 下一轮返回长期总计划，进入阶段 E“自适应推荐可行性评估”只读设计；未经用户另行批准不修改推荐行为。若真实生产样本或产品阈值不足，明确维持固定优先级并转阶段 F 发布准备。
