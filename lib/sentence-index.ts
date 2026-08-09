@@ -126,9 +126,12 @@ export function buildSentenceIndex({
       if (lower === sourceWord.toLowerCase()) continue;
       if (STOP_WORDS.has(lower)) continue;
       // 词形双向展开：token 及其变形候选凡命中词库均作为 key 收录，
-      // 让「原形 ↔ 变形」互相可查；每条例句最多收录 2 个 key 控制膨胀
+      // 让「原形 ↔ 变形」互相可查；每条例句最多收录 2 个 key 控制膨胀。
+      // 排除例句来源词自身（含变形回填，如 harbored → harbor），
+      // 避免单词在「已见例句」里引用自己的例句
       const keys = [...new Set(
-        inflections(lower).filter((candidate) => exact.has(candidate)),
+        inflections(lower).filter((candidate) =>
+          exact.has(candidate) && candidate !== sourceWord.toLowerCase()),
       )].slice(0, 2);
       if (!keys.length) continue;
       const entry: ReusedSentence = {

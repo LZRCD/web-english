@@ -18,6 +18,8 @@ type UseAiCoachOptions = {
   setSenseFrequency: Dispatch<SetStateAction<SenseFrequencyMap>>;
   unfamiliarMeanings: string[];
   currentFamiliarMeanings: Set<string>;
+  /** 已见例句原文（本词既有释义例句 + 跨词复用例句），生成时禁止与其重复 */
+  existingSentences: string[];
   onNotify: (message: string, duration?: number) => void;
 };
 
@@ -31,6 +33,7 @@ export function useAiCoach({
   setSenseFrequency,
   unfamiliarMeanings,
   currentFamiliarMeanings,
+  existingSentences,
   onNotify,
 }: UseAiCoachOptions) {
   const [aiOpen, setAiOpen] = useState(false);
@@ -103,7 +106,16 @@ export function useAiCoach({
       const response = await fetch("/api/enrich/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word, ...example, reason }),
+        // 附带同词其他义项的例句，供质检员判断是否雷同
+        body: JSON.stringify({
+          word,
+          ...example,
+          reason,
+          contextSentences: enrichmentsRef.current[wordId]?.senseExamples
+            ?.filter((_, itemIndex) => itemIndex !== index)
+            .map((item) => item.sentence)
+            .slice(0, 6) ?? [],
+        }),
         signal: AbortSignal.timeout(20_000),
       });
       const result = await response.json() as {
@@ -230,6 +242,7 @@ export function useAiCoach({
           meaning: unfamiliarMeanings.join("；"),
           senses: unfamiliarMeanings.slice(0, 6),
           familiarMeanings: [...currentFamiliarMeanings],
+          existingSentences,
         }),
         signal: AbortSignal.timeout(30000),
       });
@@ -304,6 +317,15 @@ export function useAiCoach({
           meaning: example.meaning,
           senses: [example.meaning],
           familiarMeanings: [...currentFamiliarMeanings],
+          // 其余义项例句 + 已见例句，重写后不得与其雷同
+          existingSentences: [
+            ...new Set([
+              ...(enrichment?.senseExamples
+                ?.filter((_, itemIndex) => itemIndex !== index)
+                .map((item) => item.sentence) ?? []),
+              ...existingSentences,
+            ]),
+          ].slice(0, 6),
         }),
         signal: AbortSignal.timeout(30_000),
       });

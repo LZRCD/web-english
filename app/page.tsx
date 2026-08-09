@@ -780,6 +780,22 @@ export default function Home() {
   const reinforcementMeaning = unfamiliarMeanings[0]
     ?? currentMeaningItems[0]
     ?? currentMeaning.meaning;
+  // 生成/重写例句时的「禁止重复」清单：跨词已见例句 + 本词既有释义例句，去重限长
+  const existingSentences = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const item of currentReusedSentences) {
+      if (seen.has(item.sentence)) continue;
+      seen.add(item.sentence);
+      list.push(item.sentence);
+    }
+    for (const example of currentEnrichment?.senseExamples ?? []) {
+      if (seen.has(example.sentence)) continue;
+      seen.add(example.sentence);
+      list.push(example.sentence);
+    }
+    return list.slice(0, 6);
+  }, [currentEnrichment, currentReusedSentences]);
 
   const {
     aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
@@ -796,8 +812,42 @@ export default function Home() {
     setSenseFrequency,
     unfamiliarMeanings,
     currentFamiliarMeanings,
+    existingSentences,
     onNotify: showToast,
   });
+
+  // 猜词 AI 判分：命中任一义项即对、不看语境；任何失败都返回 null 让卡片回退本地匹配
+  const checkGuessWithAi = useCallback(async ({
+    word,
+    sentence,
+    translation,
+    senses,
+    guess,
+  }: {
+    word: string;
+    sentence: string;
+    translation?: string;
+    senses: string[];
+    guess: string;
+  }) => {
+    try {
+      const response = await fetch("/api/enrich/guess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word, sentence, translation, senses, guess }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = await response.json() as {
+        correct?: boolean;
+        matched?: string;
+        error?: string;
+      };
+      if (!response.ok || typeof data.correct !== "boolean") return null;
+      return { correct: data.correct, matched: data.matched ?? "" };
+    } catch {
+      return null;
+    }
+  }, []);
 
   // 监听视口宽度：手机端 AI 面板打开时隔离底层焦点
   useEffect(() => {
@@ -2327,6 +2377,7 @@ export default function Home() {
                 onEnrichWord={enrichCurrentWord}
                 onGenerateSenseFrequency={generateSenseFrequency}
                 onGuessMistake={recordGuessMistake}
+                onGuessCheck={checkGuessWithAi}
                 onReportSenseMismatch={reportSenseMismatch}
                 onRewriteSenseExample={rewriteSenseExample}
                 onTextSelection={handleTextSelection}

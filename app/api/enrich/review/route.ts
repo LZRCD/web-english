@@ -17,6 +17,8 @@ type ReviewRequest = {
   sentence?: string;
   translation?: string;
   reason?: "meaning-mismatch" | "low-confidence";
+  /** 同词其他义项的例句，供质检员判断是否雷同 */
+  contextSentences?: string[];
 };
 
 type ReviewPayload = {
@@ -35,6 +37,13 @@ async function handlePost(request: NextRequest) {
     reason: raw.reason === "meaning-mismatch"
       ? "meaning-mismatch"
       : "low-confidence",
+    contextSentences: Array.isArray(raw.contextSentences)
+      ? raw.contextSentences
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => boundedText(item, 500))
+          .filter(Boolean)
+          .slice(0, 6)
+      : [],
   } as const;
   if (!body.word || !body.meaning || !body.sentence || !body.translation) {
     return NextResponse.json({ error: "缺少待审查例句字段" }, { status: 400 });
@@ -51,7 +60,7 @@ async function handlePost(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "你是英语词典例句质检员。只返回 JSON：matches（布尔值）、confidence（0到1）、note（不超过60字中文）。判断英文句子是否确实体现指定中文义项，翻译是否与句子一致。不要改写例句。",
+          content: "你是英语词典例句质检员。只返回 JSON：matches（布尔值）、confidence（0到1）、note（不超过60字中文）。判定标准：1. 英文句子是否通过语境线索唯一指向指定义项——句子若可同时读成其他义项，判 matches=false；2. 翻译是否与句子和义项一致；3. 句子若与 contextSentences 中的任一例句雷同（结构、用词或情节近似），判 matches=false。不要改写例句。",
         },
         { role: "user", content: JSON.stringify(body) },
       ],

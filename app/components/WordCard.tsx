@@ -106,6 +106,14 @@ type WordCardProps = {
   onGenerateSenseFrequency: () => void;
   /** 记录一次猜词猜错 */
   onGuessMistake: () => void;
+  /** AI 判分猜词：命中任一义项即对，不看语境；返回 null 表示判分不可用，回退本地匹配 */
+  onGuessCheck?: (payload: {
+    word: string;
+    sentence: string;
+    translation?: string;
+    senses: string[];
+    guess: string;
+  }) => Promise<{ correct: boolean; matched: string } | null>;
   onReportSenseMismatch: (index: number) => void;
   onRewriteSenseExample: (index: number) => void;
   onTextSelection: (
@@ -167,6 +175,7 @@ export default function WordCard({
   onEnrichWord,
   onGenerateSenseFrequency,
   onGuessMistake,
+  onGuessCheck,
   onReportSenseMismatch,
   onRewriteSenseExample,
   onTextSelection,
@@ -198,19 +207,45 @@ export default function WordCard({
     currentEnrichment?.senseExamples?.[0]?.translation;
   // 隐藏释义阶段猜词：输入中文，命中任一义项即展开
   const [guessInput, setGuessInput] = useState("");
+  const [guessing, setGuessing] = useState(false);
   const [guessFeedback, setGuessFeedback] = useState<
     | { kind: "correct"; matched: string }
     | { kind: "wrong" }
     | undefined
   >(undefined);
-  const submitGuess = () => {
+  const submitGuess = async () => {
     const input = guessInput.trim();
-    if (!input) return;
-    const matched = currentSenseItems.find((item) =>
+    if (!input || guessing) return;
+    const localMatched = currentSenseItems.find((item) =>
       item.includes(input) || input.includes(item),
     );
-    if (matched) {
-      setGuessFeedback({ kind: "correct", matched });
+    // AI 判分优先：任一义项命中即对、不看语境；失败时退回本地子串匹配
+    if (onGuessCheck) {
+      setGuessing(true);
+      try {
+        const verdict = await onGuessCheck({
+          word: current.word,
+          sentence: guessSentence ?? "",
+          translation: guessTranslation,
+          senses: currentSenseItems,
+          guess: input,
+        });
+        if (verdict) {
+          if (verdict.correct) {
+            setGuessFeedback({ kind: "correct", matched: verdict.matched });
+            setSensesExpanded(true);
+          } else {
+            setGuessFeedback({ kind: "wrong" });
+            onGuessMistake();
+          }
+          return;
+        }
+      } finally {
+        setGuessing(false);
+      }
+    }
+    if (localMatched) {
+      setGuessFeedback({ kind: "correct", matched: localMatched });
       setSensesExpanded(true);
     } else {
       setGuessFeedback({ kind: "wrong" });
@@ -424,9 +459,9 @@ export default function WordCard({
                 <button
                   type="button"
                   onClick={submitGuess}
-                  disabled={!guessInput.trim()}
+                  disabled={!guessInput.trim() || guessing}
                 >
-                  猜一猜
+                  {guessing ? "判分中…" : "猜一猜"}
                 </button>
               </div>
               {guessFeedback?.kind === "wrong" && (
@@ -452,7 +487,9 @@ export default function WordCard({
             <>
               {guessFeedback?.kind === "correct" && (
                 <p className="guess-correct">
-                  猜中了「{guessFeedback.matched}」，看下完整释义确认
+                  {guessFeedback.matched
+                    ? `猜中了「${guessFeedback.matched}」，看下完整释义确认`
+                    : "猜中了，看下完整释义确认"}
                 </p>
               )}
               <div className="meaning-main">

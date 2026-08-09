@@ -40,6 +40,32 @@ test("例句反向索引：例句中的词能被查到（含变形匹配）", ()
   assert.equal(reusedSentencesFor(index, "abundant").length, 0);
 });
 
+test("例句反向索引：来源词变形不回填自身（harbored → harbor 不反向标注 harbor）", () => {
+  const index = buildSentenceIndex({
+    redbookWords: [
+      { id: 1, word: "harbor", meaning: "v. 窝藏" },
+      { id: 2, word: "fugitive", meaning: "n. 逃犯" },
+    ],
+    enrichments: {
+      1: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 窝藏",
+          sentence: "The police arrested the man who had harbored the fugitive for weeks.",
+          translation: "警方逮捕了窝藏逃犯数周的男子。",
+          confidence: 0.96,
+        }],
+      },
+    },
+  });
+  // 例句含 harbored（变形），但来源词是 harbor 自身 → 不进入 harbor 的「已见例句」
+  assert.equal(reusedSentencesFor(index, "harbor").length, 0);
+  // 例句仍可供其他词复用（fugitive 可见「来自 harbor 的例句」）
+  const forFugitive = reusedSentencesFor(index, "fugitive");
+  assert.equal(forFugitive.length, 1);
+  assert.equal(forFugitive[0].sourceWord, "harbor");
+});
+
 test("例句反向索引：查询词的变形可命中原形", () => {
   const index = buildSentenceIndex({ redbookWords, enrichments });
   // harvested 变形命中 harvest
@@ -51,12 +77,15 @@ test("例句反向索引：查询词的变形可命中原形", () => {
 
 test("例句反向索引：词形双向展开，原形与变形互相可查", () => {
   const index = buildSentenceIndex({
-    redbookWords,
+    redbookWords: [
+      ...redbookWords,
+      { id: 4, word: "work", meaning: "v. 工作" },
+    ],
     enrichments: {
-      3: {
+      4: {
         source: "ai",
         senseExamples: [{
-          meaning: "v. 反映",
+          meaning: "v. 工作",
           sentence: "The abundant harvest reflects the hard work.",
           translation: "丰收反映了辛勤劳动。",
         }],
@@ -71,6 +100,8 @@ test("例句反向索引：词形双向展开，原形与变形互相可查", ()
   const forHarvested = reusedSentencesFor(index, "harvested");
   assert.equal(forHarvested.length, 1);
   assert.match(forHarvested[0].sentence, /harvest reflects/);
+  // 例句来源词自身的变形不反向标注自身（work 的例句不出现在 work 的「已见例句」）
+  assert.equal(reusedSentencesFor(index, "work").length, 0);
 });
 
 test("例句反向索引：来源词查询次数加权排序生效", () => {
@@ -127,28 +158,29 @@ test("例句反向索引：不规则动词变形双向命中", () => {
     redbookWords: [
       { id: 1, word: "go", meaning: "v. 去" },
       { id: 2, word: "buy", meaning: "v. 买" },
-      { id: 3, word: "harvest", meaning: "n. 收获" },
+      { id: 3, word: "market", meaning: "n. 市场" },
+      { id: 4, word: "book", meaning: "n. 书" },
     ],
     enrichments: {
-      1: {
+      3: {
         source: "ai",
         senseExamples: [{
-          meaning: "v. 去",
+          meaning: "n. 市场",
           sentence: "They went to the market yesterday.",
           translation: "他们昨天去了市场。",
         }],
       },
-      2: {
+      4: {
         source: "ai",
         senseExamples: [{
-          meaning: "v. 买",
+          meaning: "n. 书",
           sentence: "She bought a book about harvest.",
           translation: "她买了一本关于丰收的书。",
         }],
       },
     },
   });
-  // 例句含 went，查询原形 go 可命中（索引侧收录 override 原形）
+  // 例句含 went（变形），查询原形 go 可命中（索引侧收录 override 原形）
   const forGo = reusedSentencesFor(index, "go");
   assert.equal(forGo.length, 1);
   assert.match(forGo[0].sentence, /went to the market/);
@@ -159,6 +191,9 @@ test("例句反向索引：不规则动词变形双向命中", () => {
   // 反向：查询变形 went / bought 也可命中例句
   assert.equal(reusedSentencesFor(index, "went").length, 1);
   assert.equal(reusedSentencesFor(index, "bought").length, 1);
+  // 例句来源词自身的变形不反向标注自身（market 的例句不出现在 market 的「已见例句」）
+  assert.equal(reusedSentencesFor(index, "market").length, 0);
+  assert.equal(reusedSentencesFor(index, "book").length, 0);
 });
 
 test("例句反向索引：来源词薄弱度优先于查询次数加权", () => {
