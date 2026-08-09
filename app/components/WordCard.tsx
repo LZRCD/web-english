@@ -23,6 +23,7 @@ import type {
 } from "../../lib/weak-signals";
 import type { LookupStat, Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
+import type { RedbookLoadGuidance } from "../../lib/redbook";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
 
 type RedbookStatus = "loading" | "ready" | "error";
@@ -38,6 +39,7 @@ type WordCardProps = {
   reinforcementRating: ReinforcementRating | null;
   redbookReady: boolean;
   redbookStatus: RedbookStatus;
+  redbookLoadGuidance?: RedbookLoadGuidance;
 
   // 当前单词
   current: Word;
@@ -96,6 +98,7 @@ type WordCardProps = {
 
   // 回调
   onReveal: () => void;
+  onRetryRedbookLoad: () => void;
   onToggleFavorite: () => void;
   onSpeak: () => void;
   onToggleMeaningFamiliar: (meaning: string) => void;
@@ -122,6 +125,7 @@ export default function WordCard({
   reinforcementRating,
   redbookReady,
   redbookStatus,
+  redbookLoadGuidance,
   current,
   currentSenses,
   currentFamiliarMeanings,
@@ -156,6 +160,7 @@ export default function WordCard({
   rewritingSense,
   unfamiliarMeanings,
   onReveal,
+  onRetryRedbookLoad,
   onToggleFavorite,
   onSpeak,
   onToggleMeaningFamiliar,
@@ -328,6 +333,16 @@ export default function WordCard({
           !revealed && <span>先在脑中回忆，再点击查看</span>
         )}
       </button>
+
+      {redbookStatus === "error" && redbookLoadGuidance && (
+        <section className="redbook-load-error" role="alert" aria-live="assertive">
+          <strong>{redbookLoadGuidance.title}</strong>
+          <p>{redbookLoadGuidance.detail}</p>
+          <button type="button" onClick={onRetryRedbookLoad}>
+            重新读取词库
+          </button>
+        </section>
+      )}
 
       {/* 揭示后：释义面板 */}
       {revealed && redbookReady && reinforcementRating === null && (

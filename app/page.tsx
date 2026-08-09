@@ -9,8 +9,10 @@ import {
   useState,
 } from "react";
 import {
+  buildRedbookLoadGuidance,
   isPrimaryLearningWord,
   REDBOOK_SOURCE_TOTAL,
+  type RedbookLoadGuidance,
 } from "../lib/redbook";
 import {
   buildStudyKey,
@@ -219,6 +221,8 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [redbookWords, setRedbookWords] = useState<Word[]>([]);
   const [redbookStatus, setRedbookStatus] = useState<RedbookStatus>("loading");
+  const [redbookLoadAttempt, setRedbookLoadAttempt] = useState(0);
+  const [redbookLoadGuidance, setRedbookLoadGuidance] = useState<RedbookLoadGuidance>();
   const [selectedSection, setSelectedSection] = useState("必考词");
   const [selectedUnit, setSelectedUnit] = useState<number | string | "all">(1);
   const [activityRange, setActivityRange] = useState<ActivityRange>(140);
@@ -932,7 +936,9 @@ export default function Home() {
     let active = true;
     let renderFrame: number | undefined;
     const controller = new AbortController();
-    const traceId = startupTraceId;
+    const traceId = redbookLoadAttempt === 0
+      ? startupTraceId
+      : createPerformanceTrace("redbook-retry");
     const loadTimer = startPerformanceTimer("redbook.load.total", { traceId });
     Promise.all([
       fetchJsonWithDiagnostics<RedbookData>(
@@ -970,6 +976,7 @@ export default function Home() {
         });
         indexTimer.end();
         setRedbookWords(auditedWords);
+        setRedbookLoadGuidance(undefined);
         setLearningItemCount(analysis.metadata.learningItemCount);
         setReviews((items) => {
           if (!items.some((review) => review.wordId === undefined)) {
@@ -1019,8 +1026,10 @@ export default function Home() {
             : "error",
         );
         if (!active) return;
+        const guidance = buildRedbookLoadGuidance(error);
         setRedbookStatus("error");
-        showToast("红宝书词库读取失败，请检查本地资源");
+        setRedbookLoadGuidance(guidance);
+        showToast(guidance.title);
       });
     return () => {
       active = false;
@@ -1028,7 +1037,14 @@ export default function Home() {
       if (renderFrame !== undefined) window.cancelAnimationFrame(renderFrame);
       loadTimer.end({}, "aborted");
     };
-  }, [showToast, startupTraceId]);
+  }, [redbookLoadAttempt, showToast, startupTraceId]);
+
+  function retryRedbookLoad() {
+    if (redbookStatus !== "error") return;
+    setRedbookStatus("loading");
+    setRedbookLoadGuidance(undefined);
+    setRedbookLoadAttempt((attempt) => attempt + 1);
+  }
 
   useEffect(() => {
     if (!pendingWordId || !studyWords.length) return;
@@ -2127,6 +2143,7 @@ export default function Home() {
                 reinforcementRating={reinforcementRating}
                 redbookReady={redbookReady}
                 redbookStatus={redbookStatus}
+                redbookLoadGuidance={redbookLoadGuidance}
                 current={current}
                 currentSenses={currentSenses}
                 currentFamiliarMeanings={currentFamiliarMeanings}
@@ -2181,6 +2198,7 @@ export default function Home() {
                 rewritingSense={rewritingSense}
                 unfamiliarMeanings={unfamiliarMeanings}
                 onReveal={() => setRevealed(true)}
+                onRetryRedbookLoad={retryRedbookLoad}
                 onToggleFavorite={() => toggleFavorite()}
                 onSpeak={speak}
                 onToggleMeaningFamiliar={toggleMeaningFamiliar}

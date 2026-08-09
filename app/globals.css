@@ -928,6 +928,49 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.redbook-load-error {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 410px);
+  margin: -12px auto 8px;
+  padding: 16px 18px;
+  border: 1px solid #efd6c8;
+  border-radius: 16px;
+  background: #fff9f5;
+  color: #614e45;
+  text-align: left;
+}
+
+.redbook-load-error strong {
+  color: #8f4f3e;
+  font-size: 13px;
+}
+
+.redbook-load-error p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.redbook-load-error button {
+  justify-self: start;
+  min-height: 40px;
+  border: 1px solid #d9ad9c;
+  border-radius: 999px;
+  background: white;
+  color: #8f4f3e;
+  padding: 9px 15px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.redbook-load-error button:focus-visible {
+  outline: 3px solid #27825c;
+  outline-offset: 3px;
+}
+
 .meaning-panel {
   animation: panel-in 320ms ease-out both;
 }

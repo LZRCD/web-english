@@ -52,6 +52,7 @@ import {
   upsertLookupWord,
   type LookupResult,
 } from "../lib/selection-lookup.ts";
+import { buildRedbookLoadGuidance } from "../lib/redbook.ts";
 
 function createQuizAttempts(count: number): QuizAttempt[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -76,6 +77,23 @@ function createReview(
       ?? new Date(input.dueAt).getTime() - new Date(input.reviewedAt).getTime(),
   };
 }
+
+test("词库加载错误说明：只细分可靠的本地文件问题，其余使用通用修复步骤", () => {
+  const missing = buildRedbookLoadGuidance(new Error("请求失败：404"));
+  const invalidJson = buildRedbookLoadGuidance(new SyntaxError("Unexpected token"));
+  const incomplete = buildRedbookLoadGuidance(new Error("redbook analysis incomplete"));
+  const unavailable = buildRedbookLoadGuidance(new Error("请求失败：503"));
+  const unknown = buildRedbookLoadGuidance("opaque failure");
+
+  assert.equal(missing.title, "本地词库文件缺失或不完整");
+  assert.equal(invalidJson.title, missing.title);
+  assert.equal(incomplete.title, missing.title);
+  assert.match(missing.detail, /重新启动词环/);
+  assert.equal(unavailable.title, "暂时无法读取本地词库");
+  assert.equal(unknown.title, unavailable.title);
+  assert.match(unavailable.detail, /确认词环仍在运行.*重试/);
+  assert.doesNotMatch(`${unavailable.title}${unavailable.detail}`, /503|stack|Error/i);
+});
 
 test("旧状态迁移到 v5 FSRS 并清理 CET 示例记录", () => {
   const legacy = JSON.stringify({
