@@ -119,7 +119,11 @@ test("专项测验答错写入 FSRS 薄弱词并更新每周报告", async ({ co
   await page.getByRole("button", { name: /听音拼写/ }).click();
   await page.getByLabel("你的答案").fill("incorrect");
   await page.getByRole("button", { name: "提交" }).click();
-  await expect(page.locator(".quiz-feedback")).toContainText("已加入薄弱词");
+  const feedback = page.locator(".quiz-feedback");
+  await expect(feedback).toContainText("已加入薄弱词");
+  await expect(feedback).toContainText("解析：");
+  await expect(feedback).toContainText("本题播放的发音对应单词“radiate”");
+  await expect(feedback).toContainText("正确答案：radiate");
   await expect.poll(async () =>
     (await readStoreRecord(page, "word-progress", 1))?.lastRating).toBe(0);
   await expect.poll(() => readStoreCount(page, "mistakes")).toBe(1);

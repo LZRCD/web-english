@@ -93,6 +93,60 @@ test("熟词僻义与近义辨析题包含唯一正确选项", () => {
   }
 });
 
+test("三种专项测验解析说明题干答案关系并复用现有上下文", () => {
+  const words = WORDS.map((word) => word.id === 1
+    ? {
+        ...word,
+        phonetic: "/ˈreɪdieɪt/",
+        part: "vt.",
+        sentence: "Stars radiate energy.",
+        translation: "恒星辐射能量。",
+      }
+    : word);
+  const progress = progressFor([2, 2, 2, 2, 2]);
+  const questions = ([
+    "listening-spelling",
+    "chinese-to-english",
+    "meaning-choice",
+  ] as const).map((mode) => buildQuizQuestions({
+    words,
+    progress,
+    familiarMeanings: { 1: ["散发"] },
+    mode,
+    count: 5,
+    seed: 7,
+  }).find((question) => question.wordId === 1));
+
+  assert.ok(questions.every(Boolean));
+  assert.match(questions[0]!.explanation, /本题播放的发音对应单词“radiate”/);
+  assert.match(
+    questions[1]!.explanation,
+    /题干“vt\. 散发;发出光线”对应英文单词“radiate”/,
+  );
+  assert.match(
+    questions[2]!.explanation,
+    /单词“radiate”的义项“发出光线”是本题的正确答案/,
+  );
+  for (const question of questions) {
+    assert.match(question!.explanation, /音标：\/ˈreɪdieɪt\//);
+    assert.match(question!.explanation, /词性：vt\./);
+    assert.match(question!.explanation, /例句：Stars radiate energy\./);
+    assert.match(question!.explanation, /译文：恒星辐射能量。/);
+  }
+
+  const [fallback] = buildQuizQuestions({
+    words: [WORDS[0]],
+    progress: { 1: progress[1] },
+    mode: "chinese-to-english",
+    seed: 1,
+  });
+  assert.match(
+    fallback.explanation,
+    /题干“vt\. 散发;发出光线”对应英文单词“radiate”/,
+  );
+  assert.doesNotMatch(fallback.explanation, /音标：|词性：|例句：|译文：|undefined/);
+});
+
 test("出题优先级纳入划词查询、低频考频与顽固词信号", () => {
   // 全部已学习且非薄弱：基础分相同，只靠信号区分
   const progress = progressFor([2, 2, 2, 2, 2]);

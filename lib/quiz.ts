@@ -354,6 +354,19 @@ function wordSenses(word: Word) {
     .filter(Boolean);
 }
 
+function buildQuizExplanation(word: Word, relationship: string) {
+  const context = [
+    ["音标", word.phonetic],
+    ["词性", word.part],
+    ["例句", word.sentence],
+    ["译文", word.translation],
+  ].flatMap(([label, value]) => {
+    const normalized = value?.trim();
+    return normalized ? [`${label}：${normalized}。`] : [];
+  });
+  return [relationship, ...context].join(" ");
+}
+
 function shuffled<T>(items: readonly T[], seed: number, key: (item: T) => string) {
   return [...items].sort((first, second) =>
     seededScore(key(first), seed) - seededScore(key(second), seed));
@@ -427,7 +440,10 @@ function buildMeaningQuestion(
       answer: targetSense,
       options,
       label: "熟词僻义",
-      explanation: `${word.word}：${word.meaning}`,
+      explanation: buildQuizExplanation(
+        word,
+        `单词“${word.word}”的义项“${targetSense}”是本题的正确答案；完整释义为“${word.meaning}”。`,
+      ),
     };
   }
 
@@ -446,7 +462,10 @@ function buildMeaningQuestion(
     answer: word.word,
     options,
     label: "近义辨析",
-    explanation: `${word.word}：${word.meaning}`,
+    explanation: buildQuizExplanation(
+      word,
+      `题干“${targetSense}”对应英文单词“${word.word}”；该词完整释义为“${word.meaning}”。`,
+    ),
   };
 }
 
@@ -568,7 +587,10 @@ export function buildQuizQuestions(input: {
         prompt: "播放发音后，输入你听到的完整单词",
         answer: word.word,
         label: "听音拼写",
-        explanation: `${word.word}：${word.meaning}`,
+        explanation: buildQuizExplanation(
+          word,
+          `本题播放的发音对应单词“${word.word}”，该词表示“${word.meaning}”。`,
+        ),
       }];
     }
     if (input.mode === "chinese-to-english") {
@@ -580,7 +602,10 @@ export function buildQuizQuestions(input: {
         prompt: word.meaning,
         answer: word.word,
         label: "中译英",
-        explanation: `${word.word}：${word.meaning}`,
+        explanation: buildQuizExplanation(
+          word,
+          `题干“${word.meaning}”对应英文单词“${word.word}”。`,
+        ),
       }];
     }
     const question = buildMeaningQuestion(

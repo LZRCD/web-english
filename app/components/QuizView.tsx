@@ -395,7 +395,7 @@ export default function QuizView({
         {answerResult && (
           <div className={`quiz-feedback ${answerResult.correct ? "correct" : "wrong"}`} role="status">
             <span>{answerResult.correct ? "回答正确" : "已加入薄弱词"}</span>
-            <strong>{currentQuestion.explanation}</strong>
+            <strong>解析：{currentQuestion.explanation}</strong>
             {!answerResult.correct && (
               <small>你的答案：{answerResult.answer} · 正确答案：{currentQuestion.answer}</small>
             )}

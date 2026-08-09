@@ -337,6 +337,25 @@ export default function Home() {
       : REDBOOK_PLACEHOLDER,
     [currentBase, currentDictionaryPhonetic, currentEnrichment],
   );
+  const quizWords = useMemo<Word[]>(
+    () => redbookWords.map((word) => {
+      if (word.id === undefined) return word;
+      const enrichment = enrichments[word.id];
+      const phonetic = word.phonetic
+        || enrichment?.phonetic
+        || dictionaryPhonetics[word.id]
+        || undefined;
+      const sentence = enrichment?.sentence ?? word.sentence;
+      const translation = enrichment?.translation ?? word.translation;
+      if (
+        phonetic === word.phonetic
+        && sentence === word.sentence
+        && translation === word.translation
+      ) return word;
+      return { ...word, phonetic, sentence, translation };
+    }),
+    [dictionaryPhonetics, enrichments, redbookWords],
+  );
   const {
     selectionLookup,
     handleTextSelection,
@@ -2392,7 +2411,7 @@ export default function Home() {
 
         {activeView === "quiz" && (
           <QuizView
-            words={redbookWords}
+            words={quizWords}
             wordProgress={wordProgress}
             familiarMeanings={familiarMeanings}
             lookupStats={lookupStats}
