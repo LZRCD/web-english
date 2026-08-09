@@ -19,6 +19,7 @@ import {
   type WordProgressMap,
 } from "./learning.ts";
 import {
+  normalizeQuizQuestionSnapshots,
   normalizeQuizQuestionWordIds,
   type QuizAttempt,
   type QuizSessionState,
@@ -965,12 +966,18 @@ function normalizeQuizSession(value: unknown): QuizSessionState | undefined {
       }
     }
   }
-  const questionWordIds = normalizeQuizQuestionWordIds(session.questionWordIds);
+  const questionSnapshots = normalizeQuizQuestionSnapshots(
+    session.questionSnapshots,
+  )?.filter((question) => question.mode === session.mode);
+  const questionWordIds = questionSnapshots !== undefined
+    ? questionSnapshots.map((question) => question.wordId)
+    : normalizeQuizQuestionWordIds(session.questionWordIds);
   return {
     id: typeof session.id === "string" ? session.id : "quiz:restored",
     mode: session.mode as QuizSessionState["mode"],
     seed: Number(session.seed),
     ...(questionWordIds !== undefined ? { questionWordIds } : {}),
+    ...(questionSnapshots !== undefined ? { questionSnapshots } : {}),
     index: Math.max(0, Math.trunc(Number(session.index))),
     correctCount: Math.max(0, Math.trunc(Number(session.correctCount) || 0)),
     answers,

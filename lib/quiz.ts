@@ -30,6 +30,9 @@ export type QuizQuestion = {
   explanation: string;
 };
 
+/** activeQuiz 中持久化的题目呈现快照；运行时 Word 仍从当前有效词条解析。 */
+export type QuizQuestionSnapshot = Omit<QuizQuestion, "word">;
+
 export type QuizModeDefinition = {
   id: QuizMode;
   title: string;
@@ -93,6 +96,12 @@ export function appendQuizAttempt(
 }
 
 export const MAX_QUIZ_QUESTION_WORD_IDS = 30;
+const QUIZ_QUESTION_LABELS = new Set<QuizQuestion["label"]>([
+  "听音拼写",
+  "中译英",
+  "熟词僻义",
+  "近义辨析",
+]);
 
 /** 清洗持久化题组快照：只保留有序、唯一的有效学习项 id。 */
 export function normalizeQuizQuestionWordIds(value: unknown) {
@@ -111,6 +120,74 @@ export function normalizeQuizQuestionWordIds(value: unknown) {
   return wordIds;
 }
 
+/** 清洗完整题目快照：限制数量、去重目标，并拒绝无法安全呈现的题目。 */
+export function normalizeQuizQuestionSnapshots(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const seenWordIds = new Set<number>();
+  const snapshots: QuizQuestionSnapshot[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Partial<QuizQuestionSnapshot>;
+    if (
+      typeof record.id !== "string"
+      || !record.id
+      || !QUIZ_MODE_DEFINITIONS.some(({ id }) => id === record.mode)
+      || typeof record.wordId !== "number"
+      || !Number.isSafeInteger(record.wordId)
+      || record.wordId <= 0
+      || typeof record.prompt !== "string"
+      || !record.prompt
+      || typeof record.answer !== "string"
+      || !record.answer
+      || typeof record.label !== "string"
+      || !QUIZ_QUESTION_LABELS.has(record.label as QuizQuestion["label"])
+      || typeof record.explanation !== "string"
+      || seenWordIds.has(record.wordId)
+    ) {
+      continue;
+    }
+    const options = Array.isArray(record.options)
+      ? Array.from(new Set(record.options.filter(
+          (option): option is string => typeof option === "string" && Boolean(option),
+        ))).slice(0, 4)
+      : undefined;
+    if (
+      record.mode === "meaning-choice"
+      && (options?.length !== 4 || !options.includes(record.answer))
+    ) {
+      continue;
+    }
+    seenWordIds.add(record.wordId);
+    snapshots.push({
+      id: record.id,
+      mode: record.mode as QuizMode,
+      wordId: record.wordId,
+      prompt: record.prompt,
+      answer: record.answer,
+      ...(record.mode === "meaning-choice" ? { options } : {}),
+      label: record.label as QuizQuestion["label"],
+      explanation: record.explanation,
+    });
+    if (snapshots.length >= MAX_QUIZ_QUESTION_WORD_IDS) break;
+  }
+  return snapshots;
+}
+
+export function snapshotQuizQuestions(
+  questions: readonly QuizQuestion[],
+): QuizQuestionSnapshot[] {
+  return questions.slice(0, MAX_QUIZ_QUESTION_WORD_IDS).map((question) => ({
+    id: question.id,
+    mode: question.mode,
+    wordId: question.wordId,
+    prompt: question.prompt,
+    answer: question.answer,
+    ...(question.options ? { options: [...question.options] } : {}),
+    label: question.label,
+    explanation: question.explanation,
+  }));
+}
+
 /** 未完成测验的持久化进度：按题组快照与 seed 精确恢复。 */
 export type QuizSessionState = {
   id: string;
@@ -118,6 +195,8 @@ export type QuizSessionState = {
   seed: number;
   /** 实际生成题目的目标词 id，有序快照；旧会话可缺省。 */
   questionWordIds?: number[];
+  /** 题干、正确答案与选项快照；旧的仅 id 会话可缺省。 */
+  questionSnapshots?: QuizQuestionSnapshot[];
   index: number;
   correctCount: number;
   answers: Record<string, { answer: string; correct: boolean }>;
@@ -144,7 +223,8 @@ export function createQuizSession(
 
 /** 用已保存的 seed 重建同一组题目（选项与顺序均与当时一致）。 */
 export function restoreQuizQuestions(
-  session: Pick<QuizSessionState, "mode" | "seed" | "questionWordIds">,
+  session: Pick<QuizSessionState,
+    "mode" | "seed" | "questionWordIds" | "questionSnapshots">,
   words: Word[],
   progress: WordProgressMap,
   familiarMeanings: FamiliarMeaningMap,
@@ -155,6 +235,24 @@ export function restoreQuizQuestions(
     | "stubbornWords"
     | "candidateWordIds">,
 ) {
+  const snapshots = normalizeQuizQuestionSnapshots(session.questionSnapshots);
+  if (snapshots !== undefined) {
+    const learnedWordById = new Map(
+      words.filter(wordId).filter((word) => Boolean(progress[word.id]))
+        .map((word) => [word.id, word]),
+    );
+    return snapshots.flatMap<QuizQuestion>((snapshot) => {
+      if (snapshot.mode !== session.mode) return [];
+      const word = learnedWordById.get(snapshot.wordId);
+      return word
+        ? [{
+            ...snapshot,
+            ...(snapshot.options ? { options: [...snapshot.options] } : {}),
+            word,
+          }]
+        : [];
+    }).slice(0, 10);
+  }
   return buildQuizQuestions({
     words,
     progress,
@@ -165,6 +263,65 @@ export function restoreQuizQuestions(
     ...signals,
     questionWordIds: session.questionWordIds,
   });
+}
+
+export type QuizSessionRecovery = {
+  session?: QuizSessionState;
+  removedCount: number;
+  status: "unchanged" | "partial" | "cleared";
+};
+
+/** 按恢复后的有效题集合协调进度、作答、正确数、完成态和结果分母。 */
+export function recoverQuizSession(
+  session: QuizSessionState,
+  restoredQuestions: readonly QuizQuestion[],
+): QuizSessionRecovery {
+  const sourceWordIds = session.questionWordIds;
+  if (sourceWordIds === undefined) {
+    return { session, removedCount: 0, status: "unchanged" };
+  }
+  const restoredByWordId = new Map(
+    restoredQuestions.map((question) => [question.wordId, question]),
+  );
+  const questions = sourceWordIds.flatMap((wordId) => {
+    const question = restoredByWordId.get(wordId);
+    return question ? [question] : [];
+  });
+  const removedCount = Math.max(0, sourceWordIds.length - questions.length);
+  if (!questions.length) return { removedCount, status: "cleared" };
+  if (removedCount === 0) {
+    return { session, removedCount: 0, status: "unchanged" };
+  }
+
+  const questionIds = new Set(questions.map((question) => question.id));
+  const answers = Object.fromEntries(
+    Object.entries(session.answers).filter(([questionId]) =>
+      questionIds.has(questionId)),
+  );
+  const completedBoundary = Math.min(
+    sourceWordIds.length,
+    Math.max(0, Math.trunc(session.index)),
+  );
+  const validWordIds = new Set(questions.map((question) => question.wordId));
+  const index = Math.min(
+    sourceWordIds.slice(0, completedBoundary)
+      .filter((wordId) => validWordIds.has(wordId)).length,
+    questions.length - 1,
+  );
+  return {
+    session: {
+      ...session,
+      questionWordIds: questions.map((question) => question.wordId),
+      questionSnapshots: snapshotQuizQuestions(questions),
+      index,
+      correctCount: Object.values(answers)
+        .filter((answer) => answer.correct).length,
+      answers,
+      complete: questions.every((question) => Boolean(answers[question.id])),
+    },
+    removedCount,
+    status: "partial",
+  };
 }
 
 /**

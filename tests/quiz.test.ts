@@ -3,9 +3,13 @@ import test from "node:test";
 import { applyRating, type WordProgressMap } from "../lib/learning.ts";
 import {
   createQuizSession,
+  recoverQuizSession,
+  restoreQuizQuestions,
   shouldApplyQuizToSchedule,
   buildQuizQuestions,
   isQuizAnswerCorrect,
+  snapshotQuizQuestions,
+  type QuizSessionState,
 } from "../lib/quiz.ts";
 import type { Word } from "../lib/study.ts";
 
@@ -227,3 +231,89 @@ test("测验会话按 seed 可重建同一组题目", () => {
   });
   assert.deepEqual(restored.map((question) => question.id), first.map((question) => question.id));
 })
+
+test("题目呈现快照在词条内容变化后保持题干、答案与选项", () => {
+  const progress = progressFor([2, 2, 2, 2, 2]);
+  const original = buildQuizQuestions({
+    words: WORDS,
+    progress,
+    mode: "meaning-choice",
+    count: 4,
+    seed: 63,
+  });
+  assert.equal(original.length, 4);
+  const removedWordId = original[0].wordId;
+  const session: QuizSessionState = {
+    id: "quiz:meaning-choice:63",
+    mode: "meaning-choice",
+    seed: 63,
+    questionWordIds: original.map((question) => question.wordId),
+    questionSnapshots: snapshotQuizQuestions(original),
+    index: 2,
+    correctCount: 2,
+    answers: {
+      [original[0].id]: { answer: original[0].answer, correct: true },
+      [original[1].id]: { answer: "原提交答案", correct: false },
+      [original[2].id]: { answer: original[2].answer, correct: true },
+    },
+    complete: true,
+    startedAt: "2026-08-09T08:00:00.000Z",
+  };
+  const changedWords = WORDS
+    .filter((word) => word.id !== removedWordId)
+    .map((word) => ({
+      ...word,
+      word: `${word.word}-changed`,
+      meaning: `${word.meaning}（已更新）`,
+    }));
+  const changedProgress = Object.fromEntries(
+    Object.entries(progress).filter(([wordId]) => Number(wordId) !== removedWordId),
+  ) as WordProgressMap;
+  const restored = restoreQuizQuestions(
+    session,
+    changedWords,
+    changedProgress,
+    {},
+  );
+
+  assert.deepEqual(
+    snapshotQuizQuestions(restored),
+    snapshotQuizQuestions(original.slice(1)),
+  );
+
+  const recovery = recoverQuizSession(session, restored);
+  assert.equal(recovery.status, "partial");
+  assert.equal(recovery.removedCount, 1);
+  assert.deepEqual(
+    recovery.session?.questionWordIds,
+    original.slice(1).map((question) => question.wordId),
+  );
+  assert.equal(recovery.session?.index, 1);
+  assert.deepEqual(Object.keys(recovery.session?.answers ?? {}), [
+    original[1].id,
+    original[2].id,
+  ]);
+  assert.equal(recovery.session?.correctCount, 1);
+  assert.equal(recovery.session?.complete, false);
+});
+
+test("题组全部失效时清除 activeQuiz，空题组不保留陈旧会话", () => {
+  const session: QuizSessionState = {
+    id: "quiz:listening-spelling:64",
+    mode: "listening-spelling",
+    seed: 64,
+    questionWordIds: [9_999_999],
+    index: 0,
+    correctCount: 1,
+    answers: {
+      "listening-spelling:9999999:64": { answer: "missing", correct: true },
+    },
+    complete: true,
+    startedAt: "2026-08-09T08:00:00.000Z",
+  };
+
+  assert.deepEqual(recoverQuizSession(session, []), {
+    removedCount: 1,
+    status: "cleared",
+  });
+});

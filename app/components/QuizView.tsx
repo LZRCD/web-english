@@ -5,7 +5,9 @@ import {
   buildQuizQuestions,
   isQuizAnswerCorrect,
   QUIZ_MODE_DEFINITIONS,
+  recoverQuizSession,
   restoreQuizQuestions,
+  snapshotQuizQuestions,
   type QuizMode,
   type QuizQuestion,
   type QuizSessionState,
@@ -47,6 +49,9 @@ type QuizViewProps = {
   onQuizStateChange: (session: QuizSessionState | undefined) => void;
   /** 维度化处置限定词集；未提供时保持普通测验选题。 */
   candidateWordIds?: number[];
+  /** 全部题目失效后的说明；模式选择页同时提供重新开始入口。 */
+  recoveryNotice?: string;
+  onRecoveryNoticeClear?: () => void;
 };
 
 type AnswerResult = {
@@ -68,6 +73,8 @@ export default function QuizView({
   savedQuiz,
   onQuizStateChange,
   candidateWordIds,
+  recoveryNotice,
+  onRecoveryNoticeClear,
 }: QuizViewProps) {
   const learnedCount = Object.keys(wordProgress).length;
   const weakCount = Object.values(wordProgress).filter(isWeakProgress).length;
@@ -111,15 +118,16 @@ export default function QuizView({
           candidateWordIds,
         },
       );
-      if (restored.length) {
-        setMode(savedQuiz.mode);
-        setSeed(savedQuiz.seed);
-        setSessionId(savedQuiz.id);
+      const recovery = recoverQuizSession(savedQuiz, restored);
+      if (restored.length && recovery.session) {
+        setMode(recovery.session.mode);
+        setSeed(recovery.session.seed);
+        setSessionId(recovery.session.id);
         setQuestions(restored);
-        setQuestionIndex(Math.min(savedQuiz.index, restored.length - 1));
-        setCorrectCount(savedQuiz.correctCount);
-        setAnswers(savedQuiz.answers);
-        setComplete(savedQuiz.complete);
+        setQuestionIndex(Math.min(recovery.session.index, restored.length - 1));
+        setCorrectCount(recovery.session.correctCount);
+        setAnswers(recovery.session.answers);
+        setComplete(recovery.session.complete);
       }
     }
   }
@@ -139,6 +147,7 @@ export default function QuizView({
       mode,
       seed,
       questionWordIds: questions.map((question) => question.wordId),
+      questionSnapshots: snapshotQuizQuestions(questions),
       startedAt: quizStartedAtRef.current,
       index: questionIndex,
       correctCount,
@@ -148,6 +157,7 @@ export default function QuizView({
   }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions, seed, sessionId]);
 
   const startQuiz = (nextMode: QuizMode) => {
+    onRecoveryNoticeClear?.();
     const nextSeed = new Date().getTime();
     const nextQuestions = buildQuizQuestions({
       words,
@@ -240,6 +250,12 @@ export default function QuizView({
             <span><strong>{weakCount}</strong> 薄弱词</span>
           </div>
         </div>
+        {recoveryNotice && (
+          <div className="quiz-rule-note" role="status">
+            <strong>上次测验已结束</strong>
+            <span>{recoveryNotice}</span>
+          </div>
+        )}
         <div className="quiz-mode-grid">
           {QUIZ_MODE_DEFINITIONS.map((definition, index) => {
             const available = availableModeIds.has(definition.id);
@@ -254,7 +270,9 @@ export default function QuizView({
                 <span className="quiz-mode-number">0{index + 1}</span>
                 <strong>{definition.title}</strong>
                 <small>{definition.description}</small>
-                <i>{available ? "开始 10 题 →" : `至少学习 ${definition.minimumLearnedWords} 词`}</i>
+                <i>{available
+                  ? recoveryNotice ? "重新开始 10 题 →" : "开始 10 题 →"
+                  : `至少学习 ${definition.minimumLearnedWords} 词`}</i>
               </button>
             );
           })}

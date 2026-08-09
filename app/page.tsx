@@ -149,6 +149,8 @@ import type { QuizQuestion, QuizAttempt, QuizSessionState } from "../lib/quiz";
 import {
   appendQuizAttempt,
   createQuizSession,
+  recoverQuizSession,
+  restoreQuizQuestions,
   shouldApplyQuizToSchedule,
 } from "../lib/quiz";
 import QuizView from "./components/QuizView";
@@ -197,6 +199,7 @@ export default function Home() {
   const [familiarMeanings, setFamiliarMeanings] = useState<FamiliarMeaningMap>({});
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<QuizSessionState | undefined>(undefined);
+  const [quizRecoveryNotice, setQuizRecoveryNotice] = useState("");
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
   const [studyScope, setStudyScope] = useState<StudyScope>("selection");
@@ -1095,6 +1098,51 @@ export default function Home() {
     setActiveSession,
     showToast,
     wordById,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hydrated
+      || !redbookReady
+      || !activeQuiz
+      || activeQuiz.questionWordIds === undefined
+    ) return;
+    const questions = restoreQuizQuestions(
+      activeQuiz,
+      redbookWords,
+      wordProgress,
+      familiarMeanings,
+      {
+        lookupStats,
+        lookupWords,
+        senseFrequency,
+        stubbornWords,
+        candidateWordIds: activeQuizCandidateWordIds,
+      },
+    );
+    const recovery = recoverQuizSession(activeQuiz, questions);
+    if (recovery.status === "unchanged") return;
+    queueMicrotask(() => {
+      setActiveQuiz(recovery.session);
+      const message = recovery.status === "cleared"
+        ? "本组题目已不可用，已结束本组；既有测验记录不受影响，可以重新开始"
+        : `本组有 ${recovery.removedCount} 题因词条更新无法继续，已保留其余 ${recovery.session?.questionWordIds?.length ?? 0} 题；结果按剩余题目计算`;
+      if (recovery.status === "cleared") setQuizRecoveryNotice(message);
+      showToast(message, 6000);
+    });
+  }, [
+    activeQuiz,
+    activeQuizCandidateWordIds,
+    familiarMeanings,
+    hydrated,
+    lookupStats,
+    lookupWords,
+    redbookReady,
+    redbookWords,
+    senseFrequency,
+    showToast,
+    stubbornWords,
+    wordProgress,
   ]);
 
   useEffect(() => {
@@ -2334,6 +2382,8 @@ export default function Home() {
             savedQuiz={activeQuiz}
             onQuizStateChange={setActiveQuiz}
             candidateWordIds={activeQuizCandidateWordIds}
+            recoveryNotice={quizRecoveryNotice}
+            onRecoveryNoticeClear={() => setQuizRecoveryNotice("")}
           />
         )}
 

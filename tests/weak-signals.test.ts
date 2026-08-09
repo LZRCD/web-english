@@ -236,6 +236,34 @@ test("activeQuiz题组快照：归一化清洗、限长、分域往返与旧会�
     },
   }));
   assert.equal(invalid.activeQuiz?.questionWordIds, undefined);
+
+  const fullSnapshot = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeQuiz: {
+      ...legacy.activeQuiz,
+      mode: "meaning-choice",
+      questionWordIds: [99],
+      questionSnapshots: [{
+        id: "meaning-choice:3:34",
+        mode: "meaning-choice",
+        wordId: 3,
+        prompt: "原始题干",
+        answer: "原始答案",
+        options: ["原始答案", "干扰一", "干扰二", "干扰三"],
+        label: "熟词僻义",
+        explanation: "原始解析",
+      }],
+    },
+  }));
+  assert.deepEqual(fullSnapshot.activeQuiz?.questionWordIds, [3]);
+  assert.equal(
+    fullSnapshot.activeQuiz?.questionSnapshots?.[0]?.prompt,
+    "原始题干",
+  );
+  assert.deepEqual(
+    combineStoredState(splitStoredState(fullSnapshot)).activeQuiz,
+    fullSnapshot.activeQuiz,
+  );
 });
 
 test("未来维度化 id：activeSession、activeQuiz 与 review 分域往返不丢失", () => {
