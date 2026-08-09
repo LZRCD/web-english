@@ -1378,3 +1378,20 @@
 - 唯一终局 B：阶段 E 停止在可行性报告，不生成权重、阈值、排名、模式胜负、规则草案或自适应实施 Prompt；固定优先级保持不变。
 - 本轮只修改 `round-47.md`、`adaptive-recommendation-readiness.md`、`next-round-prompt.md` 与本演进记录；未修改业务代码、测试、配置、UI、schema/version/store/domain、评分、FSRS、备份、package scripts 或运行数据。
 - 未启动服务、浏览器或 E2E，未重跑 lint/typecheck/build/npm test；第 45 轮数字仅为历史基线。下一轮进入阶段 F 发布准备只读审计，只建立发布缺口清单，不自动修改备份链路或 schema。
+
+## 第六十七次迭代：阶段 F 发布准备只读审计
+
+本次迭代：2026-08-09。
+
+### 发布护栏审计
+
+- 从旧状态/备份/IndexedDB 分域追到 `normalizeStoredState`、页面 hydrate、revision 原子写入、fallback、跨标签冲突、恢复副本和导入/恢复前保护，建立 `docs/iterations/release-readiness.md` 发布缺口矩阵。
+- 旧/未来 schema、FSRS 逐词修复、当前 StoredState 完整分域、activeQuiz 题组快照与删除词过滤、导入前自动快照、冲突 abort 和恢复副本都有明确代码护栏及既有测试源码；fixture/E2E 不冒充生产数据或第 48 轮重跑结果。
+- reviews 完整保留并有 10010 条完整性测试，但真实长历史读取、排序、派生和设备性能无 SLA，保持“当前不可证明”。activeSession 删除词过滤后仍按原 wordIds 计算完成/索引、非法记录无原始行级隔离、重复 attempt ID 与清空语义等登记为中风险明确缺口。
+- 发现决定性高风险断链：`normalizeQuizAttempts` 和页面追加链都把合法 `quizAttempts` 静默裁剪为最后 5000 条；导入超过上限的合法备份也会先裁剪再写入，旧历史随后从分域、自动备份和导出中消失，且没有告警或无损测试。
+
+### 终局与后续
+
+- 唯一终局 B：该问题直接涉及合法历史数据和备份一致性，必须停止自动串行并请求单独修复授权；本轮不修改业务代码、测试、备份、schema/version/store/domain 或用户数据。
+- 第 49 轮 Prompt 仅为待授权恢复 Prompt：若用户明确授权，只取消未来 attempts 的静默裁剪并补 >5000 条 normalize、分域、备份和追加无损测试；不回填已丢历史，不顺带修其他中风险项。
+- 本轮未启动服务、浏览器或 E2E，未访问 IndexedDB，未重跑 lint/typecheck/build/npm test；第 45 轮数字仅为历史 checkpoint。只有高风险缺口修复并验证后，才可进入阶段 F2 测试收敛只读审计。

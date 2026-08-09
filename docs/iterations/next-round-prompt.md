@@ -1,110 +1,79 @@
-# 第 48 轮 Prompt：阶段 F 发布准备只读审计
+# 第 49 轮待授权 Prompt：阻止测验作答历史静默丢失
 
 ## 当前真实现场
 
 - 当前分支应为 `codex/follow-up-hardening`。
-- 第 47 轮起始基线为 `a07e81d4acc20b6af086ab7eea8d47703c253f2b`；第 47 轮完成后，HEAD 应为唯一中文文档提交 `docs: 评估自适应推荐数据门槛`。启动时用 `git rev-parse HEAD` 与 `git log -1` 登记实际完整 hash，不猜测自引用提交。
-- 第 47 轮终局 B：真实生产样本不可获得，且 E2 的结构化归因、足够随访、差异可解释、规则回退与用户关闭等门槛未同时满足；继续维持固定优先级，不生成或实施自适应推荐。
-- 阶段 A/B/C/D 已完成；阶段 E 停止在只读可行性报告。不得把自适应推荐、useSelectionLookup、ProviderClient、日期语义或 WeakSignal 公共面自动带入本轮。
-- 最近完整行为基线仍来自第 45 轮：study 35/35、typecheck 通过、lint 0 error/1 个第 44 轮既有 warning、`npm test` 230/230（含 build）、固定 3000 的 learning 17/17 与 signal-flow 18/18。第 46/47 轮均只做文档检查，不得把这些数字写成第 48 轮重跑结果。
-- 起始 index 和 tracked 工作树应为空。受保护未跟踪项至少包括 `1.txt`、`docs/architecture-analysis-2026-08-09.md`、`.zcode/`、第 38/40/41/42/43/44 轮日志与 `docs/iterations/Typora_Hook_Log.txt`；以实际 `git status` 建立清单，不修改、删除或暂存。
+- 第 48 轮起始基线为 `2715dd41caf2cc42021c890cee6e6a97742790da`；第 48 轮完成后，HEAD 应为唯一中文文档提交 `docs: 审计发布准备数据护栏`。启动时用 `git rev-parse HEAD` 与 `git log -1` 登记实际完整 hash，不猜测自引用提交。
+- 第 48 轮唯一终局 B：`normalizeQuizAttempts(...).slice(-5000)` 与 `setQuizAttempts([...items, attempt].slice(-5000))` 会静默丢弃合法旧作答；备份导入规范化也受影响，属于数据/备份一致性高风险明确缺口。
+- `docs/iterations/release-readiness.md` 还登记了 activeSession 孤儿 ID、非法记录隔离、重复 attempt ID、清空语义和长历史性能等中风险项；本轮若获授权也不得顺带处理。
+- 最近完整行为基线仍来自第 45 轮：study 35/35、typecheck 通过、lint 0 error/1 个既有 warning、`npm test` 230/230（含 build）、固定 3000 的 learning 17/17 与 signal-flow 18/18。第 46-48 轮只做文档检查，不得冒充第 49 轮结果。
+- 起始 index 和 tracked 工作树应为空；继续保护实际未跟踪项、`1.txt`、`.zcode/`、架构笔记与历史日志。
 - 3000/3001 应无监听；未 push。
 
-## 本轮性质与唯一目标
+## 授权门禁
 
-这是阶段 F 的发布准备只读审计，不是稳定性修复轮。
+这是终局 B 后的**待授权恢复 Prompt**，不是自动执行指令。
 
-业务代码、测试、配置、schema、备份链路、持久化和运行数据严格只读；只允许写本轮审计文档、轮次记录、项目演进记录和下一轮 Prompt。
+- 若用户没有明确说“授权第 49 轮修复”或等价指令：只核对当前状态并报告等待授权，不修改文件、不暂存、不提交、不启动服务。
+- 若用户明确授权：才按下述唯一目标执行。
+- 任何生产数据导出、浏览器 IndexedDB 读取/改写、历史回填、schema/version/store/domain 变化都超出本授权，立即停止请求另行授权。
 
-唯一目标：基于现有代码、历史兼容逻辑与既有行为测试，建立一份可执行但不自动修复的发布缺口清单；逐项判断发布前的证据状态、风险等级、现有护栏与解除条件，并选择阶段 F 的下一步。不得因发现缺口而修改备份、schema、FSRS、评分或生产数据。
+## 唯一目标
 
-## 必须审计的发布面
+防止未来合法 `quizAttempts` 因固定 5000 条裁剪而静默丢失，并用确定性测试证明状态归一化、IndexedDB 分域往返和备份导入规范化在超过 5000 条时完整保留。
 
-1. 旧版本状态兼容：`normalizeStoredState`、旧 schema、可选字段和非法值清洗；区分安全兼容、数据丢弃与不可恢复。
-2. IndexedDB 分域完整性：`splitStoredState` / `combineStoredState` / `stateDomains` / revision 冲突；核对 `StoredState` 字段是否完整投影，不新增 store/domain。
-3. 备份导出/导入一致性：格式/version 校验、导入前保护、恢复副本与自动备份；只审计，不读取用户浏览器库，不修改备份链路。
-4. `activeSession` / `activeQuiz` 恢复：题组快照、删除词过滤、旧会话 fallback、完成/索引边界与原 sessionId 保持。
-5. 长历史性能：reviews/quizAttempts 的读取、归一化、派生与上限；只依据代码和已有测试，不用合成大样本宣称生产性能。
-6. 无效时间、重复 ID、删除词与孤立记录：确认清洗、去重、跳过或保留语义；不得自动删除历史。
-7. 阈值变化：`weakThresholds` 持久化与派生影响；不得调整当前默认值。
-8. 离线、刷新、跨标签与写入失败：fallback、revision 冲突、恢复副本、状态提示和现有测试护栏。
-9. 发布检查面：lint/typecheck/test/E2E、build-info 漂移、package scripts、端口与受保护文件；历史数字只作 checkpoint。
+不得回填已经丢失的历史，不读取或修改用户浏览器数据，不调整评分、FSRS、每日 Quiz 门禁、推荐、阈值、activeSession、activeQuiz、重复 ID 语义或清空语义。
 
-## 发布缺口矩阵
+## 允许的最小实现范围
 
-创建 `docs/iterations/release-readiness.md`：
+1. 删除状态归一化与页面追加链上的固定 5000 条静默裁剪；优先复用一个可测试的追加边界，避免两个位置再次漂移。
+2. 保持 `QuizAttempt` 字段、现有顺序、每日门禁、弱信号派生和 sessionId 语义不变。
+3. 不新增 schema/version/store/domain，不迁移或重写历史。
+4. 新增确定性测试，至少覆盖：
+   - 5001 条及 10010 条合法 attempts 经 `parseStoredState` 数量与顺序完整；
+   - `splitStoredState -> combineStoredState` 超过 5000 条无损；
+   - `createBackupDocument -> parseBackupDocument -> parseStoredState` 超过 5000 条无损；
+   - 新追加第 5001 条不丢最早记录；
+   - 非法 attempt 仍按既有规则过滤，不能为“完整保留”放宽校验。
+5. 如果无界数组使现有测试或构建出现可证明的内存/性能阻断，不得自行新增聚合归档、分表或 schema；记录证据并停止请求新授权。
 
-| 发布面 | 代码/数据路径 | 现有护栏 | 已有测试证据 | 不能证明 | 风险 | 状态 | 解除条件 |
-|---|---|---|---|---|---|---|---|
+## 建议修改边界
 
-状态只使用：
-
-- 已具备发布护栏
-- 有明确缺口
-- 当前不可证明
-- 不适用
-
-风险只使用：阻断 / 高 / 中 / 低。
-
-不得把测试 fixture、历史 E2E 数字或纯代码能力冒充生产数据、生产性能或备份实测。
-
-## 唯一终局选择
-
-最终只能选择一个：
-
-### A. 发布护栏结构完整，可进入阶段 F2 测试收敛审计
-
-- 没有阻断级或高风险的明确数据断链；中低风险均有边界与解除条件。
-- 本轮仍不机械重跑全套测试；下一轮只审计核心纵向链与重复 E2E，先提出最小测试收敛清单，不直接删改测试。
-
-### B. 存在需单独授权的发布阻断/高风险缺口
-
-- 任一备份一致性、schema/分域、数据损坏、恢复或跨标签写入风险缺少可靠护栏，即选择 B。
-- 只登记最小复现、影响面和建议的单一修复轮；自动串行停止，请求用户授权。不得在本轮修改备份链路、schema/version/store/domain 或历史数据。
-
-### C. 现有证据不足，无法作发布判断
-
-- 代码与已有测试仍不能判断关键发布面，且需要用户生产导出、浏览器状态或外部环境才能继续，即选择 C。
-- 明确缺失证据与最小只读输入，自动串行停止；不得用 seed 补齐现实证据。
-
-## 本轮只读核对与验证
-
-1. 核对 branch、HEAD、status、index、保护项及 3000/3001；发现任何 tracked diff 立即停止。
-2. 阅读上述代码路径、调用端、归一化/存储/备份测试和 data-lifecycle/learning E2E；只形成证据矩阵。
-3. 不启动开发服务，不运行浏览器，不读取或改写浏览器 IndexedDB，不导入/导出用户数据。
-4. 不修改业务代码或测试，不机械重跑 lint/typecheck/build/npm test/E2E。
-5. 文档完成后只运行：
-   - `git diff --check -- docs/iterations/round-48.md docs/iterations/release-readiness.md docs/iterations/next-round-prompt.md docs/project-evolution.md`
-   - `git status --short`
-   - `git diff --cached --name-only`
-
-## 允许修改与提交
-
-本轮只允许修改：
-
-- `docs/iterations/round-48.md`
+- `lib/study.ts`
+- `lib/quiz.ts`（仅在提取可测试的无损追加 helper 时）
+- `app/page.tsx`
+- `tests/study.test.ts`、`tests/data-integrity.test.ts` 或一个最小等价测试文件
+- `docs/iterations/round-49.md`
 - `docs/iterations/release-readiness.md`
 - `docs/iterations/next-round-prompt.md`
 - `docs/project-evolution.md`
 
-完成后精确暂存实际修改文件，创建一次中文文档提交，例如：
+不得修改备份格式、storage domain、数据库版本、package scripts 或 E2E fixture 来规避问题。
 
-`docs: 审计发布准备数据护栏`
+## 验证顺序
 
-不使用 `git add .`、`git add -A` 或 `git commit -am`；不 merge，不 push。
+授权后按风险递增执行：
 
-## 禁止与停止门槛
+1. 定向超过 5000 条的纯函数/分域/备份往返测试。
+2. `npm run typecheck`。
+3. `npm run lint`。
+4. `npm test`（含生产 build）；若 `lib/build-info.generated.ts` 漂移，验证后恢复为本轮基线，不把生成漂移混入提交。
+5. 只在纯测试无法覆盖真实页面追加时，才按固定 3000 规则运行最小相关 E2E；不得机械重跑全目录来代替针对性证据。
+6. 精确复核 tracked diff、index、保护项清单和 3000/3001。
 
-- 不修改业务代码、测试、推荐、UI、评分、FSRS、每日 Quiz 门禁、备份、schema/version/store/domain、package scripts 或历史数据。
-- 不清理、迁移、去重、回填或重写用户 reviews/quizAttempts/IndexedDB。
-- 不用测试 seed 证明生产兼容、性能、备份可靠或现实样本充分。
-- 一旦需要生产导出、读取浏览器状态、新增 schema、修改备份、改变评分/FSRS，停止并按终局 B/C 记录。
-- 若固定端口被非项目进程占用，记录冲突并停止；本轮本就不应启动服务。
+## 停止条件
 
-## 完成交付
+- 未获得用户明确授权。
+- 需要读取/修改生产数据或浏览器 IndexedDB。
+- 需要回填已丢失历史。
+- 需要新增 schema/version/store/domain、归档格式或备份格式。
+- 发现与本缺口无关的 tracked diff、非项目端口冲突或保护文件变化。
+- 无法在不改变评分/FSRS/门禁/推荐语义的前提下完成无损保留。
 
-- `docs/iterations/round-48.md`：发布面调用图、矩阵摘要、唯一终局和证据。
-- `docs/iterations/release-readiness.md`：完整发布缺口清单。
-- `docs/project-evolution.md`：登记阶段 F 只读结论。
-- 本文件：按唯一终局覆写下一轮只读 Prompt；若 B/C 则只写待授权恢复 Prompt，不自动执行。
-- 一次中文文档提交；工作区仅保留基线保护项；3000/3001 无监听；不 push。
+## 获授权后的交付
+
+- 代码只修“未来 attempts 不再静默丢失”。
+- 测试给出 >5000 条 normalize、分域、备份和追加的无损证据。
+- `release-readiness.md` 只更新该高风险行；其他中风险项保持原状态。
+- 精确暂存实际修改文件，创建一次中文提交，例如 `fix: 保留完整测验作答历史`；不 merge，不 push。
+- 修复验证通过后，下一轮才可进入阶段 F2 测试收敛只读审计。
