@@ -14,7 +14,9 @@ import {
   adaptiveNewWordGoal,
   applyRating,
   buildExamPlan,
+  buildStudyWordSource,
   buildTodayQueue,
+  buildTodayTaskPreview,
   createStudySession,
   isWeakProgress,
   rebuildStubbornWords,
@@ -538,6 +540,142 @@ test("今日任务划词补漏：已到期或已入队的补漏词不重复进�
   );
   // 1 已在到期队列不重复；2 补漏插入且去重
   assert.deepEqual(queue, [1, 2]);
+});
+
+test("今日任务预览与实际队列同源，并对到期、补漏和新词互斥计数", () => {
+  const now = new Date("2026-07-28T00:11:00.000Z");
+  const due = applyRating(undefined, {
+    wordId: 1,
+    word: "due",
+    rating: 0,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "preview-due",
+  }).progress;
+  const options = { lookupPriorityIds: [1, 3, 3] };
+  const preview = buildTodayTaskPreview({
+    primaryWordIds: [1, 2, 3, 4, 5],
+    progress: { 1: due },
+    configuredNewGoal: 20,
+    effectiveNewGoal: 10,
+    learnedTodayCount: 2,
+    adaptiveEnabled: true,
+    now,
+    options,
+  });
+
+  assert.deepEqual(
+    preview.wordIds,
+    buildTodayQueue([1, 2, 3, 4, 5], { 1: due }, 8, now, options),
+  );
+  assert.deepEqual(preview.dueWordIds, [1]);
+  assert.deepEqual(preview.lookupWordIds, [3]);
+  assert.deepEqual(preview.newWordIds, [2, 4, 5]);
+  assert.equal(preview.totalCount, 5);
+  assert.equal(preview.dueCount + preview.lookupCount + preview.newCount, 5);
+  assert.equal(new Set(preview.wordIds).size, preview.wordIds.length);
+});
+
+test("今日任务预览解释自适应目标、已完成新词和空任务", () => {
+  const adjusted = buildTodayTaskPreview({
+    primaryWordIds: [1, 2, 3],
+    progress: {},
+    configuredNewGoal: 20,
+    effectiveNewGoal: 10,
+    learnedTodayCount: 4,
+    adaptiveEnabled: true,
+  });
+  assert.match(adjusted.goalExplanation, /到期复习较多，新词目标已从 20 调整到 10/);
+  assert.match(adjusted.goalExplanation, /本轮安排 3 个/);
+  assert.equal(adjusted.estimatedMinutes, 3);
+
+  const completed = buildTodayTaskPreview({
+    primaryWordIds: [],
+    progress: {},
+    configuredNewGoal: 20,
+    effectiveNewGoal: 20,
+    learnedTodayCount: 20,
+    adaptiveEnabled: true,
+  });
+  assert.deepEqual(completed.wordIds, []);
+  assert.equal(completed.complete, true);
+  assert.equal(completed.estimatedMinutes, 0);
+  assert.equal(completed.goalExplanation, "今日新词已完成，本轮只安排到期和补漏。");
+});
+
+test("学习卡来源覆盖今日任务明细、全部会话类型和通用回退", () => {
+  const now = new Date("2026-07-28T00:11:00.000Z");
+  const due = applyRating(undefined, {
+    wordId: 1,
+    word: "due",
+    rating: 0,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "source-due",
+  }).progress;
+  const future = applyRating(undefined, {
+    wordId: 2,
+    word: "future",
+    rating: 3,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "source-future",
+  }).progress;
+  const today = createStudySession("today", "今日任务", [1], now);
+
+  assert.equal(buildStudyWordSource({
+    session: today,
+    progress: due,
+    lookupPriority: true,
+    now,
+  }).label, "今日到期");
+  assert.equal(buildStudyWordSource({
+    session: today,
+    lookupPriority: true,
+    now,
+  }).label, "反复查词补漏");
+  assert.equal(buildStudyWordSource({
+    session: today,
+    lookupPriority: false,
+    now,
+  }).label, "今日新词");
+  assert.equal(buildStudyWordSource({
+    session: createStudySession("today", "今日任务 · 补漏", [1], now),
+    progress: future,
+    lookupPriority: false,
+    now,
+  }).label, "手动加入今日任务");
+  assert.equal(buildStudyWordSource({
+    session: today,
+    progress: future,
+    lookupPriority: false,
+    now,
+  }).label, "今日任务");
+
+  const labels = {
+    mistakes: "错词强化",
+    stubborn: "顽固词专项",
+    lookups: "划词集学习",
+    favorites: "收藏复习",
+    search: "搜索专项",
+    sprint: "薄弱冲刺",
+    reinforcement: "本轮再强化",
+  } as const;
+  for (const [kind, label] of Object.entries(labels)) {
+    assert.equal(buildStudyWordSource({
+      session: createStudySession(
+        kind as keyof typeof labels,
+        label,
+        [1],
+        now,
+      ),
+      progress: future,
+      lookupPriority: false,
+      now,
+    }).label, label);
+  }
+  assert.equal(buildStudyWordSource({
+    progress: future,
+    lookupPriority: false,
+    now,
+  }).label, "当前词书额外练习");
 });
 
 test("回忆耗时随评分日志保存但不改变用户评分", () => {

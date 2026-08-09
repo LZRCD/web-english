@@ -36,7 +36,8 @@ import {
   adaptiveNewWordGoal,
   applyRating,
   buildExamPlan,
-  buildTodayQueue,
+  buildStudyWordSource,
+  buildTodayTaskPreview,
   examProgressTiers,
   dueWordIds,
   formatInterval,
@@ -569,6 +570,15 @@ export default function Home() {
     Math.round((stats.newCount / Math.max(1, effectiveNewGoal)) * 100),
   );
   const currentProgress = current.id === undefined ? undefined : wordProgress[current.id];
+  const currentWordSource = useMemo(
+    () => buildStudyWordSource({
+      session: activeSession,
+      progress: currentProgress,
+      lookupPriority: current.id !== undefined && lookupPriorityIds.includes(current.id),
+      now: new Date(clock),
+    }),
+    [activeSession, clock, current.id, currentProgress, lookupPriorityIds],
+  );
   const ratingIntervalLabels = ([0, 1, 2, 3] as const).map((rating) =>
     formatInterval(nextInterval(currentProgress, rating, new Date(clock))));
   const primaryWordIds = useMemo(
@@ -603,6 +613,34 @@ export default function Home() {
         && dateKey(review.reviewedAt) === todayKey)
       .map((review) => review.wordId!),
     [reviews, todayKey],
+  );
+  const todayTaskPreview = useMemo(
+    () => buildTodayTaskPreview({
+      primaryWordIds,
+      progress: wordProgress,
+      configuredNewGoal: dailyGoal,
+      effectiveNewGoal,
+      learnedTodayCount: stats.newCount,
+      adaptiveEnabled: adaptiveNewWords,
+      now: new Date(clock),
+      options: {
+        familyKeyByWordId,
+        reviewedTodayWordIds,
+        lookupPriorityIds,
+      },
+    }),
+    [
+      adaptiveNewWords,
+      clock,
+      dailyGoal,
+      effectiveNewGoal,
+      familyKeyByWordId,
+      lookupPriorityIds,
+      primaryWordIds,
+      reviewedTodayWordIds,
+      stats.newCount,
+      wordProgress,
+    ],
   );
   const remainingBySection = useMemo(() => {
     const counts = { 必考词: 0, 基础词: 0, 超纲词: 0 };
@@ -1513,17 +1551,7 @@ export default function Home() {
     return startSession(
       "today",
       "今日任务",
-      buildTodayQueue(
-        primaryWordIds,
-        wordProgress,
-        Math.max(0, effectiveNewGoal - stats.newCount),
-        new Date(clock),
-        {
-          familyKeyByWordId,
-          reviewedTodayWordIds,
-          lookupPriorityIds,
-        },
-      ),
+      todayTaskPreview.wordIds,
     );
   }
 
@@ -2037,12 +2065,33 @@ export default function Home() {
         </header>
 
         {activeView === "learn" && (
-          <div className="learn-view">
+          <div className={!activeSession && redbookReady
+            ? "learn-view has-today-preview"
+            : "learn-view"}
+          >
             {!activeSession && redbookReady && (
-              <button className="today-task-strip" onClick={startTodaySession}>
-                <span>今日任务</span>
-                <strong>{stats.dueCount} 个到期复习 · 还可新学 {Math.max(0, effectiveNewGoal - stats.newCount)} 词</strong>
-                <small>开始 →</small>
+              <button
+                type="button"
+                className="today-task-strip"
+                onClick={startTodaySession}
+                disabled={todayTaskPreview.complete}
+                aria-label={todayTaskPreview.complete
+                  ? `今日任务已完成。${todayTaskPreview.goalExplanation}`
+                  : `开始今日任务，共 ${todayTaskPreview.totalCount} 词：到期复习 ${todayTaskPreview.dueCount}，反复查词补漏 ${todayTaskPreview.lookupCount}，新词 ${todayTaskPreview.newCount}。预计约 ${todayTaskPreview.estimatedMinutes} 分钟，粗略估算。${todayTaskPreview.goalExplanation}`}
+              >
+                <span className="today-task-title">今日任务预览</span>
+                <strong>
+                  {todayTaskPreview.complete
+                    ? "今日任务已完成"
+                    : `${todayTaskPreview.totalCount} 词 · 约 ${todayTaskPreview.estimatedMinutes} 分钟`}
+                </strong>
+                <span className="today-task-breakdown">
+                  <b>到期 {todayTaskPreview.dueCount}</b>
+                  <b>补漏 {todayTaskPreview.lookupCount}</b>
+                  <b>新词 {todayTaskPreview.newCount}</b>
+                </span>
+                <small>{todayTaskPreview.goalExplanation}</small>
+                <em>{todayTaskPreview.complete ? "无需额外安排" : "粗略估算 · 开始 →"}</em>
               </button>
             )}
             {sessionComplete && sessionCompletionSummary && (
@@ -2120,6 +2169,7 @@ export default function Home() {
                 stabilizedDimensions={currentStabilizedDimensions}
                 onFocusSourceWord={focusSourceWord}
                 activeSession={activeSession}
+                wordSource={currentWordSource}
                 newCount={stats.newCount}
                 clock={clock}
                 reinforcementInput={reinforcementInput}

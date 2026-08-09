@@ -8,7 +8,13 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
-import type { SenseFrequencyEntry, WordEnrichment, WordProgress, StudySession } from "../../lib/learning";
+import type {
+  SenseFrequencyEntry,
+  StudySession,
+  StudyWordSource,
+  WordEnrichment,
+  WordProgress,
+} from "../../lib/learning";
 import type { ReusedSentence } from "../../lib/sentence-index";
 import { wordRetrievability } from "../../lib/learning";
 import type {
@@ -72,6 +78,7 @@ type WordCardProps = {
 
   // 上下文
   activeSession?: StudySession;
+  wordSource: StudyWordSource;
   newCount: number;
   clock: number;
 
@@ -137,6 +144,7 @@ export default function WordCard({
   onAddToToday,
   onFocusSourceWord,
   activeSession,
+  wordSource,
   newCount,
   clock,
   reinforcementInput,
@@ -238,6 +246,15 @@ export default function WordCard({
         if (event.pointerType !== "mouse") onTextSelection(event);
       }}
     >
+      <div
+        className="word-source"
+        role="note"
+        aria-label={`当前单词来源：${wordSource.label}。${wordSource.description}`}
+      >
+        <span>{wordSource.label}</span>
+        <small>{wordSource.description}</small>
+      </div>
+
       {/* 词头：计数 + 收藏/发音 */}
       <div className="word-heading">
         <p className="word-count">

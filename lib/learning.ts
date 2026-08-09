@@ -81,6 +81,32 @@ export type StudySession = {
   createdAt: string;
 };
 
+export type TodayQueueOptions = {
+  familyKeyByWordId?: Record<number, string>;
+  reviewedTodayWordIds?: number[];
+  /** 划词补漏：反复查询(≥3 次)的词 id，插在到期词之后、新词之前 */
+  lookupPriorityIds?: number[];
+};
+
+export type TodayTaskPreview = {
+  wordIds: number[];
+  dueWordIds: number[];
+  lookupWordIds: number[];
+  newWordIds: number[];
+  totalCount: number;
+  dueCount: number;
+  lookupCount: number;
+  newCount: number;
+  estimatedMinutes: number;
+  goalExplanation: string;
+  complete: boolean;
+};
+
+export type StudyWordSource = {
+  label: string;
+  description: string;
+};
+
 export type StubbornWordRecord = {
   wordId: number;
   active: boolean;
@@ -490,17 +516,12 @@ export function stubbornWordIds(
     .map((record) => record.wordId);
 }
 
-export function buildTodayQueue(
+function buildTodayQueueParts(
   primaryWordIds: number[],
   progress: WordProgressMap,
   dailyNewGoal: number,
   now = new Date(),
-  options?: {
-    familyKeyByWordId?: Record<number, string>;
-    reviewedTodayWordIds?: number[];
-    /** 划词补漏：反复查询(≥3 次)的词 id，插在到期词之后、新词之前 */
-    lookupPriorityIds?: number[];
-  },
+  options?: TodayQueueOptions,
 ) {
   const dueIds = dueWordIds(progress, now);
   const dueSet = new Set(dueIds);
@@ -537,7 +558,153 @@ export function buildTodayQueue(
     if (familyKey) usedFamilyKeys.add(familyKey);
     if (newIds.length >= dailyNewGoal) break;
   }
-  return [...dueIds, ...priorityIds, ...newIds];
+  return {
+    wordIds: [...dueIds, ...priorityIds, ...newIds],
+    dueWordIds: dueIds,
+    lookupWordIds: priorityIds,
+    newWordIds: newIds,
+  };
+}
+
+export function buildTodayQueue(
+  primaryWordIds: number[],
+  progress: WordProgressMap,
+  dailyNewGoal: number,
+  now = new Date(),
+  options?: TodayQueueOptions,
+) {
+  return buildTodayQueueParts(
+    primaryWordIds,
+    progress,
+    dailyNewGoal,
+    now,
+    options,
+  ).wordIds;
+}
+
+/** 今日任务的共享派生结果：预览与实际会话直接复用同一组 wordIds。 */
+export function buildTodayTaskPreview(input: {
+  primaryWordIds: number[];
+  progress: WordProgressMap;
+  configuredNewGoal: number;
+  effectiveNewGoal: number;
+  learnedTodayCount: number;
+  adaptiveEnabled: boolean;
+  now?: Date;
+  options?: TodayQueueOptions;
+}): TodayTaskPreview {
+  const remainingNewGoal = Math.max(
+    0,
+    input.effectiveNewGoal - input.learnedTodayCount,
+  );
+  const parts = buildTodayQueueParts(
+    input.primaryWordIds,
+    input.progress,
+    remainingNewGoal,
+    input.now,
+    input.options,
+  );
+  const totalCount = parts.wordIds.length;
+  let goalExplanation: string;
+  if (remainingNewGoal === 0) {
+    goalExplanation = "今日新词已完成，本轮只安排到期和补漏。";
+  } else if (input.effectiveNewGoal < input.configuredNewGoal) {
+    goalExplanation = `到期复习较多，新词目标已从 ${input.configuredNewGoal} 调整到 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+  } else if (input.adaptiveEnabled) {
+    goalExplanation = `当前到期复习量未触发调整，新词目标保持 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+  } else {
+    goalExplanation = `自适应调整已关闭，新词目标按设置为 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+  }
+  return {
+    ...parts,
+    totalCount,
+    dueCount: parts.dueWordIds.length,
+    lookupCount: parts.lookupWordIds.length,
+    newCount: parts.newWordIds.length,
+    estimatedMinutes: Math.ceil(totalCount * 45 / 60),
+    goalExplanation,
+    complete: totalCount === 0,
+  };
+}
+
+/** 当前词进入学习卡的可解释来源；无法细分时回退到会话级说明。 */
+export function buildStudyWordSource(input: {
+  session?: StudySession;
+  progress?: WordProgress;
+  lookupPriority: boolean;
+  now?: Date;
+}): StudyWordSource {
+  const { session } = input;
+  if (!session) {
+    return {
+      label: "当前词书额外练习",
+      description: "你正在当前词书中自由学习，这个词不属于专项会话。",
+    };
+  }
+  if (session.kind === "today") {
+    if (session.title === "今日任务 · 补漏") {
+      return {
+        label: "手动加入今日任务",
+        description: "你从学习卡将这个词加入了本次今日任务。",
+      };
+    }
+    const dueAt = input.progress
+      ? new Date(input.progress.nextDueAt).getTime()
+      : Number.NaN;
+    if (Number.isFinite(dueAt) && dueAt <= (input.now ?? new Date()).getTime()) {
+      return {
+        label: "今日到期",
+        description: "这个词的下一次复习时间已经到达。",
+      };
+    }
+    if (input.lookupPriority) {
+      return {
+        label: "反复查词补漏",
+        description: "这个词因反复查询且尚未被后续掌握覆盖而进入本轮。",
+      };
+    }
+    if (!input.progress) {
+      return {
+        label: "今日新词",
+        description: "这个词尚无学习进度，来自今天的新词名额。",
+      };
+    }
+    return {
+      label: "今日任务",
+      description: "这个词来自当前今日任务；现有记录不足以可靠区分更具体原因。",
+    };
+  }
+  const byKind: Record<Exclude<SessionKind, "today">, StudyWordSource> = {
+    favorites: {
+      label: "收藏复习",
+      description: "这个词来自你收藏的词汇。",
+    },
+    mistakes: {
+      label: "错词强化",
+      description: "这个词来自当前仍需强化的错词。",
+    },
+    stubborn: {
+      label: "顽固词专项",
+      description: "这个词来自顽固词的专项强化会话。",
+    },
+    search: {
+      label: "搜索专项",
+      description: "这个词来自你刚刚选择的搜索结果。",
+    },
+    lookups: {
+      label: "划词集学习",
+      description: "这个词来自你保存的划词集。",
+    },
+    sprint: {
+      label: "薄弱冲刺",
+      description: "这个词来自当前薄弱冲刺会话。",
+    },
+    reinforcement: {
+      label: "本轮再强化",
+      description: "这个词在上一轮完成后被选中再次强化。",
+    },
+  };
+  return byKind[session.kind];
 }
 
 export function adaptiveNewWordGoal(input: {
