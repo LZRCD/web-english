@@ -32,6 +32,7 @@ import {
   saveStoredStateImmediate,
 } from "../../lib/storage";
 import {
+  clearLearningRecords,
   consumeStoredParseRepairCount,
   parseStoredState,
   STORAGE_KEY,
@@ -1326,7 +1327,9 @@ export function useStudyPersistence({
   }, [clearRecoveryCopy, notify]);
 
   const resetLearningRecords = useCallback(async () => {
-    if (!window.confirm("确定清空评分、记忆状态、错词和学习位置吗？收藏与内容缓存会保留。")) {
+    if (!window.confirm(
+      "确定清空本机的评分与记忆进度、错词、测验记录、进行中学习任务和学习位置吗？收藏与内容缓存会保留。清空前会创建可恢复快照。",
+    )) {
       return;
     }
     if (!beginAuthoritativeWrite()) return;
@@ -1341,16 +1344,7 @@ export function useStudyPersistence({
         throw new Error("清空期间的新修改无法备份，本次操作已取消");
       }
       const latestState = stateRef.current;
-      const resetState: StoredState = {
-        ...latestState,
-        reviews: [],
-        wordProgress: {},
-        mistakes: [],
-        stubbornWords: {},
-        positions: {},
-        activeSession: undefined,
-        ratingUndoStack: [],
-      };
+      const resetState = clearLearningRecords(latestState);
       const status = await persistStateSnapshot(resetState, true);
       const protectedAfterCommit = await protectNewerState(
         protectedVersion,
@@ -1372,7 +1366,7 @@ export function useStudyPersistence({
       setLastSaveTime(Date.now());
       updateLoadStatus("ready");
       keepBlocked = false;
-      notify("学习记录已清空，收藏和内容缓存已保留");
+      notify("本机学习记录已清空；收藏和内容缓存已保留，可从快照恢复");
     } catch (error) {
       pendingLocalChangesRef.current = true;
       stashRecoveryCopy(stateRef.current);

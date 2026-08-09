@@ -3,6 +3,7 @@ import {
   createBackup,
   createRecoveryCollection,
   createState,
+  DATABASE_NAME,
   RADIATE_ENRICHMENT,
   RECOVERY_COPY_PREFIX,
   STORAGE_KEY,
@@ -17,6 +18,29 @@ import {
   readStoreRecord,
   waitForApp,
 } from "./helpers.mjs";
+
+async function readAutomaticBackups(page) {
+  return page.evaluate((databaseName) => new Promise((resolve, reject) => {
+    const openRequest = globalThis.indexedDB.open(databaseName);
+    openRequest.onerror = () => reject(openRequest.error);
+    openRequest.onsuccess = () => {
+      const database = openRequest.result;
+      const transaction = database.transaction("backups", "readonly");
+      const request = transaction.objectStore("backups").getAll();
+      request.onerror = () => {
+        database.close();
+        reject(request.error);
+      };
+      request.onsuccess = () => {
+        const backups = request.result;
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(backups);
+        };
+      };
+    };
+  }), DATABASE_NAME);
+}
 
 test("导入备份会替换状态，并在刷新后保持", async ({ context, page }) => {
   await installStateSeed(context, createState({
@@ -109,7 +133,7 @@ test("可从多份恢复副本中恢复指定副本，并保留其余副本", as
   await expect(page.getByText("发现 1 份未合并的恢复副本")).toBeVisible();
 });
 
-test("清空学习记录时保留收藏与内容缓存，并创建恢复快照", async ({ context, page }) => {
+test("清空学习记录时清除测验与进度，保留收藏和内容缓存并创建恢复快照", async ({ context, page }) => {
   const reviewedAt = new Date(Date.now() - 60_000).toISOString();
   const dueAt = new Date(Date.now() + 10 * 60_000).toISOString();
   await installStateSeed(context, createState({
@@ -177,6 +201,34 @@ test("清空学习记录时保留收藏与内容缓存，并创建恢复快照",
     positions: {
       "selection:ordered:必考词:1:1": 7,
     },
+    activeSession: {
+      id: "reset-session",
+      kind: "today",
+      title: "今日任务",
+      wordIds: [1],
+      index: 0,
+      createdAt: reviewedAt,
+    },
+    quizAttempts: [{
+      id: "reset-attempt-1",
+      wordId: 1,
+      mode: "listening-spelling",
+      correct: false,
+      recallMs: 4_000,
+      answeredAt: reviewedAt,
+      appliedToSchedule: false,
+    }],
+    activeQuiz: {
+      id: "quiz:listening-spelling:1:reset",
+      mode: "listening-spelling",
+      seed: 1,
+      questionWordIds: [1],
+      index: 0,
+      correctCount: 0,
+      answers: {},
+      complete: false,
+      startedAt: reviewedAt,
+    },
     enrichments: RADIATE_ENRICHMENT,
   }));
   await openApp(page);
@@ -187,14 +239,20 @@ test("清空学习记录时保留收藏与内容缓存，并创建恢复快照",
   await expect.poll(() => readStoreCount(page, "mistakes")).toBe(1);
   await expect.poll(() => readStoreCount(page, "stubborn-words")).toBe(1);
   await expect.poll(() => readStoreCount(page, "positions")).toBe(1);
+  await expect.poll(() => readStoreCount(page, "quiz-attempts")).toBe(1);
   await expect.poll(() => readStoreCount(page, "favorites")).toBe(1);
   await expect.poll(() => readStoreCount(page, "enrichments")).toBe(1);
 
   await openSettings(page);
-  page.once("dialog", (dialog) => dialog.accept());
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe(
+      "确定清空本机的评分与记忆进度、错词、测验记录、进行中学习任务和学习位置吗？收藏与内容缓存会保留。清空前会创建可恢复快照。",
+    );
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "清空本机学习记录" }).click();
   await expect(
-    page.getByRole("status").filter({ hasText: "学习记录已清空" }),
+    page.getByRole("status").filter({ hasText: "本机学习记录已清空" }),
   ).toBeVisible();
 
   await expect.poll(() => readStoreCount(page, "reviews")).toBe(0);
@@ -203,12 +261,25 @@ test("清空学习记录时保留收藏与内容缓存，并创建恢复快照",
   await expect.poll(() => readStoreCount(page, "mistakes")).toBe(0);
   await expect.poll(() => readStoreCount(page, "stubborn-words")).toBe(0);
   await expect.poll(() => readStoreCount(page, "positions")).toBe(0);
+  await expect.poll(() => readStoreCount(page, "quiz-attempts")).toBe(0);
   await expect.poll(() => readStoreCount(page, "favorites")).toBe(1);
   await expect.poll(() => readStoreCount(page, "enrichments")).toBe(1);
   await expect.poll(() => readStoreCount(page, "backups")).toBeGreaterThanOrEqual(1);
+  const clearedSettings = await readStoreRecord(page, "settings", "current");
+  expect(clearedSettings.activeSession).toBeUndefined();
+  expect(clearedSettings.activeQuiz).toBeUndefined();
+  const recoveryBackup = (await readAutomaticBackups(page))
+    .find((backup) => backup.reason === "manual");
+  expect(recoveryBackup?.document.state.quizAttempts).toHaveLength(1);
+  expect(recoveryBackup?.document.state.activeQuiz?.id)
+    .toBe("quiz:listening-spelling:1:reset");
 
   await page.reload();
   await waitForApp(page);
+  await expect.poll(() => readStoreCount(page, "quiz-attempts")).toBe(0);
+  const refreshedSettings = await readStoreRecord(page, "settings", "current");
+  expect(refreshedSettings.activeSession).toBeUndefined();
+  expect(refreshedSettings.activeQuiz).toBeUndefined();
   await openWordbook(page);
   await expect(
     page.getByRole("tabpanel").getByRole("heading", { name: "radiate" }),

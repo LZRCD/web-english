@@ -1488,3 +1488,12 @@
 - 学习卡顶部增加可访问的来源标签与说明，覆盖今日到期/新词/补漏/手动加入以及收藏、错词、顽固词、划词集、搜索、冲刺、再强化和当前词书额外练习；无法细分时只给会话级通用说明。
 - 没有新增 schema/version/store 或第二套推荐规则；队列顺序、FSRS、评分、弱信号与历史归因保持不变。
 - 当前验证：定向单测 43/43、typecheck、lint 0 error / 1 个既有 warning、production build + Node 238/238、新增 E2E 2/2、完整 signal-flow 18/18；固定 3000 项目进程已精确清理。
+
+## 清空本机学习记录契约（第 57 轮）
+
+本轮：2026-08-09。
+
+- 设置页说明、确认对话框和成功通知明确清除评分/记忆进度、错词、测验记录、进行中任务和学习位置，保留收藏与内容缓存，并在清空前创建可恢复快照。
+- 新增唯一纯函数清空字段清单；`quizAttempts` 与 `activeQuiz` 现在和 `reviews`、进度、错词、会话、位置及撤销历史一同清除，刷新后不再恢复旧测验信号或未完成测验。
+- 清空前的完整快照继续保留 `quizAttempts` 与 `activeQuiz`；没有改变 schema/version/store/domain、备份数量、FSRS、Quiz 规则或弱信号阈值。
+- 当前验证：定向单测 44/44、typecheck、lint 0 error / 1 个既有 warning、production build + Node 239/239、精选 data-lifecycle E2E 1/1；固定 3000 服务链已精确清理。

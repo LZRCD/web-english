@@ -439,14 +439,25 @@ export default function SettingsView({
             </button>
           </div>
         </div>
-        <button
-          type="button"
-          className="reset-button"
-          disabled={dataReplacementLocked}
-          onClick={onResetRecords}
-        >
-          清空本机学习记录
-        </button>
+        <div className="backup-settings reset-learning-settings">
+          <span>
+            <strong>清空本机学习记录</strong>
+            <small>
+              清空评分与记忆进度、错词、测验记录、进行中学习任务和学习位置；
+              保留收藏与内容缓存。清空前会创建可恢复快照。
+            </small>
+          </span>
+          <div>
+            <button
+              type="button"
+              className="reset-button"
+              disabled={dataReplacementLocked}
+              onClick={onResetRecords}
+            >
+              清空本机学习记录
+            </button>
+          </div>
+        </div>
       </div>
       <details className="advanced-settings">
         <summary>高级设置</summary>

@@ -184,6 +184,25 @@ export type StoredState = {
   ratingUndoStack: RatingUndo[];
 };
 
+/**
+ * 清空本机学习记录，同时保留收藏、内容缓存和用户设置。
+ * 调用方必须在持久化该结果前保存完整恢复快照。
+ */
+export function clearLearningRecords(state: StoredState): StoredState {
+  return {
+    ...state,
+    reviews: [],
+    wordProgress: {},
+    mistakes: [],
+    stubbornWords: {},
+    positions: {},
+    activeSession: undefined,
+    quizAttempts: [],
+    activeQuiz: undefined,
+    ratingUndoStack: [],
+  };
+}
+
 export const STORAGE_KEY = "wordloop-state";
 export const STORAGE_VERSION = 5;
 export const REDBOOK_SECTIONS = ["必考词", "基础词", "超纲词"] as const;

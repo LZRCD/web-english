@@ -2754,7 +2754,7 @@ select:focus-visible {
 }
 
 .reset-button {
-  margin: 20px 25px;
+  margin: 0;
   border: 1px solid #edcfc8;
   background: #fff8f6;
   color: #a85c4d;
@@ -2762,6 +2762,15 @@ select:focus-visible {
   padding: 11px 15px;
   cursor: pointer;
   font-size: 11px;
+}
+
+.reset-learning-settings {
+  border-bottom: 0;
+}
+
+.reset-learning-settings small {
+  max-width: 620px;
+  line-height: 1.65;
 }
 
 .shortcut-panel {

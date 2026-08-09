@@ -4,6 +4,7 @@ import {
   buildActivityCalendar,
   buildDailyAggregates,
   buildStudyKey,
+  clearLearningRecords,
   learningStats,
   lookupWordId,
   parseStoredState,
@@ -818,6 +819,108 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
   assert.equal(snapshot.fsrsCards[0].reps, 1);
   assert.equal(snapshot.settings.ratingUndoStack.length, 1);
   assert.deepEqual(restored, state);
+});
+
+test("清空本机学习记录：清除测验与学习进度，保留收藏、内容缓存和设置", () => {
+  const reviewedAt = "2026-08-09T08:00:00.000Z";
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    reviews: [{
+      id: "clear-review",
+      wordId: 1,
+      word: "radiate",
+      rating: 0,
+      kind: "new",
+      intervalMs: 600_000,
+      dueAt: "2026-08-09T08:10:00.000Z",
+      reviewedAt,
+      section: "必考词",
+      unit: 1,
+    }],
+    favorites: [{ wordId: 1, addedAt: reviewedAt }],
+    mistakes: [{
+      wordId: 1,
+      addedAt: reviewedAt,
+      mistakeCount: 1,
+      lastRating: 0,
+      lastMistakeAt: reviewedAt,
+    }],
+    positions: { "selection:ordered:必考词:1:1": 7 },
+    enrichments: { 1: { sentence: "Stars radiate energy." } },
+    lookupWords: [{
+      id: 9_000_000_001,
+      linkedWordId: 1,
+      query: "radiate",
+      kind: "word",
+      phonetic: "",
+      part: "v.",
+      meaning: "散发",
+      note: "",
+      source: "redbook",
+      addedAt: reviewedAt,
+    }],
+    activeSession: {
+      id: "clear-session",
+      kind: "today",
+      title: "今日任务",
+      wordIds: [1],
+      index: 0,
+      createdAt: reviewedAt,
+    },
+    quizAttempts: [{
+      id: "clear-attempt",
+      wordId: 1,
+      mode: "listening-spelling",
+      correct: false,
+      recallMs: 3_000,
+      answeredAt: reviewedAt,
+      appliedToSchedule: false,
+    }],
+    activeQuiz: {
+      id: "quiz:listening-spelling:1:clear",
+      mode: "listening-spelling",
+      seed: 1,
+      questionWordIds: [1],
+      index: 0,
+      correctCount: 0,
+      answers: {},
+      complete: false,
+      startedAt: reviewedAt,
+    },
+    dailyGoal: 30,
+  }));
+  state.ratingUndoStack = [{
+    reviewId: "clear-review",
+    wordId: 1,
+    word: "radiate",
+    previousProgress: undefined,
+    previousPosition: 0,
+    studyKey: "selection:ordered:必考词:1:1",
+    selectedSection: "必考词",
+    selectedUnit: 1,
+    studyMode: "ordered",
+    studyScope: "selection",
+    shuffleSeed: 1,
+  }];
+
+  const recoverySnapshot = createBackupDocument(state, reviewedAt);
+  const cleared = clearLearningRecords(state);
+
+  assert.deepEqual(cleared.reviews, []);
+  assert.deepEqual(cleared.wordProgress, {});
+  assert.deepEqual(cleared.mistakes, []);
+  assert.deepEqual(cleared.stubbornWords, {});
+  assert.deepEqual(cleared.positions, {});
+  assert.equal(cleared.activeSession, undefined);
+  assert.deepEqual(cleared.quizAttempts, []);
+  assert.equal(cleared.activeQuiz, undefined);
+  assert.deepEqual(cleared.ratingUndoStack, []);
+  assert.deepEqual(cleared.favorites, state.favorites);
+  assert.deepEqual(cleared.enrichments, state.enrichments);
+  assert.deepEqual(cleared.lookupWords, state.lookupWords);
+  assert.equal(cleared.dailyGoal, 30);
+  assert.equal(recoverySnapshot.state.quizAttempts.length, 1);
+  assert.equal(recoverySnapshot.state.activeQuiz?.id, "quiz:listening-spelling:1:clear");
 });
 
 test("释义中的词性只展示一次", () => {
