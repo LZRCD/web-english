@@ -32,7 +32,7 @@
 | 13 / 284 | `selectedActivityDate` | state 名只约束内部实现，未验证用户选日后的详情。 | 4 | 删除，不锁定 state 名。 |
 | 14 / 285 | `回到今天` | 当前 `HistoryView` 提供返回今天操作；`study.test.ts:274-296` 仅覆盖日历纯逻辑，现有 E2E 未覆盖历史翻页、选日和回到今天。 | 2 | 先补一个历史日历最窄 E2E，再删展示字符串正则。 |
 | 15 / 286 | `STORAGE_VERSION = 5` | `study.test.ts:77-122, 151-183` 与 `data-integrity.test.ts:58-83, 250-283` 直接验证 v5 迁移、非法/未来版本拒绝及备份版本一致性。 | 1 | 删除固定源码赋值正则；保留行为与迁移测试。 |
-| 16 / 287 | `AbortSignal.timeout(` | `api-guard.test.ts:163-207` 直接调用 `chatCompletion`，验证请求携带 `AbortSignal`、请求体与响应提取；第 43 轮已有该替代测试证据。 | 1 | **第 54 轮唯一目标：删除该断言及只为它存在的 `aiProvider` 源码读取槽位。** |
+| 16 / 287 | `AbortSignal.timeout(` | `api-guard.test.ts:163-207` 直接调用 `chatCompletion`，验证请求携带 `AbortSignal`、请求体与响应提取；第 54 轮已重新运行直接行为测试。 | 1 | **第 54 轮已删除该断言及只为它存在的 `aiProvider` 源码读取槽位。** |
 | 17 / 288 | `function undoLastRating` | `learning.spec.mjs:168-226` 直接覆盖评分后撤销、持久化回退及刷新后撤销。 | 1 | 删除函数名正则。 |
 | 18 / 289 | `function startTodaySession` | `study.test.ts:421-541` 覆盖今日队列规则，但未直接覆盖页面“今日任务”入口建立会话及持久化。 | 2 | 先补最窄入口行为测试，再删函数名正则。 |
 | 19 / 290 | `function startFavoriteSession` | `responsive.spec.mjs:85-112` 只确认“复习全部收藏”按钮可见，未点击并验证收藏会话。 | 2 | 先补点击收藏入口后队列/标题的最窄 E2E，再删函数名正则。 |
