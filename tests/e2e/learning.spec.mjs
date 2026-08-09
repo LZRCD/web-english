@@ -21,16 +21,21 @@ const E_DICTIONARY_SHARD = readFileSync(
   "utf8",
 );
 
+const ELUCIDATOR_SENTENCE =
+  "A careful elucidator radiated light onto the old diagram.";
+
+function getElucidatorSentence(page) {
+  // 同一句例句可能因多个目标义项重复展示；这些用例只需选择其中一个可见实例。
+  return page.getByText(ELUCIDATOR_SENTENCE, { exact: true }).first();
+}
+
 async function openElucidatorLookup(context, page) {
   await installStateSeed(context, createState({
     enrichments: RADIATE_ENRICHMENT,
   }));
   await openApp(page);
   await page.getByRole("button", { name: "显示单词释义" }).click();
-  const sentence = page.getByText(
-    "A careful elucidator radiated light onto the old diagram.",
-    { exact: true },
-  );
+  const sentence = getElucidatorSentence(page);
   await selectText(sentence, "elucidator");
   const popup = page.getByRole("dialog", { name: "划词查询：elucidator" });
   await popup.getByRole("button", { name: "翻译" }).click();
@@ -134,7 +139,7 @@ test("专项测验答错写入 FSRS 薄弱词并更新每周报告", async ({ co
   expect(mobileReportViewport.scrollWidth)
     .toBeLessThanOrEqual(mobileReportViewport.clientWidth + 1);
   await navigation.getByRole("button", { name: /测验$/ }).click();
-  await page.getByRole("button", { name: /听音拼写/ }).click();
+  await expect(page.locator(".quiz-view")).toBeVisible();
   const mobileQuizViewport = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -282,10 +287,7 @@ test("词典 Range 请求返回 206，查询过的词再次划选时直显结果
   await openApp(page);
   await page.getByRole("button", { name: "显示单词释义" }).click();
 
-  const sentence = page.getByText(
-    "A careful elucidator radiated light onto the old diagram.",
-    { exact: true },
-  );
+  const sentence = getElucidatorSentence(page);
   await selectText(sentence, "elucidator");
   let popup = page.getByRole("dialog", { name: "划词查询：elucidator" });
   await expect(popup.getByRole("button", { name: "翻译" })).toBeVisible();
@@ -501,10 +503,7 @@ test("快速 A→B 划词时旧请求晚返回也不会覆盖新弹窗", async (
   await installStateSeed(context, createState({ enrichments: RADIATE_ENRICHMENT }));
   await openApp(page);
   await page.getByRole("button", { name: "显示单词释义" }).click();
-  const sentence = page.getByText(
-    "A careful elucidator radiated light onto the old diagram.",
-    { exact: true },
-  );
+  const sentence = getElucidatorSentence(page);
 
   await selectText(sentence, "careful elucidator");
   await page.getByRole("dialog", { name: "划词查询：careful elucidator" })
@@ -540,10 +539,7 @@ test("关闭划词弹窗后旧请求返回不会重新打开或写入结果", as
   await installStateSeed(context, createState({ enrichments: RADIATE_ENRICHMENT }));
   await openApp(page);
   await page.getByRole("button", { name: "显示单词释义" }).click();
-  const sentence = page.getByText(
-    "A careful elucidator radiated light onto the old diagram.",
-    { exact: true },
-  );
+  const sentence = getElucidatorSentence(page);
   await selectText(sentence, "careful elucidator");
   const popup = page.getByRole("dialog", {
     name: "划词查询：careful elucidator",
