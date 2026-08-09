@@ -920,8 +920,7 @@ function normalizeQuizAttempts(value: unknown): QuizAttempt[] {
   if (!Array.isArray(value)) return [];
   return value
     .map(normalizeQuizAttempt)
-    .filter((item): item is QuizAttempt => item !== null)
-    .slice(-5000);
+    .filter((item): item is QuizAttempt => item !== null);
 }
 
 function normalizeQuizSession(value: unknown): QuizSessionState | undefined {

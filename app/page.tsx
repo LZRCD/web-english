@@ -140,7 +140,11 @@ import {
 } from "../lib/performance-diagnostics";
 import { versionedDataUrl } from "../lib/data-version";
 import type { QuizQuestion, QuizAttempt, QuizSessionState } from "../lib/quiz";
-import { createQuizSession, shouldApplyQuizToSchedule } from "../lib/quiz";
+import {
+  appendQuizAttempt,
+  createQuizSession,
+  shouldApplyQuizToSchedule,
+} from "../lib/quiz";
 import QuizView from "./components/QuizView";
 import {
   ACTIVITY_RANGE_LABELS as activityRangeLabels,
@@ -1343,7 +1347,7 @@ export default function Home() {
       answeredAt: nowIso,
       appliedToSchedule: applyToSchedule,
     };
-    setQuizAttempts((items) => [...items, attempt].slice(-5000));
+    setQuizAttempts((items) => appendQuizAttempt(items, attempt));
     refreshClock();
 
     if (!correct) {

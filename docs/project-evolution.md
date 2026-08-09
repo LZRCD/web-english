@@ -1395,3 +1395,19 @@
 - 唯一终局 B：该问题直接涉及合法历史数据和备份一致性，必须停止自动串行并请求单独修复授权；本轮不修改业务代码、测试、备份、schema/version/store/domain 或用户数据。
 - 第 49 轮 Prompt 仅为待授权恢复 Prompt：若用户明确授权，只取消未来 attempts 的静默裁剪并补 >5000 条 normalize、分域、备份和追加无损测试；不回填已丢历史，不顺带修其他中风险项。
 - 本轮未启动服务、浏览器或 E2E，未访问 IndexedDB，未重跑 lint/typecheck/build/npm test；第 45 轮数字仅为历史 checkpoint。只有高风险缺口修复并验证后，才可进入阶段 F2 测试收敛只读审计。
+
+## 第六十八次迭代：阻止测验作答历史静默丢失
+
+本次迭代：2026-08-09。
+
+### 修复与边界
+
+- 删除 `normalizeQuizAttempts` 的固定 5000 条裁剪，合法 attempts 经状态加载、IndexedDB 分域合并和备份导入规范化时保持原数量与顺序；非法记录仍按既有规则过滤。
+- 新增 `appendQuizAttempt` 作为页面唯一无损追加边界，追加第 5001 条不会丢弃最早记录；不再由状态归一化和页面各自维护上限。
+- 未改变 `QuizAttempt` 字段、每日 Quiz 门禁、评分、FSRS、弱信号、推荐、sessionId、备份格式或清空语义；未新增 schema/version/store/domain，未读取生产数据，也未回填已经丢失的历史。
+
+### 验证与后续
+
+- 新增 5 项确定性测试：5001/10010 条 normalize、非法过滤、5001 条分域往返、备份导入规范化往返和第 5001 条追加。
+- 定向 study 40/40，typecheck 通过，lint 0 error/1 个既有 warning，`npm test` 含生产 build 235/235；build-info 生成漂移已恢复。
+- 页面仅复用已单测纯 helper，分域和备份由纯往返覆盖，因此未启动 3000 或 E2E。`quizAttempts` 固定裁剪高风险项解除，真实长历史性能与其他中风险项保持证据边界；下一轮进入阶段 F2 测试收敛只读审计。

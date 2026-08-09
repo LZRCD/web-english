@@ -84,6 +84,14 @@ export type QuizAttempt = {
   appliedToSchedule: boolean;
 };
 
+/** 按原顺序追加作答历史，不静默丢弃合法旧记录。 */
+export function appendQuizAttempt(
+  attempts: readonly QuizAttempt[],
+  attempt: QuizAttempt,
+) {
+  return [...attempts, attempt];
+}
+
 export const MAX_QUIZ_QUESTION_WORD_IDS = 30;
 
 /** 清洗持久化题组快照：只保留有序、唯一的有效学习项 id。 */

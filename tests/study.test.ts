@@ -28,6 +28,10 @@ import {
   parseBackupDocument,
 } from "../lib/backup.ts";
 import {
+  appendQuizAttempt,
+  type QuizAttempt,
+} from "../lib/quiz.ts";
+import {
   combineStoredState,
   splitStoredState,
 } from "../lib/storage.ts";
@@ -45,6 +49,18 @@ import {
   upsertLookupWord,
   type LookupResult,
 } from "../lib/selection-lookup.ts";
+
+function createQuizAttempts(count: number): QuizAttempt[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `attempt:${index}`,
+    wordId: index + 1,
+    mode: "meaning-choice",
+    correct: index % 2 === 0,
+    recallMs: index,
+    answeredAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+    appliedToSchedule: index % 3 === 0,
+  }));
+}
 
 function createReview(
   input: Omit<Review, "id" | "kind" | "intervalMs"> & Partial<Pick<Review, "id" | "kind" | "intervalMs">>,
@@ -765,6 +781,67 @@ test("评分日志追加写入，不再静默截断旧历史", () => {
   const state = parseStoredState(JSON.stringify({ schemaVersion: 5, reviews, wordProgress: {} }));
   assert.ok(state.reviews.length > 10000, `完整保留历史（实际 ${state.reviews.length} 条）`);
 })
+
+test("测验作答归一化完整保留 5001 条与 10010 条合法历史", () => {
+  for (const count of [5001, 10010]) {
+    const attempts = createQuizAttempts(count);
+    const state = parseStoredState(JSON.stringify({
+      schemaVersion: 5,
+      quizAttempts: attempts,
+    }));
+
+    assert.equal(state.quizAttempts.length, count);
+    assert.deepEqual(state.quizAttempts, attempts);
+  }
+});
+
+test("测验作答完整保留不会放宽非法记录过滤", () => {
+  const attempts = createQuizAttempts(5001);
+  const invalidAttempt = {
+    ...attempts[0],
+    id: "attempt:invalid",
+    answeredAt: "invalid",
+  };
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    quizAttempts: [invalidAttempt, ...attempts],
+  }));
+
+  assert.deepEqual(state.quizAttempts, attempts);
+});
+
+test("超过 5000 条测验作答可经 IndexedDB 分域无损往返", () => {
+  const attempts = createQuizAttempts(5001);
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    quizAttempts: attempts,
+  }));
+  const restored = combineStoredState(splitStoredState(state));
+
+  assert.deepEqual(restored.quizAttempts, attempts);
+});
+
+test("超过 5000 条测验作答可经备份导入规范化无损往返", () => {
+  const attempts = createQuizAttempts(5001);
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    quizAttempts: attempts,
+  }));
+  const backup = createBackupDocument(state, "2026-08-09T00:00:00.000Z");
+  const imported = parseBackupDocument(JSON.stringify(backup));
+  const restored = parseStoredState(JSON.stringify(imported.state));
+
+  assert.deepEqual(restored.quizAttempts, attempts);
+});
+
+test("追加第 5001 条测验作答时保留最早记录", () => {
+  const attempts = createQuizAttempts(5001);
+  const appended = appendQuizAttempt(attempts.slice(0, 5000), attempts[5000]);
+
+  assert.equal(appended.length, 5001);
+  assert.equal(appended[0].id, "attempt:0");
+  assert.deepEqual(appended[5000], attempts[5000]);
+});
 
 test("日期工具：localDateKey 本地自然日 YYYY-MM-DD，string 输入等价", () => {
   // 本地构造器构造 2026-08-09，断言本地时区语义（不依赖 UTC 解析）
