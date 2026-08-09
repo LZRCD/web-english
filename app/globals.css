@@ -81,23 +81,38 @@ select:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 100;
-  border: 0;
   background: rgba(250, 251, 249, 0.98);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 24px;
   animation: welcome-in 0.7s ease-out both;
 }
 
+.welcome:focus {
+  outline: none;
+}
+
+.welcome-card {
+  width: min(440px, 100%);
+  min-width: 0;
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 24px 70px rgba(31, 42, 35, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
 .welcome-mark {
-  width: 116px;
-  height: 116px;
+  width: 86px;
+  height: 86px;
   border: 1px solid #cfd4cf;
   border-radius: 50%;
   position: relative;
-  margin-bottom: 26px;
+  margin-bottom: 18px;
   animation: orbit-float 4s ease-in-out infinite;
 }
 
@@ -111,41 +126,41 @@ select:focus-visible {
 }
 
 .welcome-mark::before {
-  width: 46px;
-  height: 46px;
-  left: 22px;
-  top: 26px;
+  width: 36px;
+  height: 36px;
+  left: 16px;
+  top: 19px;
 }
 
 .welcome-mark::after {
-  width: 34px;
-  height: 34px;
-  right: 21px;
-  bottom: 22px;
+  width: 28px;
+  height: 28px;
+  right: 14px;
+  bottom: 16px;
   border-color: var(--mint);
 }
 
 .welcome-mark i:nth-child(1) {
   width: 10px;
   height: 10px;
-  left: 18px;
-  top: 19px;
+  left: 11px;
+  top: 13px;
   background: var(--paper);
 }
 
 .welcome-mark i:nth-child(2) {
   width: 8px;
   height: 8px;
-  right: 21px;
-  top: 31px;
+  right: 13px;
+  top: 22px;
   background: var(--paper);
 }
 
 .welcome-mark i:nth-child(3) {
   width: 7px;
   height: 7px;
-  left: 44px;
-  bottom: 15px;
+  left: 32px;
+  bottom: 10px;
   background: var(--paper);
 }
 
@@ -156,10 +171,108 @@ select:focus-visible {
   margin-left: 0.18em;
 }
 
+.welcome-step {
+  margin: 24px 0 8px;
+  color: #5a8870;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.welcome-card h1 {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.25;
+}
+
+.welcome-description {
+  min-height: 52px;
+  margin: 13px 0 0;
+  color: #687169;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.welcome-shortcut {
+  margin-top: 15px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #edf6f1;
+  color: #39775a;
+  font-size: 11px;
+}
+
+.welcome-progress {
+  display: flex;
+  gap: 7px;
+  margin-top: 22px;
+}
+
+.welcome-progress span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #d7ddd8;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.welcome-progress span.active {
+  width: 24px;
+  background: var(--mint);
+}
+
+.welcome-actions {
+  width: 100%;
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.welcome-actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.welcome-actions button {
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.welcome-actions button:focus-visible {
+  outline: 3px solid rgba(85, 201, 150, 0.3);
+  outline-offset: 2px;
+}
+
+.welcome-actions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.welcome-actions .welcome-skip {
+  border-color: transparent;
+  color: #7a827b;
+  background: transparent;
+}
+
+.welcome-actions .welcome-next {
+  border-color: var(--mint);
+  background: var(--mint);
+  color: white;
+}
+
 .welcome-hint {
   color: #8a9089;
-  font-size: 13px;
-  margin-top: 14px;
+  font-size: 10px;
+  margin-top: 15px;
 }
 
 .side-rail {
@@ -4139,6 +4252,78 @@ kbd {
 }
 
 @media (max-width: 480px) {
+  .welcome {
+    padding: 12px;
+  }
+
+  .welcome-card {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    padding: 24px 16px;
+    border-radius: 22px;
+  }
+
+  .welcome-mark {
+    width: 66px;
+    height: 66px;
+    margin-bottom: 12px;
+  }
+
+  .welcome-mark::before {
+    width: 28px;
+    height: 28px;
+    left: 12px;
+    top: 14px;
+  }
+
+  .welcome-mark::after {
+    width: 22px;
+    height: 22px;
+    right: 10px;
+    bottom: 12px;
+  }
+
+  .welcome-mark i:nth-child(1) {
+    left: 7px;
+    top: 9px;
+  }
+
+  .welcome-mark i:nth-child(2) {
+    right: 9px;
+    top: 16px;
+  }
+
+  .welcome-mark i:nth-child(3) {
+    left: 24px;
+    bottom: 6px;
+  }
+
+  .welcome-step {
+    margin-top: 18px;
+  }
+
+  .welcome-card h1 {
+    font-size: 21px;
+  }
+
+  .welcome-description {
+    min-height: 66px;
+  }
+
+  .welcome-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .welcome-actions > div {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+  }
+
+  .welcome-actions button {
+    width: 100%;
+  }
+
   .quiz-readiness {
     display: none;
   }
