@@ -4,6 +4,7 @@ param(
   [string]$ExpectedHead,
   [string]$ExpectedBranch,
   [string[]]$AllowedPath = @(),
+  [switch]$Detailed,
   [switch]$Json
 )
 
@@ -182,7 +183,10 @@ try {
   }
 
   if ($protectedUntracked.Count -gt 0) {
-    $notes.Add("Protected untracked paths preserved: $($protectedUntracked -join ', ')")
+    $notes.Add("Protected untracked paths preserved: $($protectedUntracked.Count).")
+    if ($Detailed) {
+      $notes.Add("Protected paths: $($protectedUntracked -join ', ')")
+    }
   }
 
   $port3000 = @()

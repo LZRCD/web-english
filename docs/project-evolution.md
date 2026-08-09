@@ -1497,3 +1497,11 @@
 - 新增唯一纯函数清空字段清单；`quizAttempts` 与 `activeQuiz` 现在和 `reviews`、进度、错词、会话、位置及撤销历史一同清除，刷新后不再恢复旧测验信号或未完成测验。
 - 清空前的完整快照继续保留 `quizAttempts` 与 `activeQuiz`；没有改变 schema/version/store/domain、备份数量、FSRS、Quiz 规则或弱信号阈值。
 - 当前验证：定向单测 44/44、typecheck、lint 0 error / 1 个既有 warning、production build + Node 239/239、精选 data-lifecycle E2E 1/1；固定 3000 服务链已精确清理。
+
+## 自动化迭代流程提速 v2
+
+本次流程调整：2026-08-09。
+
+- 完整 Round 0 改为每个授权批次执行一次，轮间只做增量门禁；出现 HEAD/分支/工作区/授权漂移时才升级为完整复核。
+- 验证改为 V0～V4 风险阶梯并新增 `npm run test:unit`，避免定向测试、全量 Node 测试和含 build 的 `npm test` 在同一轮无条件重复。
+- 新增固定 3000 dev 服务管理脚本，集中记录 PID 和日志并支持批次内复用；安全停止、精确暂存、一个中文提交、不 push 等边界不变。
