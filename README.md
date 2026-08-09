@@ -38,14 +38,92 @@
 
 ## 本地运行
 
-环境要求：Node.js `>=22.13.0`。
+环境要求：Windows 11、Node.js `>=22.13.0`，并已安装项目依赖。所有启动方式都固定使用端口 `3000`，不会自动改到 `3001` 或其他端口。
 
-```bash
+### Windows 双击启动
+
+1. 首次运行前，在项目目录打开 PowerShell，执行 `npm install`。
+2. 双击项目根目录的 `启动词环网站.cmd`。
+3. 启动器会优先使用 PowerShell 7，未安装时回退到 Windows PowerShell；随后打开 <http://localhost:3000/>。
+
+启动器只会在缺少 `dist/server/index.js` 时执行 `npm run build`，然后通过 `npm run start -- --port 3000` 启动网站。它不会自动安装 Node.js 或项目依赖，也不会在构建或端口冲突后自动修复。
+
+### 命令行启动
+
+开发模式适合修改源码，命令会持续占用当前终端；按 `Ctrl+C` 停止：
+
+```powershell
+Set-Location "D:\me\小东西\单词"
 npm install
 npm run dev
 ```
 
-打开 <http://localhost:3000/>。
+也可以从 PowerShell 调用与双击入口相同的生产启动器：
+
+```powershell
+Set-Location "D:\me\小东西\单词"
+& ".\启动词环网站.cmd"
+```
+
+启动后打开 <http://localhost:3000/>。
+
+### 启动失败时怎么处理
+
+#### 找不到 Node.js 或 npm
+
+先检查版本：
+
+```powershell
+node --version
+npm --version
+```
+
+如果命令不存在，安装 Node.js `>=22.13.0`，关闭并重新打开 PowerShell，再重复版本检查。启动器不会代替你安装 Node.js。
+
+#### 依赖未安装
+
+如果出现“找不到模块”、`vinext` 不存在或类似错误，在项目根目录重新安装当前 `package.json` / `package-lock.json` 声明的依赖：
+
+```powershell
+npm install
+```
+
+安装仍失败时，保留终端中的第一条 npm 错误；不要删除学习数据或 `.wordloop-runtime` 来尝试修复依赖。
+
+#### 构建失败
+
+在项目根目录直接运行构建，以便在终端查看完整错误：
+
+```powershell
+npm run build
+```
+
+双击启动器产生的构建错误日志位于 `.wordloop-runtime\build-时间.error.log`。可用下面的命令读取最新一份：
+
+```powershell
+$latestBuildError = Get-ChildItem ".\.wordloop-runtime\build-*.error.log" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+Get-Content $latestBuildError.FullName
+```
+
+先按日志中的第一条真实错误处理；依赖缺失时运行 `npm install`。不要假设启动器会自动重建数据文件、清理缓存或恢复学习记录。
+
+#### 固定端口 3000 被占用
+
+先确认监听进程：
+
+```powershell
+$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen
+$listener
+Get-Process -Id $listener.OwningProcess
+```
+
+- 如果 <http://localhost:3000/> 已经是可用的词环页面，直接复用，不要重复启动。
+- 如果是其他程序，正常关闭该程序后再启动词环；只有确认 PID 属于可停止的进程时，才执行 `Stop-Process -Id $listener.OwningProcess`。
+- 不要批量结束所有 `node` 进程，也不要把 WordLoop 改到其他端口规避冲突。
+
+生产服务启动后立即退出时，错误日志位于 `.wordloop-runtime\server-时间.error.log`，处理方式与构建日志相同。
 
 ## 红宝书词库
 
