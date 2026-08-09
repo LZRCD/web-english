@@ -101,7 +101,10 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useSearch } from "./hooks/useSearch";
 import { useSelectionLookup } from "./hooks/useSelectionLookup";
 import { useStudyPersistence } from "./hooks/useStudyPersistence";
-import { useStudySession } from "./hooks/useStudySession";
+import {
+  recoverStudySessionWords,
+  useStudySession,
+} from "./hooks/useStudySession";
 import { useSyncedRefs } from "./hooks/useSyncedRefs";
 import BooksView from "./components/BooksView";
 import CoachPanel from "./components/CoachPanel";
@@ -1064,6 +1067,35 @@ export default function Home() {
   useEffect(() => {
     if (hydrated) clearStaleToday(todayKey);
   }, [clearStaleToday, hydrated, todayKey]);
+
+  useEffect(() => {
+    if (!hydrated || !redbookReady || !activeSession) return;
+    const recovery = recoverStudySessionWords(
+      activeSession,
+      new Set(
+        [...wordById.keys()].filter(
+          (wordId): wordId is number => wordId !== undefined,
+        ),
+      ),
+    );
+    if (recovery.status === "unchanged") return;
+    queueMicrotask(() => {
+      setActiveSession(recovery.session);
+      showToast(
+        recovery.status === "cleared"
+          ? "本次任务的词条已不可用，已结束会话；可以重新开始"
+          : `本次任务有 ${recovery.removedCount} 个词已不可用，已保留其余词并继续`,
+        5000,
+      );
+    });
+  }, [
+    activeSession,
+    hydrated,
+    redbookReady,
+    setActiveSession,
+    showToast,
+    wordById,
+  ]);
 
   useEffect(() => {
     if (!redbookReady || selectedUnit === "all" || availableUnits.includes(String(selectedUnit))) return;

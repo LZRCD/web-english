@@ -90,6 +90,44 @@ export function clearStaleTodayStudySession(
     : session;
 }
 
+export type StudySessionWordRecovery = {
+  session?: StudySession;
+  removedCount: number;
+  status: "unchanged" | "partial" | "cleared";
+};
+
+/**
+ * 词库变化后恢复进行中会话：只移除无法解析的词，并按已完成的有效词数重算进度。
+ */
+export function recoverStudySessionWords(
+  session: StudySession,
+  availableWordIds: ReadonlySet<number>,
+): StudySessionWordRecovery {
+  const wordIds = session.wordIds.filter((wordId) =>
+    availableWordIds.has(wordId));
+  const removedCount = session.wordIds.length - wordIds.length;
+  if (removedCount === 0) {
+    return { session, removedCount: 0, status: "unchanged" };
+  }
+  if (wordIds.length === 0) {
+    return { removedCount, status: "cleared" };
+  }
+
+  const completedBoundary = Math.min(
+    session.wordIds.length,
+    Math.max(0, Math.trunc(session.index)),
+  );
+  const index = session.wordIds
+    .slice(0, completedBoundary)
+    .filter((wordId) => availableWordIds.has(wordId))
+    .length;
+  return {
+    session: { ...session, wordIds, index: Math.min(index, wordIds.length) },
+    removedCount,
+    status: "partial",
+  };
+}
+
 export function useStudySession(
   initialSession?: StudySession,
 ): UseStudySessionResult {

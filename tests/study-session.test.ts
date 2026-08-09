@@ -5,6 +5,7 @@ import {
   appendTodayDueToStudySession,
   clearStaleTodayStudySession,
   isStudySessionComplete,
+  recoverStudySessionWords,
 } from "../app/hooks/useStudySession.ts";
 import type { StudySession } from "../lib/learning.ts";
 
@@ -53,4 +54,32 @@ test("跨自然日后清除旧今日会话，不影响其他来源", () => {
     )?.kind,
     "favorites",
   );
+});
+
+test("会话词条部分失效时保留有效顺序并按有效完成数夹取进度", () => {
+  const recovered = recoverStudySessionWords(
+    session({ wordIds: [1, 1_234_567, 2, 3], index: 2 }),
+    new Set([1, 2, 3]),
+  );
+
+  assert.equal(recovered.status, "partial");
+  assert.equal(recovered.removedCount, 1);
+  assert.deepEqual(recovered.session?.wordIds, [1, 2, 3]);
+  assert.equal(recovered.session?.index, 1);
+});
+
+test("会话词条全部失效时清除会话，正常会话保持原引用", () => {
+  const current = session({ wordIds: [1, 2], index: 1 });
+  const unchanged = recoverStudySessionWords(current, new Set([1, 2]));
+  const cleared = recoverStudySessionWords(
+    session({ wordIds: [1_234_567], index: 0 }),
+    new Set([1, 2]),
+  );
+
+  assert.equal(unchanged.status, "unchanged");
+  assert.equal(unchanged.session, current);
+  assert.deepEqual(cleared, {
+    removedCount: 1,
+    status: "cleared",
+  });
 });
