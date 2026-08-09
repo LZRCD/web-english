@@ -1361,3 +1361,20 @@
 - 本轮只修改 `docs/iterations/round-46.md`、`docs/iterations/next-round-prompt.md` 与本演进记录；未修改业务代码、测试、配置、schema/version/store/domain、评分、FSRS、备份、package scripts 或运行数据。
 - 未启动 3000、浏览器或 E2E，未重跑 lint/typecheck/build/npm test；第 45 轮 230/230 与 learning 17/17、signal-flow 18/18 仅保留为历史基线，不冒充本轮证据。
 - 下一轮返回长期总计划，进入阶段 E“自适应推荐可行性评估”只读设计；未经用户另行批准不修改推荐行为。若真实生产样本或产品阈值不足，明确维持固定优先级并转阶段 F 发布准备。
+
+## 第六十六次迭代：阶段 E 自适应推荐可行性只读评估
+
+本次迭代：2026-08-09。
+
+### 证据与门槛
+
+- 固定推荐仍是“听音拼写 -> 中译英 -> 释义辨析 -> 划词主动回忆 -> 顽固多模式 -> 通用冲刺”；三类 Quiz、lookup、stubborn 与 generic 已有真实未来 sessionId 写入路径，但 slow-recall/lapse 的通用入口仍写 generic，不能宣称各维度都已真实结构化归因。
+- 保持链继续以全局最近成功锚点、任意下一 sprint 截断、已观察分母、覆盖率、实际间隔和同词配对测时为准；分维报告先全局选唯一锚点再归维，unknown/generic 分列、活动跨维不可合计、所有结果保持非因果。
+- 生产历史位于浏览器 IndexedDB；本轮按只读 Prompt 未访问，用户也未提供备份导出。fixture/E2E seed 只证明算法与交互行为，不能证明现实样本量。
+- E2 门槛结论：覆盖透明、不改 FSRS、不伪造历史已满足；各维真实归因、规则回退、用户关闭未满足；足够随访与模式差异可解释当前不可证明。产品也没有批准样本量、覆盖率、随访区间或稳健性阈值。
+
+### 终局与后续
+
+- 唯一终局 B：阶段 E 停止在可行性报告，不生成权重、阈值、排名、模式胜负、规则草案或自适应实施 Prompt；固定优先级保持不变。
+- 本轮只修改 `round-47.md`、`adaptive-recommendation-readiness.md`、`next-round-prompt.md` 与本演进记录；未修改业务代码、测试、配置、UI、schema/version/store/domain、评分、FSRS、备份、package scripts 或运行数据。
+- 未启动服务、浏览器或 E2E，未重跑 lint/typecheck/build/npm test；第 45 轮数字仅为历史基线。下一轮进入阶段 F 发布准备只读审计，只建立发布缺口清单，不自动修改备份链路或 schema。
