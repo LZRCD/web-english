@@ -37,6 +37,14 @@ import {
   localDayStart,
   localWeekStart,
 } from "../lib/date-utils.ts";
+import {
+  buildWordTextIndex,
+  recordLookupStat,
+  rememberLookupResult,
+  resolveKnownLookupResult,
+  upsertLookupWord,
+  type LookupResult,
+} from "../lib/selection-lookup.ts";
 
 function createReview(
   input: Omit<Review, "id" | "kind" | "intervalMs"> & Partial<Pick<Review, "id" | "kind" | "intervalMs">>,
@@ -816,4 +824,209 @@ test("日期工具：localWeekStart 本地周一作为周起点", () => {
   const saturday = localWeekStart(new Date(2026, 7, 8, 8));
   assert.equal(saturday.getDay(), 1);
   assert.equal(saturday.getDate(), 3);
+})
+
+test("划词纯投影：红宝书 exact/folded 命中优先级与音标来源保持", () => {
+  const exactWord = {
+    id: 1,
+    word: "Abandon",
+    phonetic: "/əˈbændən/",
+    part: "v.",
+    meaning: "放弃",
+    section: "必考词",
+    unit: 2,
+  };
+  const foldedFirst = {
+    id: 2,
+    word: "abandon",
+    meaning: "遗弃",
+    section: "基础词",
+    unit: 1,
+  };
+  const foldedSecond = { ...foldedFirst, id: 3, meaning: "沉溺" };
+  const wordByText = buildWordTextIndex([
+    exactWord,
+    foldedFirst,
+    foldedSecond,
+  ]);
+
+  const exact = resolveKnownLookupResult({
+    query: "Abandon",
+    context: "",
+    wordByText,
+    lookupWords: [],
+    lookupCache: {},
+    phoneticIndex: {},
+  });
+  assert.deepEqual(exact, {
+    result: {
+      linkedWordId: 1,
+      query: "Abandon",
+      kind: "word",
+      phonetic: "/əˈbændən/",
+      phoneticSource: "redbook",
+      part: "v.",
+      meaning: "放弃",
+      note: "必考词 · Unit 2",
+      source: "redbook",
+    },
+    cached: false,
+    linkedPhonetic: { wordId: 1, phonetic: "/əˈbændən/" },
+  });
+
+  const folded = resolveKnownLookupResult({
+    query: "ABANDON",
+    context: "",
+    wordByText: buildWordTextIndex([foldedFirst, foldedSecond]),
+    lookupWords: [],
+    lookupCache: {},
+    phoneticIndex: { abandon: "əˈbændən" },
+  });
+  assert.equal(folded?.result.linkedWordId, 2);
+  assert.equal(folded?.result.meaning, "遗弃");
+  assert.equal(folded?.result.phonetic, "əˈbændən");
+  assert.equal(folded?.result.phoneticSource, "dictionary");
+})
+
+test("划词纯投影：已保存结果优先于 query/context 缓存且保留 AI 音标语义", () => {
+  const saved = {
+    id: -10,
+    query: "careful elucidator",
+    kind: "phrase" as const,
+    phonetic: "old",
+    part: "短语",
+    meaning: "谨慎的阐释者",
+    note: "saved",
+    source: "ai" as const,
+    addedAt: "2026-08-01T00:00:00.000Z",
+  };
+  const cached: LookupResult = {
+    query: saved.query,
+    kind: saved.kind,
+    phonetic: "cached",
+    part: saved.part,
+    meaning: "缓存结果",
+    note: "cache",
+    source: "ai",
+  };
+  const lookupCache = rememberLookupResult(
+    {},
+    saved.query,
+    "Example Context",
+    cached,
+  );
+  const resolved = resolveKnownLookupResult({
+    query: saved.query,
+    context: "Example Context",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [saved],
+    lookupCache,
+    phoneticIndex: { "careful elucidator": "new" },
+  });
+  assert.equal(resolved?.cached, true);
+  assert.equal(resolved?.result.meaning, saved.meaning);
+  assert.equal(resolved?.result.phonetic, "new");
+  assert.equal(resolved?.result.phoneticSource, "dictionary");
+
+  const cacheOnly = resolveKnownLookupResult({
+    query: saved.query,
+    context: "EXAMPLE CONTEXT",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [],
+    lookupCache,
+    phoneticIndex: {},
+  });
+  assert.deepEqual(cacheOnly, { result: cached, cached: true });
+})
+
+test("划词纯投影：保存去重保留身份与时间，新词冲突继续分配不同 id", () => {
+  const first: LookupResult = {
+    linkedWordId: 1,
+    query: "radiate",
+    kind: "word",
+    phonetic: "",
+    part: "v.",
+    meaning: "散发",
+    note: "first",
+    source: "redbook",
+  };
+  const existing = upsertLookupWord([], first, "2026-08-01T00:00:00.000Z");
+  const updated = upsertLookupWord(
+    [{
+      id: -99,
+      query: "other",
+      kind: "word",
+      phonetic: "",
+      part: "n.",
+      meaning: "其他",
+      note: "other",
+      source: "dictionary",
+      addedAt: "2026-08-02T00:00:00.000Z",
+    }, ...existing],
+    { ...first, meaning: "发出", note: "updated" },
+    "2026-08-03T00:00:00.000Z",
+  );
+  assert.equal(updated[0].id, existing[0].id);
+  assert.equal(updated[0].addedAt, existing[0].addedAt);
+  assert.equal(updated[0].meaning, "发出");
+  assert.equal(updated[1].query, "other");
+
+  const collisionId = lookupWordId("collision-a");
+  const inserted = upsertLookupWord(
+    [{
+      id: collisionId,
+      query: "collision-b",
+      kind: "word",
+      phonetic: "",
+      part: "n.",
+      meaning: "冲突",
+      note: "",
+      source: "dictionary",
+      addedAt: "2026-08-01T00:00:00.000Z",
+    }],
+    { ...first, linkedWordId: undefined, query: "collision-a" },
+    "2026-08-03T00:00:00.000Z",
+  );
+  assert.notEqual(inserted[0].id, collisionId);
+})
+
+test("划词纯投影：统计保留 firstAt，缓存按既有插入顺序裁剪到 120 项", () => {
+  const first = recordLookupStat({}, "  Radiate  ", "2026-08-01T00:00:00.000Z");
+  const second = recordLookupStat(first, "RADIATE", "2026-08-02T00:00:00.000Z");
+  assert.deepEqual(second.radiate, {
+    count: 2,
+    firstAt: "2026-08-01T00:00:00.000Z",
+    lastAt: "2026-08-02T00:00:00.000Z",
+  });
+  assert.equal(recordLookupStat(second, "   ", "later"), second);
+
+  let cache: Record<string, LookupResult> = {};
+  for (let index = 0; index < 121; index += 1) {
+    cache = rememberLookupResult(cache, `word-${index}`, "Context", {
+      query: `word-${index}`,
+      kind: "word",
+      phonetic: "",
+      part: "n.",
+      meaning: String(index),
+      note: "",
+      source: "ai",
+    });
+  }
+  assert.equal(Object.keys(cache).length, 120);
+  assert.equal(resolveKnownLookupResult({
+    query: "WORD-120",
+    context: "CONTEXT",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [],
+    lookupCache: cache,
+    phoneticIndex: {},
+  })?.result.meaning, "120");
+  assert.equal(resolveKnownLookupResult({
+    query: "word-0",
+    context: "Context",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [],
+    lookupCache: cache,
+    phoneticIndex: {},
+  }), null);
 })

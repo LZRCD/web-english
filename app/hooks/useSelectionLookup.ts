@@ -11,15 +11,16 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  allocateLookupWordId,
   buildWordTextIndex,
-  lookupIdentity,
+  recordLookupStat,
+  rememberLookupResult,
+  resolveKnownLookupResult,
+  upsertLookupWord,
   type LookupResult,
   type SelectionLookupState,
   type WordTextIndex,
 } from "../../lib/selection-lookup";
 import {
-  splitMeaning,
   type LookupStats,
   type LookupWord,
   type Word,
@@ -110,31 +111,6 @@ function writeLookupCache(cache: Record<string, LookupResult>) {
   } catch {}
 }
 
-/** 由红宝书词条构建划词结果；phonetic 可来自词典音标索引 */
-function redbookLookupResult(
-  localWord: Word,
-  phonetic: string,
-): LookupResult {
-  const parsed = splitMeaning(localWord.meaning);
-  return {
-    linkedWordId: localWord.id,
-    query: localWord.word,
-    kind: localWord.word.includes(" ") ? "phrase" : "word",
-    phonetic,
-    phoneticSource: localWord.phonetic
-      ? "redbook"
-      : phonetic
-        ? "dictionary"
-        : undefined,
-    part: localWord.part ?? parsed.part,
-    meaning: parsed.meaning,
-    note: `${localWord.section ?? "红宝书"}${
-      localWord.unit ? ` · Unit ${localWord.unit}` : ""
-    }`,
-    source: "redbook",
-  };
-}
-
 export function useSelectionLookup(
   options: UseSelectionLookupOptions,
 ): UseSelectionLookupResult {
@@ -207,17 +183,7 @@ export function useSelectionLookup(
     const key = query.trim().toLowerCase();
     if (!key) return;
     const now = new Date().toISOString();
-    setLookupStats((items) => {
-      const previous = items[key];
-      return {
-        ...items,
-        [key]: {
-          count: (previous?.count ?? 0) + 1,
-          firstAt: previous?.firstAt ?? now,
-          lastAt: now,
-        },
-      };
-    });
+    setLookupStats((items) => recordLookupStat(items, query, now));
   }, [setLookupStats]);
 
   const closeSelectionLookup = useCallback(() => {
@@ -226,20 +192,7 @@ export function useSelectionLookup(
   }, []);
 
   const saveLookupWord = useCallback((result: LookupResult) => {
-    setLookupWords((items) => {
-      const identity = lookupIdentity(result);
-      const existing = items.find(
-        (item) => lookupIdentity(item) === identity,
-      );
-      return [
-        {
-          ...result,
-          id: existing?.id ?? allocateLookupWordId(result.query, items),
-          addedAt: existing?.addedAt ?? new Date().toISOString(),
-        },
-        ...items.filter((item) => lookupIdentity(item) !== identity),
-      ];
-    });
+    setLookupWords((items) => upsertLookupWord(items, result));
   }, [setLookupWords]);
 
   const loadDictionaryPrefix = useCallback(async (
@@ -357,55 +310,22 @@ export function useSelectionLookup(
     query: string,
     context: string,
   ): { result: LookupResult; cached: boolean } | null => {
-    const normalizedQuery = query.toLowerCase();
-    const localWord = wordByText.exact.get(query.trim())
-      ?? wordByText.folded.get(normalizedQuery)?.[0];
-    if (localWord) {
-      const phonetic = localWord.phonetic
-        || phoneticIndexRef.current[normalizedQuery]
-        || "";
-      if (localWord.id !== undefined && phonetic) {
-        setDictionaryPhonetics((items) => ({
-          ...items,
-          [localWord.id!]: phonetic,
-        }));
-      }
-      return {
-        result: redbookLookupResult(localWord, phonetic),
-        cached: false,
-      };
+    const resolved = resolveKnownLookupResult({
+      query,
+      context,
+      wordByText,
+      lookupWords,
+      lookupCache: lookupCacheRef.current,
+      phoneticIndex: phoneticIndexRef.current,
+    });
+    if (resolved?.linkedPhonetic) {
+      const { wordId, phonetic } = resolved.linkedPhonetic;
+      setDictionaryPhonetics((items) => ({
+        ...items,
+        [wordId]: phonetic,
+      }));
     }
-
-    const savedLookup = lookupWords.find(
-      (item) => item.query.toLowerCase() === normalizedQuery,
-    );
-    if (savedLookup) {
-      const phonetic = savedLookup.source === "ai"
-        ? phoneticIndexRef.current[normalizedQuery] || savedLookup.phonetic
-        : savedLookup.phonetic;
-      return {
-        result: {
-          query: savedLookup.query,
-          kind: savedLookup.kind,
-          phonetic,
-          phoneticSource: savedLookup.source === "ai"
-            ? (phonetic ? "dictionary" : undefined)
-            : savedLookup.phoneticSource,
-          part: savedLookup.part,
-          meaning: savedLookup.meaning,
-          note: savedLookup.note,
-          source: savedLookup.source,
-        },
-        cached: true,
-      };
-    }
-
-    const cacheKey = JSON.stringify([normalizedQuery, context.toLowerCase()]);
-    const cached = lookupCacheRef.current[cacheKey];
-    if (cached) {
-      return { result: cached, cached: true };
-    }
-    return null;
+    return resolved;
   }, [
     lookupWords,
     setDictionaryPhonetics,
@@ -642,11 +562,12 @@ export function useSelectionLookup(
           selectionLookup.result?.phoneticSource
           || (dictionaryPhonetic ? "dictionary" : undefined),
       };
-      const entries = Object.entries({
-        ...lookupCacheRef.current,
-        [JSON.stringify([normalizedQuery, context.toLowerCase()])]: trustedResult,
-      }).slice(-120);
-      lookupCacheRef.current = Object.fromEntries(entries);
+      lookupCacheRef.current = rememberLookupResult(
+        lookupCacheRef.current,
+        query,
+        context,
+        trustedResult,
+      );
       writeLookupCache(lookupCacheRef.current);
       saveLookupWord(trustedResult);
       recordLookup(query);
