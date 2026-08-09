@@ -1463,3 +1463,19 @@
 - 第 50 轮批准的 typecheck、lint、production build、Node 235/235、production smoke 与 7 项精选 E2E 证据链已闭环，阶段 F 的最小发布护栏验证可以条件收尾。
 - 该结论不等于全部发布就绪；activeSession 孤儿 ID、非法记录行级隔离、重复 attempt ID、activeQuiz 非法时间、清空语义、备份容量和真实长历史性能仍保持中风险或当前不可证明。
 - 后续不机械开新轮；若用户继续，只从剩余中风险中选择一个独立目标另行授权。
+
+## 第一阶段残余契约清理批次（第 53～55 轮）
+
+本批次：2026-08-09。
+
+### 已完成事实
+
+- 第 53 轮把 `tests/rendered-html.test.mjs` 最后一个测试原有的 37 条源码结构断言逐条归入行为已覆盖、待补行为覆盖、静态供应链或纯实现外观四类，没有修改产品或测试。
+- 第 54 轮删除 `AbortSignal.timeout` 实现文本断言及其唯一 Provider 源码读取槽位；第 55 轮删除 `function undoLastRating` 函数名断言并保留全部源码读取槽位。两轮都没有修改生产代码、行为测试或相邻结构断言。
+- 第 55 轮重新验证 rendered-html 9/9、撤销 E2E 2/2、typecheck、lint（0 error / 1 个既有 warning）及含 production build 的 Node 235/235；生成的 build-info 已恢复，固定 3000 项目进程已精确清理。
+
+### 批次停止与证据边界
+
+- 已达到授权的 3 Round 上限，批次 STOP 并等待新授权；不生成自动继续授权。
+- 尚余 35 条：分类 1 为 12 条、分类 2 为 14 条、分类 3 为 1 条、分类 4 为 8 条。分类 2 必须先补最窄行为覆盖，分类 3 的运行时供应链接线应保留，因此不能宣称全部结构测试已经清理。
+- 本批次只收敛测试契约与文档，没有改变撤销、持久化、Quiz、Sprint、Review/FSRS、Provider、schema/version/store/domain 或用户数据。

@@ -1,73 +1,54 @@
-# 第 55 轮待授权 Prompt：删除已有撤销行为覆盖的函数名断言
+# 第一阶段残余契约清理批次 STOP：等待新授权
 
 ## 当前真实现场
 
-- 分支应为 `codex/follow-up-hardening`。
-- 起始 HEAD 应为第 54 轮“删除超时实现源码结构断言”的唯一中文提交；启动时读取并登记完整 hash，不猜测自引用提交。
-- 第 54 轮仅删除 `tests/rendered-html.test.mjs` 中 `AbortSignal.timeout` 源码正则及其唯一 `aiProvider` 读取槽位；其余 36 条结构断言未改。
-- 当前唯一目标对应 `docs/iterations/structure-test-contract-audit.md` 矩阵第 17 条：`tests/e2e/learning.spec.mjs:168-226` 已直接覆盖评分后撤销、持久化回退及刷新后撤销，具体函数名不是产品契约。
-- 第 54 轮的定向 21/21、typecheck、lint 0 error / 1 warning、production build 与 Node 235/235 仅作历史背景，不能替代下一轮运行。
+- 本批次已严格串行完成第 53、54、55 共 **3 个 Round**，达到批次上限，必须停止；本文件不构成自动继续授权。
+- 分支应为 `codex/follow-up-hardening`；下一次启动必须读取并登记第 55 轮实际完整提交 hash，不在本轮文档中猜测自引用提交。
+- 第 53 轮完成 `tests/rendered-html.test.mjs` 最后一个测试原 37 条结构断言的逐条分类矩阵。
+- 第 54 轮已删除 `AbortSignal.timeout` 源码断言及只为它存在的 Provider 源码读取槽位。
+- 第 55 轮已删除 `function undoLastRating` 函数名断言，保留全部源码读取槽位与其他 35 条结构断言；撤销 E2E 2/2 重新运行通过。
+- 第 55 轮的 rendered-html 9/9、撤销 E2E 2/2、typecheck、lint 0 error / 1 warning、production build 与 Node 235/235 是本轮证据；未来恢复时不能替代新 checkout 的验证。
 
-## 授权门禁
+## STOP 原因与剩余矩阵
 
-这是下一轮候选 Prompt，不是自动执行指令。用户或批次总控未明确授权第 55 轮时，保持等待，不修改文件、不暂存、不提交、不启动服务。
+本批次已经完成授权上限 3 Round，因此当前状态为 **STOP / WAIT_AUTH**。剩余 35 条结构断言按原矩阵分类的当前未清理数为：
 
-授权后先独立核对：
+| 分类 | 当前未清理数 | 恢复规则 |
+|---:|---:|---|
+| 1：已有可靠行为覆盖 | 12 | 新授权后仍需逐条复核当前行为证据，再一次只删一条。 |
+| 2：缺少稳定行为覆盖 | 14 | 必须先补一个最窄行为测试，再删除对应结构断言。 |
+| 3：静态供应链契约 | 1 | 保留 `redbook-analysis.json` 运行时接线静态检查。 |
+| 4：仅内部实现或源码外观 | 8 | 可逐条删除，但不得整块弱化或建立等价脆弱断言。 |
+| 5：需要业务决策 | 0 | 当前无此类项；若现场变化产生冲突则 STOP。 |
 
-1. branch、完整 HEAD、`git status --short --branch`、tracked diff 与 index；
-2. `docs/iterations/round-55.md` 不存在；
-3. 矩阵第 17 条仍为分类 1，`learning.spec.mjs:168-226` 的撤销、持久化回退和刷新后撤销断言仍存在；
-4. `1.txt`、`.zcode/`、架构文档、Typora 日志和历史 `.codex-*.log` 未漂移；
-5. `lib/build-info.generated.ts` 无修改，固定端口 `3000` 无监听。
+这里的 35 条不是自动执行清单，也不表示都应删除。分类 2 仍有行为覆盖缺口，分类 3 应保留，其他项目也必须以恢复时的当前源码、测试和 Git 证据重新判定。
 
-任一不符立即 STOP，保留现场。
+## 建议恢复入口（非自动执行）
 
-## 唯一目标与完成定义
+只有用户发出新的明确授权后，才从 `WAIT_AUTH` 进入 Round 0：
 
-仅删除 `tests/rendered-html.test.mjs` 最后一个测试中的：
+1. 完整读取 `AGENTS.md`、`docs/iterations/AUTOMATION-SOP.md`、本文件和 `docs/iterations/structure-test-contract-audit.md`；
+2. 核对 branch、实际完整 HEAD、`git status --short --branch`、tracked diff、index、保护项、`lib/build-info.generated.ts` 与固定端口 `3000`；
+3. 以已跟踪的最大 Round 编号加 1，确认目标 Round 文档不存在；
+4. 重新核对候选对应的当前行为证据，且一个 Round 只处理一个契约；
+5. 风险匹配验证、恢复生成文件、精确暂存、PreCommit、一个中文提交，不 push。
 
-```js
-assert.match(page, /function undoLastRating/);
-```
+若新授权希望继续候选 A，矩阵第 21 条 `buildExamPlan` 可作为**建议**：现有纯函数测试直接覆盖阶段、重点分册、剩余词数与预计工作量，而调用名本身不是产品契约。总控仍需先确认它是恢复时最高价值目标；不得由本文件自动执行，也不得同时清理其他断言。
 
-不删除任何源码读取槽位，不修改其他 35 条结构断言，不修改撤销实现或产品行为。
+## 保持不变的边界
 
-完成定义：rendered-html 不再锁定撤销函数名；既有撤销 E2E 行为保持原样并通过；风险匹配验证通过；一个中文提交，不 push。
-
-## 允许范围
-
-- `tests/rendered-html.test.mjs`
-- `docs/iterations/round-55.md`
-- `docs/iterations/structure-test-contract-audit.md`（仅把第 17 条标为已删除，不改其他分类）
-- 仅在确定后续 `CONTINUE/STOP` 时更新 `docs/iterations/next-round-prompt.md`
-- 只有批次阶段事实变化时才更新 `docs/project-evolution.md`
-
-## 禁止范围
-
-- 其余 35 条结构断言；不得整块删除、批量弱化或添加 skip/ignore。
-- 生产代码、撤销语义、config、package scripts、schema/version/store/domain、用户数据和 `lib/build-info.generated.ts`。
-- Quiz、Sprint、Review/FSRS、复发、猜错、恢复、持久化格式与 Provider 语义。
-- 为通过测试降低门槛、改变 E2E 断言或复制第二套撤销实现。
-
-## 验证与提交
-
-1. 定向运行 `rendered-html` 对应 Node 入口；
-2. 按固定端口 `3000` 规则运行 `learning.spec.mjs` 中评分后撤销、持久化回退及刷新后撤销的唯一目标 E2E；
-3. `npm run typecheck`；
-4. `npm run lint`；
-5. `npm test`（当前脚本含 production build）；
-6. 若 build/dev 改写 `lib/build-info.generated.ts`，在最终暂存前恢复；
-7. `git diff --check`，记录实际修改文件并逐个精确暂存；
-8. 运行 `check-iteration-gate.ps1 -Phase PreCommit -AllowedPath $roundFiles`，确认 unstaged tracked 为空、cached 文件集合精确相等、cached diff check 通过；
-9. 返回 `READY_FOR_CONTROLLER_REVIEW`，获批后由同一执行者创建一个中文提交；不 push。
-
-服务启动前必须核对固定端口 `3000` 与 PID；只清理确认属于本项目的进程，不得切换端口或批量结束 node。
+- 不修改生产代码、E2E 断言、撤销语义、config、package scripts、schema/version/store/domain 或用户数据。
+- 不改变 Quiz、Sprint、Review/FSRS、复发、猜错、恢复、持久化格式或 Provider 语义。
+- 不整块删除、批量弱化、skip/ignore 或降低门槛；分类 2 不得先删后补。
+- `1.txt` 只读；`.zcode/`、架构文档、Typora/历史日志及本轮服务日志保持未跟踪、不暂存。
+- 固定端口只用 `3000`，只清理确认属于本项目的 PID；不得换端口或批量结束 Node。
+- 留在当前分支，不 push/merge/rebase/stash/reset；只精确暂存和提交授权文件。
 
 ## STOP 条件
 
-- 撤销 E2E 不再直接覆盖评分回退、持久化或刷新后撤销；
-- 必须修改生产代码、E2E 断言或其他结构断言才能通过；
-- 工作区/index/保护项漂移，或端口 `3000` 被非项目进程占用；
-- 连续两次浏览器服务验证失败、需要业务决策或扩大范围。
+- 未获得新授权；目标已完成、证据冲突或需要业务决策；
+- 需要修改生产代码、E2E 断言或相邻结构断言才能通过；
+- 工作区/index/保护项漂移，目标 Round 文档已存在，或 3000 被非项目进程占用；
+- 连续两次浏览器服务验证失败、需要降低门槛或扩大范围。
 
-停止时报告已完成、未完成、Git 状态和准确恢复入口。
+停止时必须报告已完成、未完成、Git/服务状态和准确恢复入口。

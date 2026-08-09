@@ -282,7 +282,6 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(historyView, /selectedActivityDate/);
   assert.match(historyView, /回到今天/);
   assert.match(study, /STORAGE_VERSION = 5/);
-  assert.match(page, /function undoLastRating/);
   assert.match(page, /function startTodaySession/);
   assert.match(page, /function startFavoriteSession/);
   assert.match(page, /function startMistakeSession/);
