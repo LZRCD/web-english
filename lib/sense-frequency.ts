@@ -3,6 +3,7 @@ import type { SenseFrequencyEntry } from "./learning.ts";
 /**
  * 严格校验模型返回的义项考频：每个目标义项恰好一个条目，
  * meaning 与请求逐字一致，level 在合法范围内。
+ * 兼容两种模型返回结构：顶层数组 [...]，或 json_object 模式下的 { senses: [...] }。
  */
 export function normalizeSenseFrequency(
   value: unknown,
@@ -11,10 +12,13 @@ export function normalizeSenseFrequency(
   const senses = [...new Set(
     requestedSenses.map((sense) => sense.trim()).filter(Boolean),
   )];
-  if (!senses.length || !Array.isArray(value)) {
+  const items = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>).senses
+    : value;
+  if (!senses.length || !Array.isArray(items)) {
     throw new Error("模型未按义项返回考频");
   }
-  const entries = value.map((item) => {
+  const entries = items.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new Error("模型返回的考频格式无效");
     }
