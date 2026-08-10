@@ -100,9 +100,12 @@ function inflections(token: string) {
 export function buildSentenceIndex({
   redbookWords,
   enrichments,
+  lookupWords,
 }: {
   redbookWords: Word[];
   enrichments: Record<number, WordEnrichment>;
+  /** 划词学习词（id 为 9e9+），其例句来源词按查询词形解析 */
+  lookupWords?: LookupWord[];
 }): SentenceIndex {
   const index: SentenceIndex = new Map();
   const exact = new Map<string, Word>();
@@ -160,9 +163,18 @@ export function buildSentenceIndex({
   for (const word of redbookWords) {
     if (word.id !== undefined) wordById.set(word.id, word);
   }
+  // 划词词条 id → 查询词形，用于解析其内容补充例句的来源词
+  const lookupWordById = new Map<number, LookupWord>();
+  for (const lookupWord of lookupWords ?? []) {
+    if (lookupWord.id !== undefined && !lookupWordById.has(lookupWord.id)) {
+      lookupWordById.set(lookupWord.id, lookupWord);
+    }
+  }
   for (const [wordId, enrichment] of Object.entries(enrichments)) {
     const id = Number(wordId);
-    const sourceWord = wordById.get(id)?.word ?? "词 " + id;
+    const sourceWord = wordById.get(id)?.word
+      ?? lookupWordById.get(id)?.query
+      ?? "词 " + id;
     for (const example of enrichment.senseExamples ?? []) {
       // 语义二审确认不符的例句不进入反向索引，避免劣质例句传播复用
       if (example.review?.status === "failed") continue;
@@ -213,6 +225,9 @@ export function reusedSentencesFor(
   const seen = new Map<string, ReusedSentence>();
   for (const candidate of inflections(lower)) {
     for (const entry of index.get(candidate) ?? []) {
+      // 排除来源词自身的例句：查询侧按词族展开（feeling→feel）时，
+      // 来源词的例句可能被同族词形索引到，这里一律不回填自身
+      if (entry.sourceWord.trim().toLowerCase() === lower) continue;
       const key = (entry.sourceId ?? entry.sourceWord) + ":" + entry.sentence;
       if (!seen.has(key)) seen.set(key, entry);
     }

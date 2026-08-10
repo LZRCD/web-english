@@ -741,8 +741,8 @@ export default function Home() {
   }, [redbookWords, selectedSection]);
   // 跨词例句复用索引：从已缓存释义例句反向匹配包含当前词的句子
   const sentenceIndex = useMemo(
-    () => buildSentenceIndex({ redbookWords, enrichments }),
-    [enrichments, redbookWords],
+    () => buildSentenceIndex({ redbookWords, enrichments, lookupWords }),
+    [enrichments, lookupWords, redbookWords],
   );
   const currentReusedSentences: ReusedSentence[] = useMemo(
     () => reusedSentencesFor(sentenceIndex, current.word, {

@@ -257,6 +257,101 @@ test("例句反向索引：来源词薄弱度优先于查询次数加权", () =>
   assert.equal(ranked[1].sourceWord, "reflect");
 });
 
+test("例句反向索引：来源词同族词形不回填自身（feeling 例句含 feel，不进入 feeling 的「已见例句」）", () => {
+  const index = buildSentenceIndex({
+    redbookWords: [
+      { id: 1, word: "feeling", meaning: "n. 感觉" },
+      { id: 2, word: "feel", meaning: "v. 感觉" },
+      { id: 3, word: "air", meaning: "n. 空气" },
+    ],
+    enrichments: {
+      1: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "n. 感觉",
+          sentence: "I could feel a strange feeling in the air.",
+          translation: "我能在空气中感到一种奇怪的感觉。",
+          confidence: 0.9,
+        }],
+      },
+    },
+  });
+  // 例句含同族词形 feel（查询侧 feeling → feel 展开会命中），但来源词是 feeling 自身 → 不出现在 feeling 的「已见例句」
+  assert.equal(reusedSentencesFor(index, "feeling").length, 0);
+  // 例句仍可供其他词复用（air 可见「来自 feeling 的例句」）
+  const forAir = reusedSentencesFor(index, "air");
+  assert.equal(forAir.length, 1);
+  assert.equal(forAir[0].sourceWord, "feeling");
+  // 同族词形 feel 是独立词条，仍可见该例句（跨词复用）
+  const forFeel = reusedSentencesFor(index, "feel");
+  assert.equal(forFeel.length, 1);
+  assert.equal(forFeel[0].sourceWord, "feeling");
+});
+
+test("例句反向索引：同族词形双向均不回填自身（feel 例句含 feeling，不进入 feel 的「已见例句」）", () => {
+  const index = buildSentenceIndex({
+    redbookWords: [
+      { id: 1, word: "feeling", meaning: "n. 感觉" },
+      { id: 2, word: "feel", meaning: "v. 感觉" },
+    ],
+    enrichments: {
+      2: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 感觉",
+          sentence: "I feel a strange feeling in the air.",
+          translation: "我感觉到空气中有种奇怪的感觉。",
+          confidence: 0.9,
+        }],
+      },
+    },
+  });
+  // feel 的例句含 feeling（同族词形），但来源词是 feel 自身 → 不出现在 feel 的「已见例句」
+  assert.equal(reusedSentencesFor(index, "feel").length, 0);
+  // 独立词条 feeling 可见该例句（跨词复用）
+  const forFeeling = reusedSentencesFor(index, "feeling");
+  assert.equal(forFeeling.length, 1);
+  assert.equal(forFeeling[0].sourceWord, "feel");
+});
+
+test("例句反向索引：划词词条的例句来源解析为查询词形，不回填红宝书同名词", () => {
+  const index = buildSentenceIndex({
+    redbookWords: [
+      { id: 1, word: "harbor", meaning: "v. 窝藏" },
+      { id: 2, word: "fugitive", meaning: "n. 逃犯" },
+    ],
+    enrichments: {
+      9_000_000_001: {
+        source: "ai",
+        senseExamples: [{
+          meaning: "v. 窝藏",
+          sentence: "The police arrested the man who had harbored the fugitive for weeks.",
+          translation: "警方逮捕了窝藏逃犯数周的男子。",
+          confidence: 0.96,
+        }],
+      },
+    },
+    lookupWords: [{
+      id: 9_000_000_001,
+      linkedWordId: 1,
+      query: "harbor",
+      kind: "word",
+      phonetic: "",
+      part: "v.",
+      meaning: "窝藏",
+      note: "",
+      source: "redbook",
+      addedAt: "2026-08-01T00:00:00.000Z",
+    }],
+  });
+  // 来源词解析为「harbor」而非「词 9000000001」：例句不出现在 harbor 的「已见例句」
+  assert.equal(reusedSentencesFor(index, "harbor").length, 0);
+  // 例句仍可供其他词复用，且来源标注为真实词形
+  const forFugitive = reusedSentencesFor(index, "fugitive");
+  assert.equal(forFugitive.length, 1);
+  assert.equal(forFugitive[0].sourceWord, "harbor");
+});
+
 test("例句反向索引：语义二审 failed 的例句不参与复用，passed 例句正常收录", () => {
   const reviewedEnrichments: Record<number, WordEnrichment> = {
     1: {
