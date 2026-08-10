@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { SenseExample, SenseFrequencyEntry, SenseFrequencyMap, WordEnrichment } from "../../lib/learning";
 import type { Word } from "../../lib/study";
-import { buildLocalCoach } from "../../lib/word-utils";
+import { buildLocalCoach, splitWordSenses } from "../../lib/word-utils";
 
 type UseAiCoachOptions = {
   current: Word;
@@ -187,13 +187,7 @@ export function useAiCoach({
   async function generateSenseFrequency() {
     const word = currentRef.current;
     if (word.id === undefined || frequencyLoading) return;
-    const items = currentRef.current.meaning
-      ? currentRef.current.meaning
-          .split(/[;；]/)
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .slice(0, 8)
-      : [];
+    const items = splitWordSenses(word).slice(0, 8);
     if (items.length < 2) {
       onNotify("这个词只有一个义项，无需考频提示", 1800);
       return;

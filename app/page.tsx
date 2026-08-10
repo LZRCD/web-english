@@ -121,7 +121,7 @@ import {
   clozeSentence,
   formatRecallTime,
   shuffleWithSeed,
-  splitSenseItems,
+  splitWordSenses,
 } from "../lib/word-utils";
 import {
   buildSentenceIndex,
@@ -760,9 +760,7 @@ export default function Home() {
   const currentFamiliarMeanings = new Set(
     current.id === undefined ? [] : familiarMeanings[current.id] ?? [],
   );
-  const currentMeaningItems = [
-    ...new Set(currentSenses.flatMap((sense) => splitSenseItems(sense.meaning))),
-  ];
+  const currentMeaningItems = splitWordSenses(current);
   const unfamiliarMeanings = currentMeaningItems.filter(
     (meaning) => !currentFamiliarMeanings.has(meaning),
   );

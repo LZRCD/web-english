@@ -502,8 +502,8 @@ export default function WordCard({
                     const frequency = currentSenseFrequency?.find(
                       (entry) => entry.meaning === meaning,
                     );
-                    // 全局第一个义项视为红宝书核心义
-                    const isCore = currentSenseItems[0] === meaning;
+                    // 核心义以 AI 考频为据：仅真题高频常考义（high）才标注，无考频时不显示
+                    const isCore = frequency?.level === "high";
                     return (
                       <button
                         type="button"
@@ -524,7 +524,7 @@ export default function WordCard({
                             {frequencyLabel(frequency.level)}
                           </small>
                         )}
-                        {!frequency && isCore && (
+                        {isCore && (
                           <small className="sense-core">核心义</small>
                         )}
                         {familiar && <small>✓ 熟练</small>}

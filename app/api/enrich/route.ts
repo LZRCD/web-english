@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { splitWordSenses } from "../../../lib/word-utils";
 import { normalizeSenseExamples } from "../../../lib/enrichment";
 import {
   ApiRequestError,
@@ -73,7 +74,7 @@ async function handlePost(request: NextRequest) {
         .slice(0, 6)
     : [];
   if (!senses.length && meaning) {
-    senses.push(...meaning.split(/[;；]/).map((item) => item.trim()).filter(Boolean).slice(0, 6));
+    senses.push(...splitWordSenses({ meaning }).slice(0, 6));
   }
   const effectiveMeaning = senses.join("；") || meaning || "";
   if (!word || !effectiveMeaning) {

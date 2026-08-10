@@ -1,4 +1,4 @@
-import type { Word } from "./study.ts";
+import { splitMeaning, type Word } from "./study.ts";
 
 /** 清洗选中文本，去首尾标点和多余空格 */
 export function cleanSelectedText(value: string) {
@@ -27,6 +27,15 @@ export function splitSenseItems(value: string) {
   }
   if (current.trim()) items.push(current.trim());
   return items;
+}
+
+/** 拆分单词的展示义项：按词性分段后再按逗号/分号拆分并去重，与卡片展示一致 */
+export function splitWordSenses(word: Pick<Word, "meaning" | "part">): string[] {
+  const parsed = splitMeaning(word.meaning);
+  const senses = word.part
+    ? [{ part: word.part, meaning: parsed.meaning }]
+    : parsed.senses;
+  return [...new Set(senses.flatMap((sense) => splitSenseItems(sense.meaning)))];
 }
 
 /** 遮掩单词中间字母为 ·，用于强化拼写提示 */

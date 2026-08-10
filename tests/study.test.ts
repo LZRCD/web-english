@@ -26,6 +26,7 @@ import {
   type WordProgress,
   examProgressTiers,
 } from "../lib/learning.ts";
+import { splitWordSenses } from "../lib/word-utils.ts";
 import {
   createBackupDocument,
   parseBackupDocument,
@@ -963,6 +964,22 @@ test("释义中的词性只展示一次", () => {
       { part: "prep.", meaning: "穿过,从一边到另一边;在 对面；遍及" },
     ],
   });
+});
+
+test("展示义项与考频标注口径一致：逗号分隔的多义项不被合并", () => {
+  // 红宝书原句：vi. vt. (使) 蒸发,(使) 挥发 vi. 逐渐消失 —— 无分号，需拆出三个义项
+  assert.deepEqual(
+    splitWordSenses({ meaning: "vi. vt. (使) 蒸发,(使) 挥发 vi. 逐渐消失" }),
+    ["(使) 蒸发", "(使) 挥发", "逐渐消失"],
+  );
+  assert.deepEqual(
+    splitWordSenses({ meaning: "n. 地址；演讲", part: "n." }),
+    ["地址", "演讲"],
+  );
+  assert.deepEqual(
+    splitWordSenses({ meaning: "v. 放弃;抛弃" }),
+    ["放弃", "抛弃"],
+  );
 });
 
 test("考研进度三层口径：看过不等于考试日就绪", () => {
