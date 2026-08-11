@@ -23,10 +23,31 @@ import {
   localWeekStart,
 } from "./date-utils.ts";
 
-export type LearningInsightReview = Pick<
+export type TrueRetentionReview = Pick<
   ReviewEvent,
-  "reviewedAt" | "rating" | "recallMs" | "wordId" | "word" | "section" | "unit"
+  "id" | "reviewedAt" | "rating" | "kind" | "intervalMs" | "wordId" | "word" | "section" | "unit"
 >;
+
+export type LearningInsightReview = TrueRetentionReview & Pick<
+  ReviewEvent,
+  "recallMs"
+>;
+
+export type TrueRetentionBucket = {
+  reviewCount: number;
+  retainedCount: number;
+  rate: number | null;
+};
+
+export type TrueRetentionSummary = {
+  overall: TrueRetentionBucket;
+  young: TrueRetentionBucket;
+  mature: TrueRetentionBucket;
+  /** 缺少同词上一条评分间隔、无法诚实分桶的复习次数。 */
+  unclassifiedCount: number;
+};
+
+export const TRUE_RETENTION_MATURE_INTERVAL_MS = 21 * 24 * 60 * 60 * 1000;
 
 export type LearningInsights = {
   activeDays: number;
@@ -34,8 +55,10 @@ export type LearningInsights = {
   uniqueWordCount: number;
   /** 当前窗口评分达标事件占比，范围为 0–100；无评分事件时为 null。 */
   successRate: number | null;
-  /** 相比上一窗口的评分达标占比百分点差；任一窗口无评分时为 null。 */
+  /** 相比上一窗口的当场达标占比百分点差；任一窗口无评分时为 null。 */
   successRateDelta: number | null;
+  /** 仅统计 kind=review；忘记（FSRS Again）失败，其余评分保持。 */
+  trueRetention: TrueRetentionSummary;
   /** 合法回忆耗时的平均毫秒数；没有样本时为 null。 */
   averageRecallMs: number | null;
 };
@@ -95,13 +118,106 @@ function successRate(reviews: readonly TimedReview[]) {
   return (successes / reviews.length) * 100;
 }
 
-function reviewWordKey(review: LearningInsightReview) {
+function reviewWordKey(review: TrueRetentionReview) {
   if (Number.isSafeInteger(review.wordId)) return `id:${review.wordId}`;
   return [
     review.section ?? "",
     review.unit ?? "",
     review.word.trim().toLowerCase(),
   ].join(":");
+}
+
+function retentionBucket(reviewCount = 0, retainedCount = 0): TrueRetentionBucket {
+  return {
+    reviewCount,
+    retainedCount,
+    rate: reviewCount ? (retainedCount / reviewCount) * 100 : null,
+  };
+}
+
+function emptyTrueRetention(): TrueRetentionSummary {
+  return {
+    overall: retentionBucket(),
+    young: retentionBucket(),
+    mature: retentionBucket(),
+    unclassifiedCount: 0,
+  };
+}
+
+/**
+ * True Retention：只统计真正的复习评分；Again 失败，Hard/Good/Easy 成功。
+ * young/mature 使用同词上一条评分写下的调度间隔，避免把本次评分后的新间隔当成旧间隔。
+ */
+export function buildTrueRetention(
+  reviews: readonly TrueRetentionReview[],
+  window: { startAt?: Date; endAt?: Date } = {},
+): TrueRetentionSummary {
+  const startAtMs = window.startAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const endAtMs = window.endAt?.getTime() ?? Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(startAtMs) && startAtMs !== Number.NEGATIVE_INFINITY) {
+    return emptyTrueRetention();
+  }
+  if (!Number.isFinite(endAtMs) && endAtMs !== Number.POSITIVE_INFINITY) {
+    return emptyTrueRetention();
+  }
+  if (startAtMs > endAtMs) return emptyTrueRetention();
+
+  const grouped = new Map<string, Array<TrueRetentionReview & {
+    reviewedAtMs: number;
+    sourceIndex: number;
+  }>>();
+  reviews.forEach((review, sourceIndex) => {
+    const reviewedAtMs = new Date(review.reviewedAt).getTime();
+    if (!Number.isFinite(reviewedAtMs)) return;
+    const key = reviewWordKey(review);
+    const items = grouped.get(key) ?? [];
+    items.push({ ...review, reviewedAtMs, sourceIndex });
+    grouped.set(key, items);
+  });
+
+  let reviewCount = 0;
+  let retainedCount = 0;
+  let youngCount = 0;
+  let youngRetainedCount = 0;
+  let matureCount = 0;
+  let matureRetainedCount = 0;
+  let unclassifiedCount = 0;
+
+  for (const items of grouped.values()) {
+    items.sort((first, second) =>
+      first.reviewedAtMs - second.reviewedAtMs
+      || first.id.localeCompare(second.id)
+      || first.sourceIndex - second.sourceIndex);
+    let previous: (typeof items)[number] | undefined;
+    for (const review of items) {
+      const inWindow = review.reviewedAtMs >= startAtMs
+        && review.reviewedAtMs <= endAtMs;
+      if (inWindow && review.kind === "review") {
+        const retained = review.rating !== (0 satisfies Rating);
+        reviewCount += 1;
+        if (retained) retainedCount += 1;
+
+        const intervalBefore = previous?.intervalMs;
+        if (typeof intervalBefore !== "number" || !Number.isFinite(intervalBefore) || intervalBefore < 0) {
+          unclassifiedCount += 1;
+        } else if (intervalBefore < TRUE_RETENTION_MATURE_INTERVAL_MS) {
+          youngCount += 1;
+          if (retained) youngRetainedCount += 1;
+        } else {
+          matureCount += 1;
+          if (retained) matureRetainedCount += 1;
+        }
+      }
+      previous = review;
+    }
+  }
+
+  return {
+    overall: retentionBucket(reviewCount, retainedCount),
+    young: retentionBucket(youngCount, youngRetainedCount),
+    mature: retentionBucket(matureCount, matureRetainedCount),
+    unclassifiedCount,
+  };
 }
 
 export function buildLearningInsights(
@@ -117,6 +233,7 @@ export function buildLearningInsights(
       uniqueWordCount: 0,
       successRate: null,
       successRateDelta: null,
+      trueRetention: emptyTrueRetention(),
       averageRecallMs: null,
     };
   }
@@ -134,6 +251,10 @@ export function buildLearningInsights(
     && review.reviewedAtMs < currentStartMs);
   const currentSuccessRate = successRate(currentReviews);
   const previousSuccessRate = successRate(previousReviews);
+  const trueRetention = buildTrueRetention(reviews, {
+    startAt: currentStart,
+    endAt: now,
+  });
   const recallSamples = currentReviews
     .map((review) => review.recallMs)
     .filter((recallMs): recallMs is number =>
@@ -152,6 +273,7 @@ export function buildLearningInsights(
     successRateDelta: currentSuccessRate !== null && previousSuccessRate !== null
       ? currentSuccessRate - previousSuccessRate
       : null,
+    trueRetention,
     averageRecallMs: recallSamples.length
       ? recallSamples.reduce((sum, recallMs) => sum + recallMs, 0)
         / recallSamples.length

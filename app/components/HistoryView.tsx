@@ -5,6 +5,7 @@ import { dateKey, formatDueTime, buildActivityCalendar, type LookupStats, type L
 import type {
   LearningInsights,
   ReviewForecastDay,
+  TrueRetentionBucket,
   WeeklyLearningReport,
 } from "../../lib/insights";
 import type { ExamPhase, ExamProgressTiers } from "../../lib/learning";
@@ -29,6 +30,11 @@ function formatSuccessRateDelta(delta: number | null, hasCurrent: boolean) {
   const roundedDelta = Math.round(delta);
   if (roundedDelta === 0) return "较上窗持平";
   return `较上窗 ${roundedDelta > 0 ? "+" : ""}${roundedDelta} 个百分点`;
+}
+
+function formatTrueRetention(bucket: TrueRetentionBucket) {
+  if (bucket.rate === null) return "—";
+  return `${Math.round(bucket.rate)}% (${bucket.retainedCount}/${bucket.reviewCount})`;
 }
 
 type HistoryViewProps = {
@@ -864,18 +870,30 @@ export default function HistoryView({
         </div>
         <div className="insights-grid">
           <div className="insight-card">
-            <span>评分达标占比</span>
+            <span>当场达标占比</span>
             <strong>
               {insights.successRate === null
                 ? "—"
                 : `${Math.round(insights.successRate)}%`}
             </strong>
-            <small>rating≥2 / 全部评分事件</small>
+            <small>rating≥2 / 全部评分事件；不代表长期记住</small>
             <small>
               {formatSuccessRateDelta(
                 insights.successRateDelta,
                 insights.successRate !== null,
               )}
+            </small>
+          </div>
+          <div className="insight-card">
+            <span>真实复习保持率</span>
+            <strong>{formatTrueRetention(insights.trueRetention.overall)}</strong>
+            <small>仅复习：忘记失败，其余评分成功</small>
+            <small>
+              年轻 &lt;21天 {formatTrueRetention(insights.trueRetention.young)}
+              {" · "}成熟 ≥21天 {formatTrueRetention(insights.trueRetention.mature)}
+              {insights.trueRetention.unclassifiedCount > 0
+                ? ` · 未分桶 ${insights.trueRetention.unclassifiedCount}`
+                : ""}
             </small>
           </div>
           <div className="insight-card">

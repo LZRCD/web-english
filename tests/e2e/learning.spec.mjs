@@ -63,6 +63,12 @@ test("点击单词主体立即触发发音并显示音标", async ({ context, pa
 
   await wordFace.click();
 
+  await expect(page.getByText("请依据查看释义前的回忆状态评分", { exact: true })).toBeVisible();
+  const ratingButtons = page.locator(".rating-bar button");
+  await expect(ratingButtons.nth(0)).toContainText("查看前完全没想起，或回忆错误");
+  await expect(ratingButtons.nth(1)).toContainText("查看前有印象，但关键内容不完整");
+  await expect(ratingButtons.nth(2)).toContainText("查看前正确想起，过程略有迟疑");
+  await expect(ratingButtons.nth(3)).toContainText("查看前立即、准确、轻松想起");
   await expect(page.getByRole("button", { name: /认识/ })).toBeVisible();
   await expect.poll(() => page.evaluate(
     () => globalThis.__wordloopAudioPlays.length,

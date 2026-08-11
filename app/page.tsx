@@ -155,6 +155,7 @@ import {
 import QuizView from "./components/QuizView";
 import {
   ACTIVITY_RANGE_LABELS as activityRangeLabels,
+  RATING_DESCRIPTIONS as ratingDescriptions,
   RATING_LABELS as ratingLabels,
   REDBOOK_PLACEHOLDER,
   SECTION_META,
@@ -2390,7 +2391,7 @@ export default function Home() {
                   : reinforcementRating !== null
                     ? "RETRIEVE · 再提取一次"
                     : revealed
-                      ? "根据真实记忆感受评分"
+                      ? "请依据查看释义前的回忆状态评分"
                       : "SPACE · 查看释义"}
               </div>
             </div>
@@ -2398,6 +2399,7 @@ export default function Home() {
             <RatingBar
               visible={revealed && redbookReady && reinforcementRating === null}
               ratingLabels={ratingLabels}
+              ratingDescriptions={ratingDescriptions}
               ratingIntervalLabels={ratingIntervalLabels}
               onRate={(rating) => rateWord(rating)}
             />

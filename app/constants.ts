@@ -35,6 +35,13 @@ export const SECTION_META = [
 
 export const RATING_LABELS = ["忘记", "模糊", "认识", "熟练"];
 
+export const RATING_DESCRIPTIONS = [
+  "查看前完全没想起，或回忆错误",
+  "查看前有印象，但关键内容不完整",
+  "查看前正确想起，过程略有迟疑",
+  "查看前立即、准确、轻松想起",
+];
+
 export const SECTION_PRIORITY: Record<string, number> = {
   必考词: 0,
   基础词: 1,

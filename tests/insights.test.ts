@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildLearningInsights,
   buildReviewForecast,
+  buildTrueRetention,
   buildWeeklyLearningReport,
   type LearningInsightReview,
   type ReviewForecastMap,
@@ -13,6 +14,13 @@ import type {
   StubbornWordMap,
   WordProgressMap,
 } from "../lib/learning.ts";
+
+const EMPTY_TRUE_RETENTION = {
+  overall: { reviewCount: 0, retainedCount: 0, rate: null },
+  young: { reviewCount: 0, retainedCount: 0, rate: null },
+  mature: { reviewCount: 0, retainedCount: 0, rate: null },
+  unclassifiedCount: 0,
+};
 
 function localIso(
   year: number,
@@ -32,8 +40,11 @@ function review(
   recallMs?: number,
 ): LearningInsightReview {
   return {
+    id: `${wordId}:${reviewedAt}:${rating}`,
     reviewedAt,
     rating,
+    kind: "review",
+    intervalMs: 86_400_000,
     wordId,
     word: `word-${wordId}`,
     recallMs,
@@ -52,6 +63,7 @@ test("空数据返回稳定的学习洞察默认值", () => {
     uniqueWordCount: 0,
     successRate: null,
     successRateDelta: null,
+    trueRetention: EMPTY_TRUE_RETENTION,
     averageRecallMs: null,
   });
   assert.deepEqual(
@@ -72,8 +84,11 @@ test("学习洞察按本地自然日窗口统计并与上一窗口比较", () =>
     review(localIso(2026, 7, 28, 12, 0, 1), 3, 3, 7000),
     review(localIso(2026, 7, 29), 3, 4, 7000),
     {
+      id: "invalid",
       reviewedAt: "not-a-date",
       rating: 3,
+      kind: "review",
+      intervalMs: 86_400_000,
       wordId: 5,
       word: "invalid",
       recallMs: 7000,
@@ -96,7 +111,7 @@ test("学习洞察按本地自然日窗口统计并与上一窗口比较", () =>
   assert.equal(insights.averageRecallMs, 2000);
 });
 
-test("评分达标占比区分当前无样本、真实零和上一窗无样本", () => {
+test("当场达标占比区分当前无样本、真实零和上一窗无样本", () => {
   const now = new Date(2026, 6, 28, 12);
   const previousSuccess = review(localIso(2026, 7, 18, 8), 3, 1);
 
@@ -108,6 +123,7 @@ test("评分达标占比区分当前无样本、真实零和上一窗无样本",
       uniqueWordCount: 0,
       successRate: null,
       successRateDelta: null,
+      trueRetention: EMPTY_TRUE_RETENTION,
       averageRecallMs: null,
     },
   );
@@ -126,7 +142,7 @@ test("评分达标占比区分当前无样本、真实零和上一窗无样本",
   assert.equal(zeroWithoutPrevious.successRateDelta, null);
 });
 
-test("评分达标占比按事件加权并混合 new、review 与 sprint 会话", () => {
+test("当场达标占比按事件加权并混合 new、review 与 sprint 会话", () => {
   const now = new Date(2026, 6, 28, 12);
   const reviews: ReviewEvent[] = [
     {
@@ -179,7 +195,51 @@ test("评分达标占比按事件加权并混合 new、review 与 sprint 会话"
   assert.equal(insights.successRate, 50);
 });
 
-test("评分达标占比保留窗口边界并排除未来与无效时间", () => {
+test("True Retention 只计复习并按上一调度间隔区分 young 与 mature", () => {
+  const day = 86_400_000;
+  const makeReview = (
+    id: string,
+    wordId: number,
+    kind: "new" | "review",
+    rating: 0 | 1 | 2 | 3,
+    reviewedAt: string,
+    intervalMs: number,
+  ): ReviewEvent => ({
+    id,
+    wordId,
+    word: `word-${wordId}`,
+    kind,
+    rating,
+    reviewedAt,
+    intervalMs,
+    dueAt: new Date(new Date(reviewedAt).getTime() + intervalMs).toISOString(),
+  });
+  const reviews = [
+    makeReview("young-new", 1, "new", 3, localIso(2026, 6, 1), 10 * day),
+    makeReview("young-again", 1, "review", 0, localIso(2026, 6, 10), 40 * day),
+    makeReview("mature-hard", 1, "review", 1, localIso(2026, 7, 20), day),
+    makeReview("young-edge-new", 2, "new", 3, localIso(2026, 6, 1), 21 * day - 1),
+    makeReview("young-good", 2, "review", 2, localIso(2026, 6, 22), 60 * day),
+    makeReview("mature-edge-new", 3, "new", 3, localIso(2026, 6, 1), 21 * day),
+    makeReview("mature-easy", 3, "review", 3, localIso(2026, 6, 22), day),
+    makeReview("truncated-review", 4, "review", 2, localIso(2026, 6, 22), 90 * day),
+    { ...makeReview("invalid", 5, "review", 0, localIso(2026, 6, 22), day), reviewedAt: "invalid" },
+  ];
+
+  const retention = buildTrueRetention(reviews, {
+    startAt: new Date(2026, 5, 10),
+    endAt: new Date(2026, 6, 31, 23, 59, 59),
+  });
+
+  assert.deepEqual(retention, {
+    overall: { reviewCount: 5, retainedCount: 4, rate: 80 },
+    young: { reviewCount: 2, retainedCount: 1, rate: 50 },
+    mature: { reviewCount: 2, retainedCount: 2, rate: 100 },
+    unclassifiedCount: 1,
+  });
+});
+
+test("当场达标占比保留窗口边界并排除未来与无效时间", () => {
   const now = new Date(2026, 6, 28, 12);
   const insights = buildLearningInsights([
     review(localIso(2026, 7, 14, 23, 59, 59), 0, 1),

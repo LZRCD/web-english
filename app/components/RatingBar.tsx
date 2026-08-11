@@ -3,6 +3,7 @@
 type RatingBarProps = {
   visible: boolean;
   ratingLabels: readonly string[];
+  ratingDescriptions: readonly string[];
   ratingIntervalLabels: readonly string[];
   onRate: (rating: number) => void;
 };
@@ -11,6 +12,7 @@ type RatingBarProps = {
 export default function RatingBar({
   visible,
   ratingLabels,
+  ratingDescriptions,
   ratingIntervalLabels,
   onRate,
 }: RatingBarProps) {
@@ -24,7 +26,7 @@ export default function RatingBar({
         <button key={label} onClick={() => onRate(index)}>
           <span>{index + 1}</span>
           <strong>{label}</strong>
-          <small>{ratingIntervalLabels[index]}</small>
+          <small>{ratingDescriptions[index]}。预计 {ratingIntervalLabels[index]} 后复习</small>
         </button>
       ))}
     </div>

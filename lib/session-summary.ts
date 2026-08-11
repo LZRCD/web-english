@@ -34,6 +34,7 @@ export type SessionCompletionSummary = {
   totalCount: number;
   newCount: number;
   reviewCount: number;
+  /** rating≥2 的当场达标占比，不代表长期保持。 */
   successRate: number | null;
   averageRecallMs: number | null;
   weakCount: number;

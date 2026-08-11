@@ -618,12 +618,13 @@ function insightReview(id, days, rating, wordId) {
   };
 }
 
-test("信号联动：近七天评分达标占比区分无样本、真实零与上窗比较", async ({ browser, baseURL }) => {
+test("信号联动：近七天当场达标与 True Retention 保持各自口径", async ({ browser, baseURL }) => {
   const scenarios = [
     {
       reviews: [insightReview("previous-only", 8, 3, 1)],
       value: "—",
       comparison: "当前窗无样本",
+      retention: "—",
     },
     {
       reviews: [
@@ -632,6 +633,7 @@ test("信号联动：近七天评分达标占比区分无样本、真实零与�
       ],
       value: "0%",
       comparison: "较上窗 -100 个百分点",
+      retention: "0% (0/1)",
     },
     {
       reviews: [
@@ -642,6 +644,7 @@ test("信号联动：近七天评分达标占比区分无样本、真实零与�
       ],
       value: "50%",
       comparison: "较上窗持平",
+      retention: "100% (2/2)",
     },
   ];
 
@@ -660,12 +663,17 @@ test("信号联动：近七天评分达标占比区分无样本、真实零与�
         .click();
 
       const card = scenarioPage.locator(".insight-card").filter({
-        hasText: "评分达标占比",
+        hasText: "当场达标占比",
+      });
+      const retentionCard = scenarioPage.locator(".insight-card").filter({
+        hasText: "真实复习保持率",
       });
       await expect(scenarioPage.getByText("近 7 天截至目前", { exact: true })).toBeVisible();
-      await expect(card.getByText("rating≥2 / 全部评分事件", { exact: true })).toBeVisible();
+      await expect(card.getByText("rating≥2 / 全部评分事件；不代表长期记住", { exact: true })).toBeVisible();
       await expect(card.getByText(scenario.value, { exact: true })).toBeVisible();
       await expect(card.getByText(scenario.comparison, { exact: true })).toBeVisible();
+      await expect(retentionCard.getByText(scenario.retention, { exact: true })).toBeVisible();
+      await expect(retentionCard).toContainText("仅复习：忘记失败，其余评分成功");
     } finally {
       await scenarioContext.close();
     }

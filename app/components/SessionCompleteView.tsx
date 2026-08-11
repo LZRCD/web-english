@@ -110,7 +110,7 @@ export default function SessionCompleteView({
           <dd>{summary.reviewCount}</dd>
         </div>
         <div>
-          <dt>顺利回忆</dt>
+          <dt>当场达标</dt>
           <dd>{summary.successRate === null ? "—" : `${summary.successRate}%`}</dd>
         </div>
         <div>
