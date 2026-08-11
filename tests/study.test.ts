@@ -55,6 +55,11 @@ import {
   type DailyClozeInput,
 } from "../lib/daily-cloze.ts";
 import {
+  buildDailySentenceCacheEntry,
+  normalizeDailySentenceContent,
+  type DailySentenceInput,
+} from "../lib/daily-sentence.ts";
+import {
   addLocalDays,
   localDateKey,
   localDayStart,
@@ -134,6 +139,34 @@ const DAILY_CLOZE_ENTRY = buildDailyClozeCacheEntry(
       explanation: "语境表示向外传递信心。",
     }],
   }, DAILY_CLOZE_INPUT)!,
+  new Date("2026-08-11T08:00:00.000Z"),
+);
+
+const DAILY_SENTENCE_INPUT: DailySentenceInput = { localDate: "2026-08-11" };
+const DAILY_SENTENCE_ENTRY = buildDailySentenceCacheEntry(
+  DAILY_SENTENCE_INPUT,
+  normalizeDailySentenceContent({
+    sentence: "Although researchers who study memory often emphasize repeated practice, students who explain why an answer is correct may build knowledge that remains useful when unfamiliar questions require them to connect evidence across several apparently unrelated topics.",
+    backbone: "students may build knowledge",
+    clauses: [
+      {
+        text: "students who explain why an answer is correct may build knowledge",
+        type: "main",
+        function: "主句",
+      },
+      {
+        text: "who study memory",
+        type: "relative",
+        function: "修饰 researchers",
+      },
+    ],
+    modifiers: [{
+      text: "across several apparently unrelated topics",
+      target: "connect evidence",
+      relation: "补充连接证据的范围",
+    }],
+    translation: "尽管研究记忆的学者常强调重复练习，但解释答案为何正确的学生，可能建立一种在陌生问题中仍然有用的知识。",
+  }, DAILY_SENTENCE_INPUT)!,
   new Date("2026-08-11T08:00:00.000Z"),
 );
 
@@ -1293,6 +1326,59 @@ test("passage-cloze 作答正常归一化，清空学习记录同时清除缓存
   assert.equal(cleared.activeQuiz, undefined);
   assert.deepEqual(cleared.quizAttempts, []);
   assert.deepEqual(recovery.state.dailyCloze, DAILY_CLOZE_ENTRY);
+});
+
+test("每日长难句缓存经旧状态、settings 分域、备份导入和恢复完整往返", () => {
+  const legacy = parseStoredState(JSON.stringify({ schemaVersion: 5 }));
+  assert.equal(legacy.dailySentence, undefined);
+
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailyGoal: 30,
+    dailySentence: DAILY_SENTENCE_ENTRY,
+    reviews: [],
+    quizAttempts: [],
+  }));
+  assert.deepEqual(state.dailySentence, DAILY_SENTENCE_ENTRY);
+  assert.deepEqual(combineStoredState(splitStoredState(state)), state);
+  assert.deepEqual(
+    parseBackupDocument(JSON.stringify(createBackupDocument(state))).state.dailySentence,
+    DAILY_SENTENCE_ENTRY,
+  );
+
+  const invalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailyGoal: 30,
+    dailySentence: { ...DAILY_SENTENCE_ENTRY, source: "local" },
+  }));
+  assert.equal(invalid.dailySentence, undefined);
+  assert.equal(invalid.dailyGoal, 30);
+});
+
+test("清空学习记录保留合法每日长难句且不改变任何学习事实", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailySentence: DAILY_SENTENCE_ENTRY,
+    reviews: [],
+    quizAttempts: [],
+    wordProgress: {},
+  }));
+  const before = {
+    reviews: structuredClone(state.reviews),
+    quizAttempts: structuredClone(state.quizAttempts),
+    wordProgress: structuredClone(state.wordProgress),
+  };
+  const cleared = clearLearningRecords(state);
+  assert.deepEqual(cleared.dailySentence, DAILY_SENTENCE_ENTRY);
+  assert.deepEqual(before, {
+    reviews: state.reviews,
+    quizAttempts: state.quizAttempts,
+    wordProgress: state.wordProgress,
+  });
+  assert.equal(STORAGE_VERSION, 5);
+  assert.equal(DATABASE_VERSION, 3);
+  assert.equal(BACKUP_FORMAT, "wordloop-backup");
+  assert.equal(Object.keys(STORES).length, 12);
 });
 
 test("每批设置变化只影响后续创建，不改写当前 activeSession 快照", () => {

@@ -1641,3 +1641,13 @@
 - 独立缓存使用 schemaVersion 1、promptVersion `daily-cloze-v1`、localDate 与包含有序真实 wordId/word/meaning 的确定性 inputKey，放入既有 settings；刷新、离线和重新开始复用，同日输入变化或跨日即失效，重新生成失败保留旧合法缓存。
 - 新增 `passage-cloze` QuizMode、完整 activeQuiz 快照/inputKey 恢复和真实 QuizAttempt；复用每日首次 FSRS 门禁，跨模式或同模式重答不重复改写排程。错误以独立 `quiz-cloze` 进入错词、时间线、周趋势和同维恢复，不混入 sprint 推荐/留存口径。
 - 未升级 STORAGE/DATABASE/备份版本，未新增 store/domain，未修改 FSRS、评分公式、ReviewEvent/Kind、SessionKind、Provider 协议或 Canonical。当前验证：聚焦 187/187、typecheck、lint 0 error / 1 个既有 warning、精选 E2E 35/35、production build + Node 310/310、production smoke 通过；服务均精确停止，端口 3000 空闲，build-info 已恢复。本批次完成并停止，不自动进入 P1-8 或 P2。
+
+## Canonical P1-8 长难句每日一句（第 72 轮）
+
+本轮：2026-08-11。
+
+- 学习页在今日任务预览之后、主词卡之前新增“今日长难句”；只由用户显式请求，始终披露“AI 原创长难句 · 非历年真题”，无当日缓存失败时不使用本地模板或昨天内容。
+- 独立缓存使用 schemaVersion 1、promptVersion `daily-sentence-v1`、本地自然日和确定性 inputKey；结构严格包含 30–70 词原句、主干、具名从句、修饰关系、译文与生成元数据，同日刷新/离线复用，跨日失效，重新生成失败保留旧合法缓存。
+- 缓存仅进入既有 settings、备份/恢复/localStorage/跨标签链；清空学习记录保留该内容缓存。未升级 STORAGE/DATABASE/备份版本，未新增 store/domain，生成与朗读零 review、quiz、FSRS 或 weak-signals 写入。
+- 浏览器朗读支持英文 0.8 语速、暂停/继续、重播与内容/日期/卸载取消；不可用时显示诚实说明。当前验证：聚焦 90/90、typecheck、lint 0 error / 1 个既有 warning、相邻 E2E 41/41、production build + Node 319/319、production smoke 通过；服务均精确停止，端口 3000 空闲，build-info 已恢复。
+- P1-7、P1-9、P1-8 已分别完成，P1 阶段结束并 STOP；P2-10/P2-11/P2-12 均需重新授权和新的 Round 0，不 push。

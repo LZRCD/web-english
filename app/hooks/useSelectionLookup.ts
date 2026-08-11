@@ -364,10 +364,15 @@ export function useSelectionLookup(
         rangeBox.left + rangeBox.width / 2,
       ),
     );
-    const popupHeight = 220;
-    const y = rangeBox.bottom + 12 + popupHeight <= window.innerHeight
+    // 与 .selection-lookup 的实际 max-height 一致，避免页面新增内容后弹窗操作落出视口。
+    const popupHeight = Math.min(330, window.innerHeight - 24);
+    const preferredY = rangeBox.bottom + 12 + popupHeight <= window.innerHeight
       ? rangeBox.bottom + 12
-      : Math.max(12, rangeBox.top - popupHeight - 12);
+      : rangeBox.top - popupHeight - 12;
+    const y = Math.min(
+      window.innerHeight - popupHeight - 12,
+      Math.max(12, preferredY),
+    );
     const commonNode = range.commonAncestorContainer;
     const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
       ? commonNode as Element

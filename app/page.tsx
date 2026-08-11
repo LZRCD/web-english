@@ -170,6 +170,12 @@ import {
   type DailyClozeInput,
 } from "../lib/daily-cloze";
 import QuizView from "./components/QuizView";
+import DailySentenceCard from "./components/DailySentenceCard";
+import {
+  isCurrentDailySentenceCache,
+  type DailySentenceCacheEntry,
+  type DailySentenceInput,
+} from "../lib/daily-sentence";
 import {
   ACTIVITY_RANGE_LABELS as activityRangeLabels,
   RATING_DESCRIPTIONS as ratingDescriptions,
@@ -216,6 +222,7 @@ export default function Home() {
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<QuizSessionState | undefined>(undefined);
   const [dailyCloze, setDailyCloze] = useState<DailyClozeCacheEntry | undefined>(undefined);
+  const [dailySentence, setDailySentence] = useState<DailySentenceCacheEntry | undefined>(undefined);
   const [quizRecoveryNotice, setQuizRecoveryNotice] = useState("");
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
@@ -406,6 +413,15 @@ export default function Home() {
     [clock, reviews, wordProgress],
   );
   const todayKey = dateKey(new Date(clock));
+  const dailySentenceInput = useMemo<DailySentenceInput>(() => ({
+    localDate: todayKey,
+  }), [todayKey]);
+  const currentDailySentence = useMemo(
+    () => isCurrentDailySentenceCache(dailySentence, dailySentenceInput)
+      ? dailySentence
+      : undefined,
+    [dailySentence, dailySentenceInput],
+  );
   const dailyClozeInput = useMemo<DailyClozeInput>(() => ({
     localDate: todayKey,
     targets: selectDailyNewWordTargets(reviews, redbookWords, new Date(clock)),
@@ -1007,6 +1023,7 @@ export default function Home() {
     quizAttempts,
     activeQuiz,
     dailyCloze,
+    dailySentence,
   }), [
     activeSession,
     adaptiveNewWords,
@@ -1039,6 +1056,7 @@ export default function Home() {
     quizAttempts,
     activeQuiz,
     dailyCloze,
+    dailySentence,
     wordProgress,
   ]);
 
@@ -1480,6 +1498,7 @@ export default function Home() {
     setQuizAttempts(state.quizAttempts);
     setActiveQuiz(state.activeQuiz);
     setDailyCloze(state.dailyCloze);
+    setDailySentence(state.dailySentence);
     setStudyMode(state.studyMode);
     setStudyScope(state.studyScope);
     setShuffleSeed(state.shuffleSeed);
@@ -2479,6 +2498,13 @@ export default function Home() {
             )}
             {!sessionComplete && (
               <>
+            <div className="study-main-stack">
+            <DailySentenceCard
+              key={dailySentenceInput.localDate}
+              input={dailySentenceInput}
+              cache={currentDailySentence}
+              onChange={setDailySentence}
+            />
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <WordCard
@@ -2572,6 +2598,7 @@ export default function Home() {
                       ? "请依据查看释义前的回忆状态评分"
                       : "SPACE · 查看释义"}
               </div>
+            </div>
             </div>
 
             <RatingBar

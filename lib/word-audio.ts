@@ -165,6 +165,61 @@ export function speakWithTts(
   }
 }
 
+export type TextSpeechOptions = {
+  rate?: number;
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: () => void;
+};
+
+/** 长文本浏览器朗读能力检测；不读取单词录音索引。 */
+export function supportsTextSpeech() {
+  return typeof window !== "undefined"
+    && "speechSynthesis" in window
+    && Boolean(window.speechSynthesis)
+    && typeof SpeechSynthesisUtterance !== "undefined";
+}
+
+/** 朗读任意英文文本；每次开始前取消旧 utterance，便于安全重播。 */
+export function speakText(
+  text: string,
+  options: TextSpeechOptions = {},
+) {
+  if (!supportsTextSpeech() || !text.trim()) return false;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  utterance.rate = options.rate ?? 0.8;
+  utterance.onstart = () => options.onStart?.();
+  utterance.onend = () => options.onEnd?.();
+  utterance.onerror = () => options.onError?.();
+  try {
+    window.speechSynthesis.speak(utterance);
+    return true;
+  } catch {
+    options.onError?.();
+    return false;
+  }
+}
+
+export function pauseTextSpeech() {
+  if (!supportsTextSpeech()) return false;
+  window.speechSynthesis.pause();
+  return true;
+}
+
+export function resumeTextSpeech() {
+  if (!supportsTextSpeech()) return false;
+  window.speechSynthesis.resume();
+  return true;
+}
+
+export function cancelTextSpeech() {
+  if (!supportsTextSpeech()) return false;
+  window.speechSynthesis.cancel();
+  return true;
+}
+
 /** 播放单词发音：优先原声片段，缺失时回退 TTS */
 export function playWordAudio(
   word: string,

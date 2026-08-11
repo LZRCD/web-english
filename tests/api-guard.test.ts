@@ -29,6 +29,15 @@ import {
   selectDailyNewWordTargets,
   type DailyClozeInput,
 } from "../lib/daily-cloze.ts";
+import {
+  buildDailySentenceCacheEntry,
+  buildDailySentenceInputKey,
+  isCurrentDailySentenceCache,
+  isDailySentenceLocalDate,
+  normalizeDailySentenceCacheEntry,
+  normalizeDailySentenceContent,
+  type DailySentenceInput,
+} from "../lib/daily-sentence.ts";
 import type { ReviewEvent } from "../lib/learning.ts";
 import type { Word } from "../lib/study.ts";
 
@@ -83,6 +92,167 @@ const DAILY_CLOZE_CONTENT = {
     },
   ],
 };
+
+const DAILY_SENTENCE_INPUT: DailySentenceInput = {
+  localDate: "2026-08-11",
+};
+
+const DAILY_SENTENCE_TEXT = "Although researchers who study memory often emphasize the value of repeated practice, students who pause to explain why an answer is correct may build knowledge that remains useful when unfamiliar questions require them to connect evidence across several apparently unrelated topics.";
+
+const DAILY_SENTENCE_CONTENT = {
+  sentence: `  ${DAILY_SENTENCE_TEXT.replaceAll(" ", "  ")}  `,
+  backbone: "  students may build knowledge  ",
+  clauses: [
+    {
+      text: " students who pause to explain why an answer is correct may build knowledge ",
+      type: "main",
+      function: " 主句，说明学生可能建立知识。 ",
+    },
+    {
+      text: " who study memory ",
+      type: "relative",
+      function: " 修饰 researchers。 ",
+    },
+    {
+      text: " Although researchers who study memory often emphasize the value of repeated practice ",
+      type: "adverbial",
+      function: " 让步状语从句。 ",
+    },
+  ],
+  modifiers: [{
+    text: " across several apparently unrelated topics ",
+    target: " connect evidence ",
+    relation: " 介词短语补充说明证据连接的范围。 ",
+  }],
+  translation: " 尽管研究记忆的学者常强调重复练习的价值，但暂停下来解释答案为何正确的学生，可能会建立一种在陌生问题要求他们跨越多个看似无关主题连接证据时仍然有用的知识。 ",
+};
+
+test("每日长难句本地日期严格校验真实日历日", () => {
+  for (const valid of ["2026-08-11", "2024-02-29", "2000-01-01"]) {
+    assert.equal(isDailySentenceLocalDate(valid), true);
+  }
+  for (const invalid of [
+    "2026-8-11",
+    "2026-02-29",
+    "2026-04-31",
+    "2026-13-01",
+    "today",
+    "",
+    null,
+  ]) {
+    assert.equal(isDailySentenceLocalDate(invalid), false);
+  }
+});
+
+test("每日长难句 inputKey 同日稳定且跨日必定变化", () => {
+  const key = buildDailySentenceInputKey(DAILY_SENTENCE_INPUT);
+  assert.equal(buildDailySentenceInputKey({ localDate: "2026-08-11" }), key);
+  assert.notEqual(buildDailySentenceInputKey({ localDate: "2026-08-12" }), key);
+  assert.match(key, /\"schemaVersion\":1/);
+  assert.match(key, /\"promptVersion\":\"daily-sentence-v1\"/);
+  assert.match(key, /\"localDate\":\"2026-08-11\"/);
+  assert.doesNotMatch(key, /generatedAt|today/);
+});
+
+test("每日长难句结构归一化空白并保留原句、主干、从句、修饰关系和译文", () => {
+  const content = normalizeDailySentenceContent(
+    DAILY_SENTENCE_CONTENT,
+    DAILY_SENTENCE_INPUT,
+  );
+  assert.ok(content);
+  assert.equal(content.sentence, DAILY_SENTENCE_TEXT);
+  assert.equal(content.backbone, "students may build knowledge");
+  assert.equal(content.clauses.length, 3);
+  assert.equal(content.clauses[0].type, "main");
+  assert.equal(content.modifiers[0].text, "across several apparently unrelated topics");
+  assert.ok(content.translation.startsWith("尽管"));
+});
+
+test("每日长难句拒绝非法篇幅、围栏、HTML、占位符和残缺正文", () => {
+  const sentenceVariants = [
+    Array(29).fill("word").join(" ") + ".",
+    Array(71).fill("word").join(" ") + ".",
+    `${"a".repeat(1201)}.`,
+    "```English sentence```",
+    "A complete <em>HTML</em> sentence with enough repeated English words to pass a loose count but not the markup rule, because model text must stay plain and safe for rendering.",
+    "TODO placeholder sentence that contains enough ordinary English words to look complete even though it is clearly not acceptable generated learning content for the current local day.",
+    "",
+  ];
+  for (const sentence of sentenceVariants) {
+    assert.equal(normalizeDailySentenceContent({
+      ...DAILY_SENTENCE_CONTENT,
+      sentence,
+    }, DAILY_SENTENCE_INPUT), null);
+  }
+  for (const field of ["backbone", "translation"] as const) {
+    assert.equal(normalizeDailySentenceContent({
+      ...DAILY_SENTENCE_CONTENT,
+      [field]: " ",
+    }, DAILY_SENTENCE_INPUT), null);
+  }
+});
+
+test("每日长难句拒绝从句数量、枚举、主从结构和原句映射错误", () => {
+  const invalidClauses = [
+    "not-array",
+    DAILY_SENTENCE_CONTENT.clauses.slice(0, 1),
+    Array(9).fill(DAILY_SENTENCE_CONTENT.clauses[0]),
+    DAILY_SENTENCE_CONTENT.clauses.map((clause) => ({ ...clause, type: "main" })),
+    DAILY_SENTENCE_CONTENT.clauses.map((clause) => ({ ...clause, type: "relative" })),
+    [{ ...DAILY_SENTENCE_CONTENT.clauses[0], type: "invalid" }, ...DAILY_SENTENCE_CONTENT.clauses.slice(1)],
+    [{ ...DAILY_SENTENCE_CONTENT.clauses[0], text: "not present in sentence" }, ...DAILY_SENTENCE_CONTENT.clauses.slice(1)],
+    [{ ...DAILY_SENTENCE_CONTENT.clauses[0], function: " " }, ...DAILY_SENTENCE_CONTENT.clauses.slice(1)],
+  ];
+  for (const clauses of invalidClauses) {
+    assert.equal(normalizeDailySentenceContent({
+      ...DAILY_SENTENCE_CONTENT,
+      clauses,
+    }, DAILY_SENTENCE_INPUT), null);
+  }
+});
+
+test("每日长难句拒绝修饰关系数量、字段和原句映射错误", () => {
+  const invalidModifiers = [
+    "not-array",
+    [],
+    Array(13).fill(DAILY_SENTENCE_CONTENT.modifiers[0]),
+    [{ ...DAILY_SENTENCE_CONTENT.modifiers[0], text: "not present in sentence" }],
+    [{ ...DAILY_SENTENCE_CONTENT.modifiers[0], target: " " }],
+    [{ ...DAILY_SENTENCE_CONTENT.modifiers[0], relation: " " }],
+  ];
+  for (const modifiers of invalidModifiers) {
+    assert.equal(normalizeDailySentenceContent({
+      ...DAILY_SENTENCE_CONTENT,
+      modifiers,
+    }, DAILY_SENTENCE_INPUT), null);
+  }
+});
+
+test("每日长难句缓存严格校验版本、日期、身份、时间、来源和内容", () => {
+  const content = normalizeDailySentenceContent(
+    DAILY_SENTENCE_CONTENT,
+    DAILY_SENTENCE_INPUT,
+  )!;
+  const entry = buildDailySentenceCacheEntry(
+    DAILY_SENTENCE_INPUT,
+    content,
+    new Date("2026-08-11T08:00:00.000Z"),
+  );
+  assert.deepEqual(normalizeDailySentenceCacheEntry(entry), entry);
+  assert.equal(isCurrentDailySentenceCache(entry, DAILY_SENTENCE_INPUT), true);
+  assert.equal(isCurrentDailySentenceCache(entry, { localDate: "2026-08-12" }), false);
+  for (const invalid of [
+    { ...entry, schemaVersion: 2 },
+    { ...entry, promptVersion: "daily-sentence-v0" },
+    { ...entry, inputKey: "today" },
+    { ...entry, localDate: "2026-02-29" },
+    { ...entry, generatedAt: "invalid" },
+    { ...entry, source: "local" },
+    { ...entry, content: { ...entry.content, clauses: [] } },
+  ]) {
+    assert.equal(normalizeDailySentenceCacheEntry(invalid), undefined);
+  }
+});
 
 function dailyReview(
   id: string,

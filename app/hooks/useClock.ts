@@ -6,7 +6,17 @@ export function useClock(): { clock: number; refreshClock: () => void } {
 
   useEffect(() => {
     const timer = setInterval(() => setClock(Date.now()), 60_000);
-    return () => clearInterval(timer);
+    const refresh = () => setClock(Date.now());
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, []);
 
   const refreshClock = useCallback(() => setClock(Date.now()), []);

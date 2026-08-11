@@ -29,6 +29,10 @@ import {
   normalizeDailyClozeCacheEntry,
   type DailyClozeCacheEntry,
 } from "./daily-cloze.ts";
+import {
+  normalizeDailySentenceCacheEntry,
+  type DailySentenceCacheEntry,
+} from "./daily-sentence.ts";
 import { localDateKey as dateKey } from "./date-utils.ts";
 import { normalizeEtymologyCacheEntry } from "./etymology.ts";
 
@@ -165,6 +169,7 @@ export type StoredState = {
   quizAttempts: QuizAttempt[];
   activeQuiz?: QuizSessionState;
   dailyCloze?: DailyClozeCacheEntry;
+  dailySentence?: DailySentenceCacheEntry;
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
   lookupStats: LookupStats;
@@ -1261,6 +1266,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     quizAttempts: normalizeQuizAttempts(state.quizAttempts),
     activeQuiz: normalizeQuizSession(state.activeQuiz),
     dailyCloze: normalizeDailyClozeCacheEntry(state.dailyCloze),
+    dailySentence: normalizeDailySentenceCacheEntry(state.dailySentence),
   };
 }
 
