@@ -99,6 +99,7 @@ import { useAiCoach } from "./hooks/useAiCoach";
 import { useAudio } from "./hooks/useAudio";
 import { useClock } from "./hooks/useClock";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useKaoyanExamples } from "./hooks/useKaoyanExamples";
 import { useSearch } from "./hooks/useSearch";
 import { useSelectionLookup } from "./hooks/useSelectionLookup";
 import { useStudyPersistence } from "./hooks/useStudyPersistence";
@@ -401,6 +402,11 @@ export default function Home() {
     setDictionaryPhonetics,
   });
   const redbookReady = redbookStatus === "ready";
+  const currentKaoyanExamples = useKaoyanExamples(
+    current.id,
+    current.word,
+    redbookReady,
+  );
   const vocabTestWords = useMemo(
     () => redbookWords.filter((word) => isPrimaryLearningWord(word.id)),
     [redbookWords],
@@ -2532,6 +2538,7 @@ export default function Home() {
                 etymologyLoading={etymologyLoading}
                 etymologyError={etymologyError}
                 reusedSentences={currentReusedSentences}
+                kaoyanExamples={currentKaoyanExamples}
                 guessMistakeCount={
                   current.id === undefined ? 0 : guessMistakes[current.id] ?? 0
                 }

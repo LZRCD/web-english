@@ -55,5 +55,7 @@ next-env.d.ts
 /资源/
 /public/audio/
 /public/data/redbook.json
+/scripts/kaoyan-corpus/
+/public/data/kaoyan-examples/
 /public/data/dictionary/[a-z].[0-9a-f]*.json
 /public/data/dictionary/ranges/[a-z].[0-9a-f]*.json

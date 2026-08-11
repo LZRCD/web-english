@@ -26,6 +26,7 @@ import { formatDueTime } from "../../lib/study";
 import type { RedbookLoadGuidance } from "../../lib/redbook";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
 import type { EtymologyCacheEntry } from "../../lib/etymology";
+import type { KaoyanExample } from "../../lib/kaoyan-examples";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ReinforcementRating = 0 | 1;
@@ -64,6 +65,8 @@ type WordCardProps = {
   etymologyError: string;
   /** 该词出现在这些已见例句中（跨词复用） */
   reusedSentences: ReusedSentence[];
+  /** 当前真实 wordId 命中的本地真题原句 */
+  kaoyanExamples: KaoyanExample[];
   /** 该词在隐藏释义阶段猜错的累计次数 */
   guessMistakeCount: number;
   /** 该词的划词查询统计（用于补漏提示） */
@@ -155,6 +158,7 @@ export default function WordCard({
   etymologyLoading,
   etymologyError,
   reusedSentences,
+  kaoyanExamples,
   guessMistakeCount,
   currentLookupStat,
   currentRecallStats,
@@ -570,6 +574,166 @@ export default function WordCard({
             </>
           )}
 
+          {kaoyanExamples.length > 0 && (
+            <section
+              className="kaoyan-examples"
+              aria-label="考研真题原句"
+            >
+              <span className="kaoyan-examples-label">考研真题原句</span>
+              <ol>
+                {kaoyanExamples.map((item) => (
+                  <li key={item.id}>
+                    <p className="context-sentence">{item.sentence}</p>
+                    <div className="kaoyan-example-source">
+                      <span>
+                        {item.year} · {item.paperType === "old"
+                          ? "旧卷"
+                          : item.paperType === "english-one"
+                            ? "英语一"
+                            : "英语二"}
+                        {" · "}
+                        {item.section === "reading"
+                          ? "阅读"
+                          : item.section === "new-type"
+                            ? "新题型"
+                            : "翻译"}
+                      </span>
+                      <a
+                        href={item.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        来源页：懒笔记整理
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <small className="kaoyan-copyright">
+                真题版权归相关考试主管机构；本站仅用于个人学习，来源页用于核对。
+              </small>
+            </section>
+          )}
+
+          {/* 例句 / 内容补充 */}
+          {(current.sentence || currentEnrichment?.senseExamples?.length) ? (
+            <div className="context-block">
+              {currentEnrichment?.senseExamples?.length ? (
+                <>
+                  <span className="sense-examples-label">释义例句</span>
+                  <ol className="sense-examples">
+                    {currentEnrichment.senseExamples.map((example, index) => (
+                      <li
+                        className="sense-example"
+                        key={`${example.meaning}-${index}`}
+                      >
+                        <strong>{index + 1}. {(!hideSenses || sensesExpanded) ? example.meaning : ""}</strong>
+                        <p className="context-sentence">{example.sentence}</p>
+                        {(!hideSenses || sensesExpanded) && (
+                          <p className="context-translation">
+                            {example.translation}
+                          </p>
+                        )}
+                        {currentEnrichment.source === "ai" && (
+                          <div className="sense-example-quality">
+                            <small>
+                              {example.review?.status === "pending"
+                                ? "正在语义二审…"
+                                : example.review?.status === "passed"
+                                  ? "语义二审通过"
+                                  : example.review?.status === "failed"
+                                    ? `二审未通过${example.review.note ? `：${example.review.note}` : ""}`
+                                    : typeof example.confidence === "number"
+                                      ? `生成置信度 ${Math.round(example.confidence * 100)}%`
+                                      : "尚未反馈"}
+                            </small>
+                            <span>
+                              <button
+                                type="button"
+                                className="quiet"
+                                disabled={
+                                  reviewingSense !== null
+                                  || rewritingSense !== null
+                                }
+                                onClick={() => onReportSenseMismatch(index)}
+                              >
+                                {reviewingSense === index
+                                  ? "二审中…"
+                                  : "例句与义项不符"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  reviewingSense !== null
+                                  || rewritingSense !== null
+                                }
+                                onClick={() => onRewriteSenseExample(index)}
+                              >
+                                {rewritingSense === index ? "重写中…" : "只重写此条"}
+                              </button>
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <p className="context-sentence">{current.sentence}</p>
+                  {(!hideSenses || sensesExpanded) && (
+                    <p className="context-translation">{current.translation}</p>
+                  )}
+                </>
+              )}
+              {currentEnrichment && (
+                <div className="content-meta">
+                  <small className="content-source">
+                    {currentEnrichment.source === "ai"
+                      ? "AI 生成 · 已缓存 · 未人工核验"
+                      : "词典内容"}
+                    {currentEnrichment.targetMeanings?.length
+                      ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
+                      : ""}
+                  </small>
+                  {currentEnrichment.source === "ai" && (
+                    <button
+                      type="button"
+                      onClick={onEnrichWord}
+                      disabled={
+                        enrichmentLoading || !unfamiliarMeanings.length
+                      }
+                    >
+                      {enrichmentLoading
+                        ? "重写中…"
+                        : "按未熟练义项重写"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              className="context-block context-ai"
+              onClick={onEnrichWord}
+              disabled={enrichmentLoading || !unfamiliarMeanings.length}
+              aria-keyshortcuts="E"
+            >
+              <span>
+                内容补充 <kbd>E</kbd>
+              </span>
+              <p>
+                {!unfamiliarMeanings.length
+                  ? "全部中文义项已标记熟练"
+                  : enrichmentLoading
+                    ? "正在按未熟练义项生成并校验格式…"
+                    : reusedSentences.length
+                      ? `已有 ${reusedSentences.length} 条例句含该词可复用，仍可生成专属例句`
+                      : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
+              </p>
+            </button>
+          )}
+
           {/* 义项考频生成（多义词、释义可见、未缓存时） */}
           {currentSenseItems.length >= 2
             && !currentSenseFrequency
@@ -720,125 +884,6 @@ export default function WordCard({
               <span>本地词根提示</span>
               <p>{current.root}</p>
             </div>
-          )}
-
-          {/* 例句 / 内容补充 */}
-          {(current.sentence || currentEnrichment?.senseExamples?.length) ? (
-            <div className="context-block">
-              {currentEnrichment?.senseExamples?.length ? (
-                <>
-                  <span className="sense-examples-label">释义例句</span>
-                  <ol className="sense-examples">
-                    {currentEnrichment.senseExamples.map((example, index) => (
-                      <li
-                        className="sense-example"
-                        key={`${example.meaning}-${index}`}
-                      >
-                        <strong>{index + 1}. {(!hideSenses || sensesExpanded) ? example.meaning : ""}</strong>
-                        <p className="context-sentence">{example.sentence}</p>
-                        {(!hideSenses || sensesExpanded) && (
-                          <p className="context-translation">
-                            {example.translation}
-                          </p>
-                        )}
-                        {currentEnrichment.source === "ai" && (
-                          <div className="sense-example-quality">
-                            <small>
-                              {example.review?.status === "pending"
-                                ? "正在语义二审…"
-                                : example.review?.status === "passed"
-                                  ? "语义二审通过"
-                                  : example.review?.status === "failed"
-                                    ? `二审未通过${example.review.note ? `：${example.review.note}` : ""}`
-                                    : typeof example.confidence === "number"
-                                      ? `生成置信度 ${Math.round(example.confidence * 100)}%`
-                                      : "尚未反馈"}
-                            </small>
-                            <span>
-                              <button
-                                type="button"
-                                className="quiet"
-                                disabled={
-                                  reviewingSense !== null
-                                  || rewritingSense !== null
-                                }
-                                onClick={() => onReportSenseMismatch(index)}
-                              >
-                                {reviewingSense === index
-                                  ? "二审中…"
-                                  : "例句与义项不符"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  reviewingSense !== null
-                                  || rewritingSense !== null
-                                }
-                                onClick={() => onRewriteSenseExample(index)}
-                              >
-                                {rewritingSense === index ? "重写中…" : "只重写此条"}
-                              </button>
-                            </span>
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </>
-              ) : (
-                <>
-                  <p className="context-sentence">{current.sentence}</p>
-                  {(!hideSenses || sensesExpanded) && (
-                    <p className="context-translation">{current.translation}</p>
-                  )}
-                </>
-              )}
-              {currentEnrichment && (
-                <div className="content-meta">
-                  <small className="content-source">
-                    {currentEnrichment.source === "ai"
-                      ? "AI 生成 · 已缓存 · 未人工核验"
-                      : "词典内容"}
-                    {currentEnrichment.targetMeanings?.length
-                      ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
-                      : ""}
-                  </small>
-                  {currentEnrichment.source === "ai" && (
-                    <button
-                      type="button"
-                      onClick={onEnrichWord}
-                      disabled={
-                        enrichmentLoading || !unfamiliarMeanings.length
-                      }
-                    >
-                      {enrichmentLoading
-                        ? "重写中…"
-                        : "按未熟练义项重写"}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              className="context-block context-ai"
-              onClick={onEnrichWord}
-              disabled={enrichmentLoading || !unfamiliarMeanings.length}
-              aria-keyshortcuts="E"
-            >
-              <span>
-                内容补充 <kbd>E</kbd>
-              </span>
-              <p>
-                {!unfamiliarMeanings.length
-                  ? "全部中文义项已标记熟练"
-                  : enrichmentLoading
-                    ? "正在按未熟练义项生成并校验格式…"
-                    : reusedSentences.length
-                      ? `已有 ${reusedSentences.length} 条例句含该词可复用，仍可生成专属例句`
-                      : `按 ${unfamiliarMeanings.length} 个未熟练义项生成例句与搭配`}
-              </p>
-            </button>
           )}
 
           {/* 常用搭配 */}

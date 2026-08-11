@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
@@ -103,6 +104,42 @@ async function verifyHttpSurface() {
     }
     console.log(`跳过红宝书全量校验：${error instanceof Error ? error.message : String(error)}`);
   }
+
+  const kaoyanManifestResponse = await fetch(
+    new URL("/data/kaoyan-examples/manifest.json", baseURL),
+  );
+  if (kaoyanManifestResponse.ok) {
+    const manifest = await kaoyanManifestResponse.json();
+    if (
+      manifest?.schemaVersion !== 1
+      || manifest?.paperCount !== 46
+      || !manifest?.contentVersion
+      || !manifest?.releaseFiles
+      || !manifest?.shardHashes
+      || !manifest?.shardBytes
+    ) throw new Error("真题例句 manifest 结构无效");
+    const [prefix, filename] = Object.entries(manifest.releaseFiles)
+      .sort(([first], [second]) => first.localeCompare(second))[0] ?? [];
+    if (!prefix || typeof filename !== "string") throw new Error("真题例句 manifest 没有 shard");
+    const shardResponse = await assertResponse(`/data/kaoyan-examples/${filename}`);
+    const shardBuffer = Buffer.from(await shardResponse.arrayBuffer());
+    const shardHash = createHash("sha256").update(shardBuffer).digest("hex");
+    if (
+      shardHash !== manifest.shardHashes[prefix]
+      || shardBuffer.byteLength !== manifest.shardBytes[prefix]
+      || filename !== `${prefix}.${shardHash.slice(0, 16)}.json`
+    ) throw new Error("真题例句 shard 内容地址、哈希或字节数无效");
+    const shard = JSON.parse(shardBuffer.toString("utf8"));
+    if (
+      shard?.schemaVersion !== 1
+      || shard?.prefix !== prefix
+      || !Object.keys(shard?.examplesByWordId ?? {}).length
+    ) throw new Error("真题例句 shard JSON 结构无效");
+  } else if (kaoyanManifestResponse.status === 404) {
+    console.log("跳过真题例句库校验：本机未生成私有派生数据");
+  } else {
+    throw new Error(`真题例句 manifest 返回 ${kaoyanManifestResponse.status}，期望 200 或 404`);
+  }
   const audioIndex = await (
     await assertResponse("/data/audio-runtime-index.json")
   ).json();
@@ -192,6 +229,7 @@ async function startServer() {
     stderrPath: path.relative(root, stderrPath).replaceAll("\\", "/"),
   }, null, 2)}\n`, "utf8");
   await waitForHealth();
+  console.log(`生产冒烟服务：PID ${serverProcess.pid}；日志 ${path.relative(root, stdoutPath).replaceAll("\\", "/")} / ${path.relative(root, stderrPath).replaceAll("\\", "/")}`);
 }
 
 async function stopServer() {
@@ -209,7 +247,7 @@ try {
   await startServer();
   await verifyHttpSurface();
   await verifyClientActivation();
-  console.log("生产冒烟通过：首页已激活，静态资源、6550 词数据、音频索引和 Range 206 均有效");
+  console.log("生产冒烟通过：首页已激活，静态资源、6550 词数据、真题例句分片、音频索引和 Range 206 均有效");
 } catch (error) {
   try {
     const record = JSON.parse(await readFile(pidPath, "utf8"));
