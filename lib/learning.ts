@@ -9,6 +9,7 @@ import {
   type Grade,
 } from "ts-fsrs";
 import { canonicalWordId } from "./redbook.ts";
+import type { EtymologyCacheEntry } from "./etymology.ts";
 
 export type Rating = 0 | 1 | 2 | 3;
 export type ReviewKind = "new" | "review";
@@ -158,6 +159,7 @@ export type WordEnrichment = {
   source: "redbook" | "dictionary" | "ai";
   generatedAt?: string;
   verified?: boolean;
+  etymology?: EtymologyCacheEntry;
 };
 
 export type SenseFrequencyLevel = "high" | "medium" | "low";

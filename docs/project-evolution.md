@@ -1621,3 +1621,13 @@
 - 既有到期预测扩展为 30 个逐日本地日期点，逾期和今天进入第 1 天、第 30 天包含、第 31 天排除；标题与说明明确它只是当前 `nextDueAt` 排程快照，不是未来承诺。
 - 轨迹页提供样本量、周点/日期点可访问名称、30 天内部键盘滚动、320px 无 body 溢出及 200% / 400% 缩放可达布局；未修改 FSRS、进度写入、schema/version/store/domain 或持久化协议。
 - 当前验证：V1 66/66、typecheck、lint 0 error / 1 个既有 warning、Node 291/291、新趋势 E2E 3/3、趋势/signal-flow/responsive 联跑 25/25；固定 3000 服务已精确停止，build-info 已恢复。本批次完成并停止，不自动进入 P1 或 P2-11，不 push。
+
+## Canonical P1-7 AI 词根拆解与助记（第 70 轮）
+
+本轮：2026-08-11。
+
+- 学习卡揭示区新增显式按需生成的结构化 AI 词根拆解与记忆联想，始终披露“AI 助记 · 非词源考据”；没有首屏/切词自动请求，也不把本地模板冒充 AI。
+- 独立缓存使用 `schemaVersion: 1`、`promptVersion: etymology-v1` 和包含真实 wordId/word/meaning/root/relation 的确定性 inputKey；旧版本或输入变化缓存不作为当前结果。
+- 缓存复用现有 `WordEnrichment.etymology?` 与 enrichments 分域、备份、恢复、localStorage 降级和清空保留链；双向合并防止词根助记与例句/音标/搭配互相覆盖。未升级 STORAGE/DATABASE/备份版本，未新增 store/domain。
+- 降级顺序为有效 AI 缓存、本地 root/relation、无增强；AI 失败只显示诚实错误和重试，保留所有合法缓存与本地线索。键盘、320px、200% / 400% 缩放均通过。
+- 当前验证：聚焦 74/74、typecheck、lint 0 error / 1 个既有 warning、精选 E2E 33/33、production build + Node 300/300、production smoke 通过；dev/production 服务均精确停止，端口 3000 空闲，build-info 已恢复。本批次完成并停止，不自动进入 P1-9、P1-8 或 P2。

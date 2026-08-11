@@ -9,6 +9,7 @@ import {
   lookupWordId,
   parseStoredState,
   splitMeaning,
+  STORAGE_VERSION,
   type Review,
 } from "../lib/study.ts";
 import {
@@ -29,6 +30,7 @@ import {
 } from "../lib/learning.ts";
 import { splitWordSenses } from "../lib/word-utils.ts";
 import {
+  BACKUP_FORMAT,
   createBackupDocument,
   parseBackupDocument,
 } from "../lib/backup.ts";
@@ -38,8 +40,15 @@ import {
 } from "../lib/quiz.ts";
 import {
   combineStoredState,
+  DATABASE_VERSION,
   splitStoredState,
+  STORES,
 } from "../lib/storage.ts";
+import {
+  buildEtymologyCacheEntry,
+  type EtymologyInput,
+} from "../lib/etymology.ts";
+import { mergeWordEnrichment } from "../lib/enrichment.ts";
 import {
   addLocalDays,
   localDateKey,
@@ -79,6 +88,32 @@ function createReview(
       ?? new Date(input.dueAt).getTime() - new Date(input.reviewedAt).getTime(),
   };
 }
+
+const ETYMOLOGY_INPUT: EtymologyInput = {
+  wordId: 59,
+  word: "saving",
+  meaning: "n. 节省；存款",
+  root: "save",
+  relation: {
+    kind: "derived",
+    label: "save → saving · 派生词",
+    note: "红宝书以独立词条收录。",
+    lemma: "save",
+    independent: true,
+    confidence: "confirmed",
+  },
+};
+
+const ETYMOLOGY_ENTRY = buildEtymologyCacheEntry(
+  ETYMOLOGY_INPUT,
+  {
+    breakdown: "save + ing",
+    root: "save：保留",
+    affixes: [{ form: "-ing", kind: "suffix", meaning: "名词后缀" }],
+    mnemonic: "把省下来的钱存起来。",
+  },
+  new Date("2026-08-11T08:00:00.000Z"),
+);
 
 test("词库加载错误说明：只细分可靠的本地文件问题，其余使用通用修复步骤", () => {
   const missing = buildRedbookLoadGuidance(new Error("请求失败：404"));
@@ -1034,6 +1069,135 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
   assert.equal(snapshot.settings.ratingUndoStack.length, 1);
   assert.equal(snapshot.settings.sessionBatchSize, 15);
   assert.deepEqual(restored, state);
+});
+
+test("词根助记沿现有 enrichment 兼容读取，非法缓存只移除自身", () => {
+  const legacy = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    enrichments: {
+      59: {
+        sentence: "Saving regularly builds resilience.",
+        phonetic: "/ˈseɪvɪŋ/",
+        source: "dictionary",
+      },
+    },
+  }));
+  assert.equal(legacy.enrichments[59].etymology, undefined);
+  assert.equal(legacy.enrichments[59].sentence, "Saving regularly builds resilience.");
+
+  const valid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    enrichments: {
+      59: {
+        sentence: "Saving regularly builds resilience.",
+        phonetic: "/ˈseɪvɪŋ/",
+        source: "dictionary",
+        etymology: ETYMOLOGY_ENTRY,
+      },
+    },
+  }));
+  assert.deepEqual(valid.enrichments[59].etymology, ETYMOLOGY_ENTRY);
+
+  const invalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    enrichments: {
+      59: {
+        sentence: "Saving regularly builds resilience.",
+        phonetic: "/ˈseɪvɪŋ/",
+        source: "dictionary",
+        etymology: { ...ETYMOLOGY_ENTRY, source: "local" },
+      },
+    },
+  }));
+  assert.equal(invalid.enrichments[59].etymology, undefined);
+  assert.equal(invalid.enrichments[59].sentence, "Saving regularly builds resilience.");
+  assert.equal(invalid.enrichments[59].phonetic, "/ˈseɪvɪŋ/");
+});
+
+test("词根助记经分域、备份导入与清空学习记录完整保留", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    enrichments: {
+      59: {
+        sentence: "Saving regularly builds resilience.",
+        source: "dictionary",
+        etymology: ETYMOLOGY_ENTRY,
+      },
+    },
+  }));
+  const restoredDomain = combineStoredState(splitStoredState(state));
+  const backup = createBackupDocument(state, "2026-08-11T08:01:00.000Z");
+  const restoredBackup = parseStoredState(JSON.stringify(
+    parseBackupDocument(JSON.stringify(backup)).state,
+  ));
+
+  assert.deepEqual(restoredDomain.enrichments[59].etymology, ETYMOLOGY_ENTRY);
+  assert.deepEqual(restoredBackup.enrichments[59].etymology, ETYMOLOGY_ENTRY);
+  assert.deepEqual(clearLearningRecords(state).enrichments[59].etymology, ETYMOLOGY_ENTRY);
+});
+
+test("enrichment 双向合并保护例句、音标与词根助记", () => {
+  const existing = {
+    phonetic: "/ˈseɪvɪŋ/",
+    sentence: "Saving regularly builds resilience.",
+    translation: "定期储蓄能增强抗风险能力。",
+    senseExamples: [{
+      meaning: "节省",
+      sentence: "Saving regularly builds resilience.",
+      translation: "定期储蓄能增强抗风险能力。",
+    }],
+    collocations: ["energy saving"],
+    targetMeanings: ["节省"],
+    source: "dictionary" as const,
+    generatedAt: "2026-08-10T08:00:00.000Z",
+    verified: true,
+  };
+  const withEtymology = mergeWordEnrichment(existing, {
+    source: "dictionary",
+    etymology: ETYMOLOGY_ENTRY,
+  });
+  assert.equal(withEtymology.sentence, existing.sentence);
+  assert.equal(withEtymology.phonetic, existing.phonetic);
+  assert.deepEqual(withEtymology.senseExamples, existing.senseExamples);
+  assert.deepEqual(withEtymology.etymology, ETYMOLOGY_ENTRY);
+
+  const rewritten = mergeWordEnrichment(withEtymology, {
+    sentence: "The revised example focuses on saving resources.",
+    translation: "新例句聚焦节约资源。",
+    senseExamples: [{
+      meaning: "节省",
+      sentence: "The revised example focuses on saving resources.",
+      translation: "新例句聚焦节约资源。",
+    }],
+    collocations: ["resource saving"],
+    targetMeanings: ["节省"],
+    source: "ai",
+    generatedAt: "2026-08-11T08:00:00.000Z",
+    verified: false,
+  });
+  assert.equal(rewritten.sentence, "The revised example focuses on saving resources.");
+  assert.equal(rewritten.phonetic, existing.phonetic);
+  assert.deepEqual(rewritten.etymology, ETYMOLOGY_ENTRY);
+});
+
+test("词根助记不升级存储、数据库、store/domain 或备份格式", () => {
+  assert.equal(STORAGE_VERSION, 5);
+  assert.equal(DATABASE_VERSION, 3);
+  assert.equal(BACKUP_FORMAT, "wordloop-backup");
+  assert.deepEqual(Object.keys(STORES), [
+    "settings",
+    "reviews",
+    "wordProgress",
+    "favorites",
+    "mistakes",
+    "positions",
+    "enrichments",
+    "backups",
+    "fsrsCards",
+    "stubbornWords",
+    "quizAttempts",
+    "stateDomains",
+  ]);
 });
 
 test("每批设置变化只影响后续创建，不改写当前 activeSession 快照", () => {

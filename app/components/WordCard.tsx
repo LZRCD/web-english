@@ -25,6 +25,7 @@ import type { LookupStat, Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
 import type { RedbookLoadGuidance } from "../../lib/redbook";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
+import type { EtymologyCacheEntry } from "../../lib/etymology";
 
 type RedbookStatus = "loading" | "ready" | "error";
 type ReinforcementRating = 0 | 1;
@@ -57,6 +58,10 @@ type WordCardProps = {
   currentSenseFrequency?: SenseFrequencyEntry[];
   /** 义项考频生成中 */
   frequencyLoading: boolean;
+  /** 当前真实输入命中的 AI 词根助记缓存 */
+  currentEtymology?: EtymologyCacheEntry;
+  etymologyLoading: boolean;
+  etymologyError: string;
   /** 该词出现在这些已见例句中（跨词复用） */
   reusedSentences: ReusedSentence[];
   /** 该词在隐藏释义阶段猜错的累计次数 */
@@ -104,6 +109,7 @@ type WordCardProps = {
   onToggleMeaningFamiliar: (meaning: string) => void;
   onEnrichWord: () => void;
   onGenerateSenseFrequency: () => void;
+  onGenerateEtymology: () => void;
   /** 记录一次猜词猜错 */
   onGuessMistake: () => void;
   /** AI 判分猜词：命中任一义项即对，不看语境；返回 null 表示判分不可用，回退本地匹配 */
@@ -145,6 +151,9 @@ export default function WordCard({
   guessContextFirst,
   currentSenseFrequency,
   frequencyLoading,
+  currentEtymology,
+  etymologyLoading,
+  etymologyError,
   reusedSentences,
   guessMistakeCount,
   currentLookupStat,
@@ -174,6 +183,7 @@ export default function WordCard({
   onToggleMeaningFamiliar,
   onEnrichWord,
   onGenerateSenseFrequency,
+  onGenerateEtymology,
   onGuessMistake,
   onGuessCheck,
   onReportSenseMismatch,
@@ -265,6 +275,14 @@ export default function WordCard({
       : level === "medium"
         ? "◐ 中频"
         : "· 低频";
+  const affixKindLabel = (kind: EtymologyCacheEntry["content"]["affixes"][number]["kind"]) =>
+    kind === "prefix"
+      ? "前缀"
+      : kind === "root"
+        ? "词根"
+        : kind === "suffix"
+          ? "后缀"
+          : "构词片段";
 
   const cardClass = [
     "word-card",
@@ -606,6 +624,85 @@ export default function WordCard({
             </div>
           )}
 
+          {/* AI 词根拆解只在揭示后由用户显式生成；缓存命中时直接展示。 */}
+          {currentEtymology ? (
+            <section
+              className="etymology-card"
+              aria-label="AI 词根拆解与助记"
+              aria-busy={etymologyLoading}
+            >
+              <div className="etymology-heading">
+                <div>
+                  <h3>AI 词根拆解与助记</h3>
+                  <span>AI 助记 · 非词源考据</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onGenerateEtymology}
+                  disabled={etymologyLoading}
+                >
+                  {etymologyLoading ? "重新生成中…" : "重新生成"}
+                </button>
+              </div>
+              <dl className="etymology-content">
+                <div>
+                  <dt>拆解</dt>
+                  <dd>{currentEtymology.content.breakdown}</dd>
+                </div>
+                <div>
+                  <dt>核心词根</dt>
+                  <dd>{currentEtymology.content.root}</dd>
+                </div>
+                <div>
+                  <dt>前后缀 / 构词片段</dt>
+                  <dd>
+                    {currentEtymology.content.affixes.length ? (
+                      <ul className="etymology-affixes">
+                        {currentEtymology.content.affixes.map((affix, index) => (
+                          <li key={`${affix.form}-${affix.kind}-${index}`}>
+                            <strong>{affix.form}</strong>
+                            <span>{affixKindLabel(affix.kind)} · {affix.meaning}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span>未返回可用构词片段</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>记忆联想</dt>
+                  <dd>{currentEtymology.content.mnemonic}</dd>
+                </div>
+              </dl>
+              {etymologyError && (
+                <p className="etymology-error" role="alert">{etymologyError}</p>
+              )}
+            </section>
+          ) : (
+            <section
+              className="etymology-generate"
+              aria-label="AI 词根拆解与助记"
+              aria-busy={etymologyLoading}
+            >
+              <button
+                type="button"
+                onClick={onGenerateEtymology}
+                disabled={etymologyLoading || current.id === undefined}
+              >
+                {etymologyLoading
+                  ? "正在生成 AI 词根拆解与助记…"
+                  : etymologyError
+                    ? "重试生成 AI 词根拆解与助记"
+                    : "生成 AI 词根拆解与助记"}
+              </button>
+              <small>AI 助记仅用于记忆联想，不是权威词源考据。</small>
+              {etymologyError && (
+                <p className="etymology-error" role="alert">{etymologyError}</p>
+              )}
+            </section>
+          )}
+
           {/* 词族 */}
           {current.relation && (
             <div
@@ -616,6 +713,12 @@ export default function WordCard({
                 <strong>{current.relation.label}</strong>
                 <small>{current.relation.note}</small>
               </div>
+            </div>
+          )}
+          {!current.relation && current.root && (
+            <div className="local-root-hint">
+              <span>本地词根提示</span>
+              <p>{current.root}</p>
             </div>
           )}
 

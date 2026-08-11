@@ -1,9 +1,22 @@
+import type { WordEnrichment } from "./learning.ts";
+
 export type NormalizedSenseExample = {
   meaning: string;
   sentence: string;
   translation: string;
   confidence: number;
 };
+
+/** 只覆盖响应中真实存在的字段，防止不同内容能力互相清空。 */
+export function mergeWordEnrichment(
+  current: WordEnrichment | undefined,
+  incoming: WordEnrichment,
+): WordEnrichment {
+  const definedIncoming = Object.fromEntries(
+    Object.entries(incoming).filter(([, value]) => value !== undefined),
+  ) as WordEnrichment;
+  return { ...current, ...definedIncoming };
+}
 
 /** 严格校验每个目标释义恰好对应一条例句，并按请求顺序返回。 */
 export function normalizeSenseExamples(

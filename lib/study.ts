@@ -26,6 +26,7 @@ import {
   type QuizSessionState,
 } from "./quiz.ts";
 import { localDateKey as dateKey } from "./date-utils.ts";
+import { normalizeEtymologyCacheEntry } from "./etymology.ts";
 
 export type {
   Rating,
@@ -742,6 +743,7 @@ function normalizeEnrichments(value: unknown) {
     }
     const item = raw as Record<string, unknown>;
     if (!["redbook", "dictionary", "ai"].includes(String(item.source))) continue;
+    const etymology = normalizeEtymologyCacheEntry(item.etymology);
     result[wordId] = {
       phonetic: typeof item.phonetic === "string" ? item.phonetic : undefined,
       sentence: typeof item.sentence === "string" ? item.sentence : undefined,
@@ -811,6 +813,7 @@ function normalizeEnrichments(value: unknown) {
       source: item.source as WordEnrichment["source"],
       generatedAt: validDate(item.generatedAt)?.toISOString(),
       verified: item.verified === true,
+      ...(etymology ? { etymology } : {}),
     };
   }
   return result;

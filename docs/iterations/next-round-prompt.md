@@ -1,30 +1,34 @@
-# 第 69 轮完成 Prompt：Canonical P0-6 复习趋势与 30 天复习压力
+# 第 70 轮完成 Prompt：Canonical P1-7 AI 词根拆解与助记
 
 ## 当前状态
 
-- Canonical P0-6 已完成：轨迹页已有最近 4 个本地自然周的复习保持率/困难率趋势，以及未来 30 天到期复习的当前排程快照。
-- 实施报告：`docs/iterations/round-69.md`。
-- 单轮批次达到 1/1，STOP；不自动进入 P1 AI、P2-11 leech 或其他路线图目标，不 push。
+- Canonical P1-7 已完成：学习卡揭示区支持用户显式生成、缓存和重新生成 AI 词根拆解与记忆联想。
+- 实施报告：`docs/iterations/round-70.md`。
+- AI 内容明确标注“AI 助记 · 非词源考据”，不是权威历史词源、教材官方内容或真题词源。
+- 单轮批次达到 1/1，STOP；不自动进入 P1-9、P1-8、P2-11、提醒、真题语料或其他目标，不 push。
 
 ## 已完成契约
 
-1. 最近 4 周含本周、周一为周起点、按时间升序；历史周统计到下一周周一之前，本周只统计到 now，未来与非法事件排除。
-2. 复习保持率只统计 review：rating 0 失败，rating 1/2/3 成功；困难率只统计 review：rating 0/1 命中。两者同周 denominator 完全一致。
-3. 每个周点保留 numerator / denominator / rate；无样本显示 `— (0/0)`，有样本且 numerator 为 0 显示真实 `0% (0/N)`。
-4. 周报本周摘要与 4 周图都读取 `buildWeeklyLearningReport.reviewMetricTrend`，其内部只调用一次共享 `buildReviewMetricTrend`；页面与组件没有第二套统计公式。
-5. 未来到期继续复用 `buildReviewForecast(wordProgress, now, 30)`；逾期与今天进入第 1 天，第 30 天包含，第 31 天排除，无效 dueAt 忽略，全零仍保留 30 点。
-6. 标题与披露明确 30 天图只按当前 `nextDueAt` 计算，继续学习和评分会改变排程，不是未来承诺；没有加入新词参考线或持久化预测。
-7. 轨迹页以文本和 aria-label 同时披露指标、样本量、日期与数量；30 天图内部可键盘聚焦横向滚动，320px、200% 与 400% 缩放验证通过。
-8. 未改变 successRate、buildTrueRetention 口径、FSRS、nextDueAt 写入、ReviewKind、schema/version/store/domain、备份或其他功能。
+1. 新增唯一 `/api/etymology`，复用现有 Provider、api-guard、超时、重试、JSON 解析和密钥缺失处理；无本地伪 AI 200 fallback。
+2. 结构化内容只含 breakdown/root/affixes/mnemonic，严格 trim、裁剪、数组数量和 kind 枚举；缺少必填字段时整体拒绝缓存。
+3. etymology 缓存版本固定为 schemaVersion 1、promptVersion `etymology-v1`，inputKey 确定性包含真实 wordId、word、meaning、root 和 relation 语义；旧版本、旧 prompt 或输入变化时不显示为当前结果。
+4. 缓存只作为 `WordEnrichment.etymology?` 进入既有 enrichments 域；分域快照、IndexedDB、localStorage 兼容、备份导入/导出、恢复与清空保留均完整往返。
+5. etymology 写入保留例句、音标、翻译、搭配、义项目标、source/verified；后续整体/单条例句生成也保留 etymology。失败与非法响应不覆盖旧合法缓存。
+6. 降级顺序为当前有效 AI 缓存 → 本地 relation 词族轨道或 root-only 本地词根提示 → 无增强内容；无本地线索且 AI 失败时不生成虚构卡片。
+7. 只在揭示释义后由用户点击生成，无首屏、切词、预加载、恢复或批量自动请求，无新增快捷键；原生按钮支持 Tab、Enter/Space。
+8. AI 区域有稳定可访问名称与 aria-busy，失败有文本 alert，构词片段不只靠颜色；320px、200% 与 400% 缩放验证通过。
+9. 未修改 FSRS、QuizMode/QuizAttempt、评分、撤销、排程、ReviewEvent/Kind、SessionKind、红宝书 root/relation、考频数据或 Provider 协议。
+10. `STORAGE_VERSION = 5`、`DATABASE_VERSION = 3`、备份格式和既有 stores/domain 均未改变；`lib/storage.ts`、`lib/backup.ts` 未修改。
 
 ## 验证现场
 
-- V1 66/66，typecheck 通过，lint 0 error / 1 个既有 warning，Node 291/291，`git diff --check` 通过。
-- 新趋势 E2E 3/3；趋势、signal-flow 与 responsive 联跑 25/25。
-- 覆盖 4 周 rating 语义、空周/真实 0%、周报同源、30 天首日与第 30/31 天边界、逐日可访问名称、320px 内部滚动、键盘焦点及 200% / 400% 缩放。
-- 固定端口 3000 已释放；worker PID 29068 / listener PID 26180 已精确停止；dev 生成的 build-info 已恢复为起始 HEAD blob。
+- 红测按预期因缺少 `lib/etymology.ts` 失败；最终聚焦 74/74，typecheck 通过，lint 0 error / 1 个既有 warning，`git diff --check` 通过。
+- 新 etymology E2E 3/3；etymology、learning、data-lifecycle、responsive 联跑 33/33。
+- `npm test` production build 通过并识别 `/api/etymology`，全量 Node 300/300；production smoke 验证首页激活、静态资源、6550 词、音频索引和 Range 206。
+- dev worker/listener PID 11076/23548，production worker/listener PID 41196/41196；两种服务均精确停止，固定端口 3000 已释放。
+- build-info 已恢复为起始 HEAD blob `4410b1880754eea8e9ee2a9263d372318efac3f3`；Canonical SHA-256 保持 `334108484E19A792F9C5DAD2E50BC644EF4F0AB3097B45EDAD43A4267C1DA90F`。
 
 ## 等待规则
 
-- P0-6 已完成并停止，不自动进入 P1、P2-11、提醒、真题语料或其他目标。
-- 后续目标必须由用户重新授权并执行新的 Round 0；当前检查点不构成任何后续实施授权。
+- P1-7 已完成并停止，当前检查点不构成 P1-9 或任何其他路线图目标的实施授权。
+- P1-9 必须由用户重新授权，并从新的 Round 0 开始重新核对分支/HEAD、tracked/index、保护文件、Provider/缓存/恢复链与端口归属。

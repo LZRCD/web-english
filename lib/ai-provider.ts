@@ -1,5 +1,5 @@
 // lib/ai-provider.ts
-// 云端模型 Provider 的唯一实现：5 个 API 路由（coach/enrich/review/lookup/sense-frequency）
+// 云端模型 Provider 的唯一实现：6 个 API 路由（coach/enrich/review/lookup/sense-frequency/etymology）
 // 共用的环境变量读取、/chat/completions 请求构造、Markdown JSON 清理、响应提取与重试。
 // 各路由保留自己的错误文案、no-key 分支、参数值与日志前缀，行为逐字节与原实现一致。
 import { readJsonBody } from "./api-guard.ts";

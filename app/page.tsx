@@ -107,6 +107,10 @@ import {
   useStudySession,
 } from "./hooks/useStudySession";
 import { useSyncedRefs } from "./hooks/useSyncedRefs";
+import {
+  etymologyInputForWord,
+  isCurrentEtymologyCache,
+} from "../lib/etymology";
 import BooksView from "./components/BooksView";
 import CoachPanel from "./components/CoachPanel";
 import HistoryView from "./components/HistoryView";
@@ -813,12 +817,18 @@ export default function Home() {
     }
     return list.slice(0, 6);
   }, [currentEnrichment, currentReusedSentences]);
+  const currentEtymology = useMemo(() => {
+    const input = etymologyInputForWord(current);
+    const entry = currentEnrichment?.etymology;
+    return input && isCurrentEtymologyCache(entry, input) ? entry : undefined;
+  }, [current, currentEnrichment?.etymology]);
 
   const {
     aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
     enrichmentLoading,
     reviewingSense, rewritingSense,
     frequencyLoading, generateSenseFrequency,
+    etymologyLoading, etymologyError, generateEtymology,
     setAiOpen, setAiInput, setAiAnswer, setAiMode,
     submitCoach, askCoach, enrichCurrentWord,
     reportSenseMismatch, rewriteSenseExample,
@@ -2443,6 +2453,9 @@ export default function Home() {
                   current.id === undefined ? undefined : senseFrequency[current.id]
                 }
                 frequencyLoading={frequencyLoading}
+                currentEtymology={currentEtymology}
+                etymologyLoading={etymologyLoading}
+                etymologyError={etymologyError}
                 reusedSentences={currentReusedSentences}
                 guessMistakeCount={
                   current.id === undefined ? 0 : guessMistakes[current.id] ?? 0
@@ -2490,6 +2503,7 @@ export default function Home() {
                 onToggleMeaningFamiliar={toggleMeaningFamiliar}
                 onEnrichWord={enrichCurrentWord}
                 onGenerateSenseFrequency={generateSenseFrequency}
+                onGenerateEtymology={generateEtymology}
                 onGuessMistake={recordGuessMistake}
                 onGuessCheck={checkGuessWithAi}
                 onReportSenseMismatch={reportSenseMismatch}

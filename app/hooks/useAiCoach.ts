@@ -10,6 +10,12 @@ import {
 import type { SenseExample, SenseFrequencyEntry, SenseFrequencyMap, WordEnrichment } from "../../lib/learning";
 import type { Word } from "../../lib/study";
 import { buildLocalCoach, splitWordSenses } from "../../lib/word-utils";
+import {
+  buildEtymologyCacheEntry,
+  etymologyInputForWord,
+  normalizeEtymologyContent,
+} from "../../lib/etymology";
+import { mergeWordEnrichment } from "../../lib/enrichment";
 
 type UseAiCoachOptions = {
   current: Word;
@@ -47,10 +53,16 @@ export function useAiCoach({
   const [reviewingSense, setReviewingSense] = useState<number | null>(null);
   const [rewritingSense, setRewritingSense] = useState<number | null>(null);
   const [frequencyLoading, setFrequencyLoading] = useState(false);
+  const [etymologyLoadingWordId, setEtymologyLoadingWordId] = useState<number | null>(null);
+  const [etymologyError, setEtymologyError] = useState<{
+    wordId: number;
+    message: string;
+  } | null>(null);
 
   // 保持 current 引用最新，避免闭包陷阱
   const currentRef = useRef(current);
   const enrichmentsRef = useRef(enrichments);
+  const etymologyRequestRef = useRef<number | null>(null);
   useEffect(() => {
     currentRef.current = current;
     enrichmentsRef.current = enrichments;
@@ -246,7 +258,10 @@ export function useAiCoach({
       if (!response.ok || data.source !== "ai") {
         throw new Error(data.error ?? "内容补充失败");
       }
-      setEnrichments((items) => ({ ...items, [word.id!]: data }));
+      setEnrichments((items) => ({
+        ...items,
+        [word.id!]: mergeWordEnrichment(items[word.id!], data),
+      }));
       onNotify(
         `已按 ${unfamiliarMeanings.length} 个未熟练义项生成并缓存`,
         2400,
@@ -276,6 +291,62 @@ export function useAiCoach({
       );
     } finally {
       setEnrichmentLoading(false);
+    }
+  }
+
+  /** 仅由揭示区显式动作触发；结果按请求开始时的真实 wordId 合并写回。 */
+  async function generateEtymology() {
+    const word = currentRef.current;
+    const input = etymologyInputForWord(word);
+    if (!input || etymologyRequestRef.current !== null) return;
+    const wordId = input.wordId;
+    etymologyRequestRef.current = wordId;
+    setEtymologyLoadingWordId(wordId);
+    setEtymologyError((currentError) =>
+      currentError?.wordId === wordId ? null : currentError);
+    try {
+      const response = await fetch("/api/etymology", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: input.word,
+          meaning: input.meaning,
+          root: input.root ?? "",
+          relation: input.relation,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const data = await response.json() as unknown;
+      const error = data && typeof data === "object" && !Array.isArray(data)
+        && typeof (data as { error?: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : "AI 词根助记生成失败，请稍后重试";
+      const content = normalizeEtymologyContent(data);
+      if (!response.ok || !content) throw new Error(error);
+
+      const entry = buildEtymologyCacheEntry(input, content, new Date());
+      setEnrichments((items) => ({
+        ...items,
+        [wordId]: mergeWordEnrichment(items[wordId], {
+          source: items[wordId]?.source ?? "redbook",
+          etymology: entry,
+        }),
+      }));
+      setEtymologyError(null);
+      onNotify("AI 词根拆解与助记已生成并缓存", 2200);
+    } catch (error) {
+      const message = error instanceof DOMException && error.name === "TimeoutError"
+        ? "AI 请求超时，本地词根与词族线索仍会保留"
+        : error instanceof Error
+          ? error.message
+          : "AI 词根助记生成失败，本地线索仍会保留";
+      setEtymologyError({ wordId, message });
+      onNotify(message, 2600);
+    } finally {
+      if (etymologyRequestRef.current === wordId) {
+        etymologyRequestRef.current = null;
+        setEtymologyLoadingWordId(null);
+      }
     }
   }
 
@@ -355,6 +426,12 @@ export function useAiCoach({
     reviewingSense,
     rewritingSense,
     frequencyLoading,
+    etymologyLoading: current.id !== undefined
+      && etymologyLoadingWordId === current.id,
+    etymologyError: current.id !== undefined
+      && etymologyError?.wordId === current.id
+      ? etymologyError.message
+      : "",
     setAiOpen,
     setAiInput,
     setAiAnswer,
@@ -363,6 +440,7 @@ export function useAiCoach({
     askCoach,
     enrichCurrentWord,
     generateSenseFrequency,
+    generateEtymology,
     reportSenseMismatch,
     rewriteSenseExample,
   } as const;

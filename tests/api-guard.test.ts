@@ -12,6 +12,29 @@ import {
   parseJsonContent,
   withRetry,
 } from "../lib/ai-provider.ts";
+import {
+  buildEtymologyCacheEntry,
+  buildEtymologyInputKey,
+  isCurrentEtymologyCache,
+  normalizeEtymologyCacheEntry,
+  normalizeEtymologyContent,
+  type EtymologyInput,
+} from "../lib/etymology.ts";
+
+const ETYMOLOGY_INPUT: EtymologyInput = {
+  wordId: 59,
+  word: "saving",
+  meaning: "n. 节省；存款",
+  root: "save",
+  relation: {
+    kind: "derived",
+    label: "save → saving · 派生词",
+    note: "红宝书以独立词条收录。",
+    lemma: "save",
+    independent: true,
+    confidence: "confirmed",
+  },
+};
 
 test("请求体在 JSON 解析前按字节上限拒绝", async () => {
   const declared = new Request("http://localhost/api", {
@@ -158,6 +181,141 @@ test("parseJsonContent 清理 Markdown 围栏并解析 JSON", () => {
   assert.deepEqual(parseJsonContent('```\n{"b": 2}\n```'), { b: 2 });
   assert.deepEqual(parseJsonContent('{"c": [1, 2]}'), { c: [1, 2] });
   assert.throws(() => parseJsonContent("not json"));
+
+  assert.deepEqual(normalizeEtymologyContent(parseJsonContent(`\`\`\`json
+    {
+      "breakdown": " save + ing ",
+      "root": " save：保留 ",
+      "affixes": [{ "form": " -ing ", "kind": "suffix", "meaning": " 名词后缀 " }],
+      "mnemonic": " 把省下来的钱存起来。 "
+    }
+  \`\`\``)), {
+    breakdown: "save + ing",
+    root: "save：保留",
+    affixes: [{ form: "-ing", kind: "suffix", meaning: "名词后缀" }],
+    mnemonic: "把省下来的钱存起来。",
+  });
+});
+
+test("词根助记结构化解析裁剪字段、过滤非法片段并限制数量", () => {
+  const content = normalizeEtymologyContent({
+    breakdown: `  ${"b".repeat(400)}  `,
+    root: `  ${"r".repeat(160)}  `,
+    mnemonic: `  ${"m".repeat(600)}  `,
+    affixes: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        form: `  form-${index}${"x".repeat(50)}  `,
+        kind: index % 2 === 0 ? "root" : "suffix",
+        meaning: `  meaning-${index}${"y".repeat(140)}  `,
+      })),
+      { form: "bad", kind: "history", meaning: "非法枚举" },
+      { form: 1, kind: "root", meaning: "非字符串" },
+      { form: "", kind: "prefix", meaning: "空片段" },
+    ],
+  });
+
+  assert.ok(content);
+  assert.equal(content.breakdown.length, 320);
+  assert.equal(content.root.length, 120);
+  assert.equal(content.mnemonic.length, 500);
+  assert.equal(content.affixes.length, 8);
+  assert.ok(content.affixes.every((item) => item.form.length <= 40));
+  assert.ok(content.affixes.every((item) => item.meaning.length <= 120));
+  assert.ok(content.affixes.every((item) =>
+    ["prefix", "root", "suffix", "other"].includes(item.kind)));
+});
+
+test("词根助记解析把非数组片段视为空并拒绝缺少必填字段", () => {
+  assert.deepEqual(normalizeEtymologyContent({
+    breakdown: "radi + ate",
+    root: "radi：光线",
+    affixes: "not-array",
+    mnemonic: "像光线一样向外散发。",
+  })?.affixes, []);
+
+  for (const missing of ["breakdown", "root", "mnemonic"] as const) {
+    const value: Record<string, unknown> = {
+      breakdown: "radi + ate",
+      root: "radi：光线",
+      affixes: [],
+      mnemonic: "像光线一样向外散发。",
+    };
+    delete value[missing];
+    assert.equal(normalizeEtymologyContent(value), null);
+  }
+  assert.equal(normalizeEtymologyContent(null), null);
+});
+
+test("词根助记 inputKey 对同一真实输入稳定且任一语义变化都会失效", () => {
+  const key = buildEtymologyInputKey(ETYMOLOGY_INPUT);
+  assert.equal(buildEtymologyInputKey(structuredClone(ETYMOLOGY_INPUT)), key);
+  assert.match(key, /"schemaVersion":1/);
+  assert.match(key, /"promptVersion":"etymology-v1"/);
+  assert.match(key, /"wordId":59/);
+
+  const changes: EtymologyInput[] = [
+    { ...ETYMOLOGY_INPUT, wordId: 60 },
+    { ...ETYMOLOGY_INPUT, word: "saved" },
+    { ...ETYMOLOGY_INPUT, meaning: "adj. 已保存的" },
+    { ...ETYMOLOGY_INPUT, root: "serv" },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, kind: "inflection" } },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, label: "新标签" } },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, note: "新说明" } },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, lemma: "saved" } },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, independent: false } },
+    { ...ETYMOLOGY_INPUT, relation: { ...ETYMOLOGY_INPUT.relation!, confidence: "source-confirmed" } },
+  ];
+  for (const changed of changes) {
+    assert.notEqual(buildEtymologyInputKey(changed), key);
+  }
+});
+
+test("词根助记缓存保留版本、输入身份、时间和 AI 来源", () => {
+  const content = normalizeEtymologyContent({
+    breakdown: "save + ing",
+    root: "save：保留",
+    affixes: [{ form: "-ing", kind: "suffix", meaning: "名词后缀" }],
+    mnemonic: "把省下来的钱存起来。",
+  })!;
+  const entry = buildEtymologyCacheEntry(
+    ETYMOLOGY_INPUT,
+    content,
+    new Date("2026-08-11T08:00:00.000Z"),
+  );
+
+  assert.deepEqual(entry, {
+    schemaVersion: 1,
+    promptVersion: "etymology-v1",
+    inputKey: buildEtymologyInputKey(ETYMOLOGY_INPUT),
+    content,
+    generatedAt: "2026-08-11T08:00:00.000Z",
+    source: "ai",
+  });
+  assert.deepEqual(normalizeEtymologyCacheEntry(entry), entry);
+  assert.equal(isCurrentEtymologyCache(entry, ETYMOLOGY_INPUT), true);
+  assert.equal(isCurrentEtymologyCache({ ...entry, schemaVersion: 2 } as never, ETYMOLOGY_INPUT), false);
+  assert.equal(isCurrentEtymologyCache({ ...entry, promptVersion: "etymology-v0" } as never, ETYMOLOGY_INPUT), false);
+  assert.equal(isCurrentEtymologyCache({ ...entry, inputKey: "old-input" }, ETYMOLOGY_INPUT), false);
+});
+
+test("词根助记缓存忽略非法时间、来源和内容结构", () => {
+  const valid = buildEtymologyCacheEntry(
+    ETYMOLOGY_INPUT,
+    {
+      breakdown: "save + ing",
+      root: "save：保留",
+      affixes: [],
+      mnemonic: "把省下来的钱存起来。",
+    },
+    new Date("2026-08-11T08:00:00.000Z"),
+  );
+  assert.equal(normalizeEtymologyCacheEntry({ ...valid, generatedAt: "invalid" }), undefined);
+  assert.equal(normalizeEtymologyCacheEntry({ ...valid, source: "local" }), undefined);
+  assert.equal(normalizeEtymologyCacheEntry({
+    ...valid,
+    content: { ...valid.content, mnemonic: "" },
+  }), undefined);
+  assert.equal(normalizeEtymologyCacheEntry({ ...valid, inputKey: "" }), undefined);
 });
 
 test("chatCompletion 构造请求体、携带超时信号并提取 choices 内容", async () => {

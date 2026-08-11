@@ -1185,6 +1185,155 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+.etymology-card,
+.etymology-generate,
+.local-root-hint {
+  min-width: 0;
+  margin-bottom: 12px;
+  border: 1px solid #d8e4ef;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f5f8fc, #fbfcfd);
+  color: #27352e;
+  overflow-wrap: anywhere;
+}
+
+.etymology-card {
+  padding: 15px 16px;
+}
+
+.etymology-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.etymology-heading > div {
+  min-width: 0;
+}
+
+.etymology-heading h3 {
+  margin: 0 0 4px;
+  font: 700 14px/1.35 system-ui, sans-serif;
+}
+
+.etymology-heading span,
+.etymology-generate small {
+  display: block;
+  color: #69788a;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.etymology-heading button,
+.etymology-generate button {
+  min-height: 36px;
+  border: 1px solid #aebfd1;
+  border-radius: 10px;
+  background: #fff;
+  color: #395d7b;
+  padding: 7px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: normal;
+}
+
+.etymology-heading button:disabled,
+.etymology-generate button:disabled {
+  color: #8c98a4;
+  cursor: default;
+}
+
+.etymology-content {
+  display: grid;
+  gap: 9px;
+  margin: 13px 0 0;
+}
+
+.etymology-content > div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.etymology-content dt {
+  color: #6b7f91;
+  font: 700 9px/1.55 "Courier New", monospace;
+  letter-spacing: 0.04em;
+}
+
+.etymology-content dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.etymology-affixes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.etymology-affixes li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  min-width: 0;
+}
+
+.etymology-affixes strong {
+  color: #315f7f;
+}
+
+.etymology-affixes span {
+  color: #66756b;
+}
+
+.etymology-generate {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+}
+
+.etymology-generate button {
+  width: 100%;
+}
+
+.etymology-error {
+  margin: 9px 0 0;
+  color: #8c4d3d;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.local-root-hint {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f6faf7;
+  border-color: #dcebe2;
+}
+
+.local-root-hint span {
+  color: #459b75;
+  font: 700 9px/1.5 "Courier New", monospace;
+}
+
+.local-root-hint p {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .word-relation {
   display: grid;
   grid-template-columns: 72px 1fr;
@@ -4742,6 +4891,16 @@ kbd {
     grid-template-columns: 1fr;
     gap: 6px;
     padding: 12px 14px;
+  }
+
+  .etymology-content > div,
+  .local-root-hint {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .etymology-heading button {
+    width: 100%;
   }
 
   .context-sentence {
