@@ -8,6 +8,9 @@ import {
 
 type WelcomeScreenProps = {
   onBegin: () => void;
+  onStartVocabTest: () => void;
+  vocabTestReady: boolean;
+  inactive?: boolean;
 };
 
 const GUIDE_STEPS = [
@@ -28,7 +31,12 @@ const GUIDE_STEPS = [
   },
 ] as const;
 
-export default function WelcomeScreen({ onBegin }: WelcomeScreenProps) {
+export default function WelcomeScreen({
+  onBegin,
+  onStartVocabTest,
+  vocabTestReady,
+  inactive = false,
+}: WelcomeScreenProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const nextButtonRef = useRef<HTMLButtonElement>(null);
   const step = GUIDE_STEPS[stepIndex];
@@ -53,6 +61,7 @@ export default function WelcomeScreen({ onBegin }: WelcomeScreenProps) {
       aria-modal="true"
       aria-labelledby="welcome-title"
       aria-describedby="welcome-description"
+      inert={inactive}
     >
       <div className="welcome-card">
         <span className="welcome-mark" aria-hidden="true">
@@ -72,6 +81,22 @@ export default function WelcomeScreen({ onBegin }: WelcomeScreenProps) {
           {GUIDE_STEPS.map((item, index) => (
             <span key={item.title} className={index === stepIndex ? "active" : ""} />
           ))}
+        </div>
+
+        <div className="welcome-vocab-entry">
+          <button
+            type="button"
+            onClick={onStartVocabTest}
+            disabled={!vocabTestReady}
+            aria-describedby="welcome-vocab-status"
+          >
+            先测词汇量
+          </button>
+          <small id="welcome-vocab-status">
+            {vocabTestReady
+              ? "约 60 题纯本地自评，不会完成引导或写入学习记录"
+              : "本地红宝书正在载入，载入完成后即可测试"}
+          </small>
         </div>
 
         <div className="welcome-actions">

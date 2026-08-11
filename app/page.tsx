@@ -115,6 +115,7 @@ import SelectionLookupPopup from "./components/SelectionLookupPopup";
 import SessionCompleteView from "./components/SessionCompleteView";
 import SettingsView from "./components/SettingsView";
 import WelcomeScreen from "./components/WelcomeScreen";
+import VocabTestView from "./components/VocabTestView";
 import WordCard from "./components/WordCard";
 import WordbookView from "./components/WordbookView";
 import {
@@ -205,6 +206,7 @@ export default function Home() {
   const [studyScope, setStudyScope] = useState<StudyScope>("selection");
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
+  const [vocabTestSource, setVocabTestSource] = useState<"welcome" | "wordbook" | null>(null);
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [hideChineseMeaning, setHideChineseMeaning] = useState(false);
@@ -238,6 +240,7 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const reinforcementInputRef = useRef<HTMLInputElement>(null);
   const wordCardRef = useRef<HTMLElement>(null);
+  const vocabTestTriggerRef = useRef<HTMLElement | null>(null);
   const previousSessionCompleteRef = useRef(sessionComplete);
   const toastTimerRef = useRef<number | undefined>(undefined);
   const ratingUndoTimerRef = useRef<number | undefined>(undefined);
@@ -373,6 +376,11 @@ export default function Home() {
     setDictionaryPhonetics,
   });
   const redbookReady = redbookStatus === "ready";
+  const vocabTestWords = useMemo(
+    () => redbookWords.filter((word) => isPrimaryLearningWord(word.id)),
+    [redbookWords],
+  );
+  const vocabTestReady = redbookReady && vocabTestWords.length > 0;
   const isFavorite = current.id !== undefined
     && favorites.some((item) => item.wordId === current.id);
   const stats = useMemo(
@@ -1268,6 +1276,7 @@ export default function Home() {
     selectionLookup: selectionLookupRef,
     sessionComplete: sessionCompleteRef,
     operationInProgress: dataOperationRef,
+    vocabTestOpen: vocabTestOpenRef,
   } = useSyncedRefs({
     started,
     activeView,
@@ -1282,11 +1291,13 @@ export default function Home() {
     selectionLookup,
     sessionComplete,
     operationInProgress,
+    vocabTestOpen: vocabTestSource !== null,
   });
 
   useKeyboardShortcuts({
     paused: () =>
       dataOperationRef.current
+      || vocabTestOpenRef.current
       || aiOpenRef.current
       || searchOpenRef.current
       || selectionLookupRef.current !== undefined,
@@ -1294,6 +1305,10 @@ export default function Home() {
       {
         key: "Escape",
         action: () => {
+          if (vocabTestOpenRef.current) {
+            closeVocabTest();
+            return;
+          }
           setSearchOpen(false);
           setAiOpen(false);
           closeSelectionLookup();
@@ -1416,6 +1431,33 @@ export default function Home() {
     // 默认主入口 = 今日任务；无可用队列时退回自由学习（额外练习）
     if (redbookReadyRef.current && startTodaySession()) return;
     beginLearning();
+  }
+
+  function openVocabTest(source: "welcome" | "wordbook") {
+    if (!vocabTestReady) {
+      showToast("本地红宝书载入后即可测试", 1800);
+      return;
+    }
+    vocabTestTriggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setSearchOpen(false);
+    setAiOpen(false);
+    closeSelectionLookup();
+    setVocabTestSource(source);
+  }
+
+  function closeVocabTest() {
+    const trigger = vocabTestTriggerRef.current;
+    setVocabTestSource(null);
+    vocabTestTriggerRef.current = null;
+    requestAnimationFrame(() => trigger?.focus());
+  }
+
+  function startVocabTestLearning(wordIds: number[]) {
+    setVocabTestSource(null);
+    vocabTestTriggerRef.current = null;
+    startSession("vocab-test", "词汇量测试补漏", wordIds);
   }
 
   function rateWord(rating: number, skipReinforcement = false) {
@@ -1971,6 +2013,11 @@ export default function Home() {
         },
       };
     }
+    if (sourceKind === "vocab-test") {
+      // 该函数仅会在按钮点击后执行，规则无法跨辅助函数识别事件边界。
+      // eslint-disable-next-line react-hooks/refs
+      return { label: "完成补漏学习", onClick: () => returnToFreeStudy() };
+    }
     if (!sourceKind) return undefined;
     const tab = sourceKind === "favorites"
       ? "favorites"
@@ -2106,7 +2153,22 @@ export default function Home() {
       className="app-shell"
       aria-busy={operationInProgress || loadStatus === "loading"}
     >
-      {!started && <WelcomeScreen onBegin={beginFromWelcome} />}
+      {!started && (
+        <WelcomeScreen
+          onBegin={beginFromWelcome}
+          onStartVocabTest={() => openVocabTest("welcome")}
+          vocabTestReady={vocabTestReady}
+          inactive={vocabTestSource !== null}
+        />
+      )}
+      {vocabTestSource && (
+        <VocabTestView
+          words={vocabTestWords}
+          source={vocabTestSource}
+          onExit={closeVocabTest}
+          onStartLearning={startVocabTestLearning}
+        />
+      )}
       {(operationInProgress || loadStatus === "loading") && (
         <div
           className="data-operation-shield"
@@ -2124,7 +2186,7 @@ export default function Home() {
       <aside
         className="side-rail"
         aria-label="主导航"
-        inert={!started || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
       >
         <button className="brand" onClick={() => setActiveView("learn")} aria-label="词环首页">
           <span className="brand-orbit"><i /></span>
@@ -2167,7 +2229,7 @@ export default function Home() {
 
       <section
         className="workspace"
-        inert={!started || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
       >
         <header className={activeView === "learn" ? "topbar learn-topbar" : "topbar"}>
           <div>
@@ -2450,6 +2512,8 @@ export default function Home() {
             onStartMistakes={startMistakeSession}
             onStartStubborn={startStubbornSession}
             onStartLookups={startLookupSession}
+            onStartVocabTest={() => openVocabTest("wordbook")}
+            vocabTestReady={vocabTestReady}
             onExportWeakCandidateCsv={exportWeakCandidateCsv}
             onRemoveLookup={(item) => {
               const identity = lookupIdentity(item);
@@ -2617,7 +2681,7 @@ export default function Home() {
         )}
       </section>
 
-      {selectionLookup && (
+      {selectionLookup && vocabTestSource === null && (
         <SelectionLookupPopup
           lookup={selectionLookup}
           senseFrequency={
@@ -2635,7 +2699,7 @@ export default function Home() {
       )}
 
       <CoachPanel
-        open={aiOpen && reinforcementRating === null}
+        open={vocabTestSource === null && aiOpen && reinforcementRating === null}
         word={current.word}
         meaning={currentMeaning.meaning}
         aiMode={aiMode}
@@ -2648,7 +2712,7 @@ export default function Home() {
         onClose={() => setAiOpen(false)}
       />
 
-      {searchOpen && (
+      {searchOpen && vocabTestSource === null && (
         <SearchPanel
           open={searchOpen}
           query={searchQuery}

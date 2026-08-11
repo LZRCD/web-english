@@ -35,6 +35,8 @@ type WordbookViewProps = {
   onStartMistakes: () => void;
   onStartStubborn: () => void;
   onStartLookups: (wordIds?: number[]) => void;
+  onStartVocabTest: () => void;
+  vocabTestReady: boolean;
   /** 导出薄弱候选清单 CSV（复用 buildSprintCsv） */
   onExportWeakCandidateCsv: () => void;
   onRemoveLookup: (word: LookupWord) => void;
@@ -62,6 +64,8 @@ export default function WordbookView({
   onStartMistakes,
   onStartStubborn,
   onStartLookups,
+  onStartVocabTest,
+  vocabTestReady,
   onExportWeakCandidateCsv,
   onRemoveLookup,
   onNavigateLearn,
@@ -159,6 +163,16 @@ export default function WordbookView({
           <span><strong>{mistakeWords.length}</strong> 个错词</span>
           <span><strong>{stubbornWordList.length}</strong> 个顽固词</span>
           <span><strong>{lookupWords.length}</strong> 个划词</span>
+        </div>
+        <div className="wordbook-vocab-action">
+          <button
+            type="button"
+            onClick={onStartVocabTest}
+            disabled={!vocabTestReady}
+          >
+            测试我的词汇量
+          </button>
+          {!vocabTestReady && <small>本地红宝书载入后可用</small>}
         </div>
         <div className="wordbook-batch-actions">
           <button onClick={batchAction.run} disabled={batchAction.disabled}>

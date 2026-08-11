@@ -21,6 +21,7 @@ export type SessionKind =
   | "search"
   | "lookups"
   | "sprint"
+  | "vocab-test"
   | "reinforcement";
 
 export type ReviewEvent = {
@@ -698,6 +699,10 @@ export function buildStudyWordSource(input: {
     sprint: {
       label: "薄弱冲刺",
       description: "这个词来自当前薄弱冲刺会话。",
+    },
+    "vocab-test": {
+      label: "词汇量测试补漏",
+      description: "这个词来自你刚完成词汇量测试时标记的“不认识”词。",
     },
     reinforcement: {
       label: "本轮再强化",

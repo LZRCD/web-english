@@ -1,25 +1,27 @@
-# 第 65 轮完成 Prompt：Canonical P0-1 考义高亮
+# 第 66 轮完成 Prompt：Canonical P0-2 词汇量测试
 
 ## 当前状态
 
-- Canonical P0-1 已完成：学习卡与红宝书划词弹窗现在一致突出 `senseFrequency` 中的 high 义项。
-- 实施报告：`docs/iterations/round-65.md`。
-- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-2，不 push。
+- Canonical P0-2 已完成：欢迎页和词本页顶部均可进入纯本地红宝书分层词汇量自评，并可把真实“不认识”词转入补漏学习。
+- 实施报告：`docs/iterations/round-66.md`。
+- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-3 每日学习提醒，不 push。
 
 ## 已完成契约
 
-1. `WordCard` 的 high 义项使用稳定语义 class、浅底、轻边框和 700 字重；与 `familiar`、hover、focus-visible 正确组合。
-2. 划词弹窗只复用页面现有缓存；`linkedWordId` 命中时通过 `splitWordSenses` 拆分并按精确 meaning 标记 high。
-3. medium/low、无考频、无关联 ID、ECDICT 与 AI 结果不伪造高频标签；发音、翻译、划词入库、关闭和焦点恢复保持不变。
-4. 未修改 API、schema、IndexedDB、FSRS、评分、队列或学习记录。
+1. 只使用 `isPrimaryLearningWord` 认可的 6549 个真实学习项；三个分册按现有词序每 100 词分层，正常访问 6 / 11 / 3 层并形成 18 / 33 / 9 共 60 题。
+2. 固定 seed 抽样、方向自适应、边界收敛、估算夹取和“不认识”去重集中在 `lib/vocab-test.ts` 纯函数中；同一会话不重复层或 word ID。
+3. 结果只披露分层抽样自评估算，分别限制在 1856 / 3680 / 1014 和总量 6550；不宣称学习完成、FSRS 掌握或考研达标。
+4. 测试答案不持久化；只有点击补漏后才以真实 word ID 创建 `vocab-test` 会话，学习卡来源为“词汇量测试补漏”，评分前不产生 FSRS、错词或薄弱证据。
+5. 欢迎页进入/退出不完成首次引导，词本退出恢复原 tab；覆盖层隔离背景交互并恢复触发焦点，320px 无横向溢出。
+6. 未新增 AI/API、缓存表或 IndexedDB 版本，未修改红宝书源数据、FSRS、评分、今日队列或其他 Canonical 目标。
 
 ## 验证现场
 
-- 定向 53/53，typecheck 通过，lint 0 error / 1 个既有 warning，Node 258/258。
-- 新增唯一标题 E2E 1/1，相关划词回归 4/4；320px 无横向溢出。
+- 定向 70/70，typecheck 通过，lint 0 error / 1 个既有 warning，Node 269/269。
+- 新增唯一标题 E2E 2/2；欢迎页、词本和响应式相关回归合计 8/8；320px 与焦点恢复通过。
 - 固定端口 3000 已释放；生成的 build-info 噪声已恢复。
 
 ## 等待规则
 
 - 本目标已完成并停止。
-- 若继续 Canonical P0-2「词汇量测试」或其他目标，需重新明确授权并执行新的 Round 0；不得顺带修改考频数据、FSRS、评分、队列或用户学习数据。
+- 不自动实施 Canonical P0-3「每日学习提醒」。若继续该目标或其他目标，需重新明确授权并执行新的 Round 0；不得顺带修改通知权限、FSRS、评分、队列或用户学习数据。

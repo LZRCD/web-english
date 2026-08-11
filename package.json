@@ -26,7 +26,7 @@
     "start": "node scripts/start-production.mjs",
     "smoke:production": "node scripts/production-smoke.mjs",
     "test": "npm run build && npm run test:unit",
-    "test:unit": "node --experimental-strip-types --test tests/rendered-html.test.mjs tests/study.test.ts tests/quiz.test.ts tests/insights.test.ts tests/data-integrity.test.ts tests/session-summary.test.ts tests/study-session.test.ts tests/performance-diagnostics.test.ts tests/performance-baseline-analysis.test.mjs tests/data-provenance-verification.test.mjs tests/production-server.test.mjs tests/launcher.test.mjs tests/api-guard.test.ts tests/sentence-index.test.ts tests/weak-signals.test.ts tests/sense-frequency.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/rendered-html.test.mjs tests/study.test.ts tests/quiz.test.ts tests/insights.test.ts tests/data-integrity.test.ts tests/session-summary.test.ts tests/study-session.test.ts tests/vocab-test.test.ts tests/performance-diagnostics.test.ts tests/performance-baseline-analysis.test.mjs tests/data-provenance-verification.test.mjs tests/production-server.test.mjs tests/launcher.test.mjs tests/api-guard.test.ts tests/sentence-index.test.ts tests/weak-signals.test.ts tests/sense-frequency.test.ts",
     "test:e2e": "playwright test --config playwright.config.mjs",
     "test:e2e:production": "node scripts/production-baseline.mjs --e2e",
     "perf:baseline": "node scripts/performance-baseline.mjs",
