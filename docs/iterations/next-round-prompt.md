@@ -1,29 +1,30 @@
-# 第 68 轮完成 Prompt：Canonical P0-5 文章批量提取生词
+# 第 69 轮完成 Prompt：Canonical P0-6 复习趋势与 30 天复习压力
 
 ## 当前状态
 
-- Canonical P0-5 已完成：词本页可粘贴英文文章，纯本地分析并按来源/学习状态预览、筛选和选择；用户确认后才保存选中的新 ECDICT 词并创建可恢复的 article 学习会话。
-- 实施报告：`docs/iterations/round-68.md`。
-- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-6，不 push。
+- Canonical P0-6 已完成：轨迹页已有最近 4 个本地自然周的复习保持率/困难率趋势，以及未来 30 天到期复习的当前排程快照。
+- 实施报告：`docs/iterations/round-69.md`。
+- 单轮批次达到 1/1，STOP；不自动进入 P1 AI、P2-11 leech 或其他路线图目标，不 push。
 
 ## 已完成契约
 
-1. tokenizer 归一大小写、ASCII/弯撇号和不同连字符，去重并保留首次出现顺序；文本框最多 20,000 字符，只分析前 200 个不同 token，并披露真实截断数。
-2. 候选固定按红宝书、既有 lookup、ECDICT、未命中解析；最多 4 个并发 ECDICT 查询，复用既有 Range/prefix/fallback/版本/诊断链，未命中和词典故障分开统计。
-3. 预览显示未学习、学习中、复习中、项目内已掌握；mastered 默认隐藏且不默认选择，可展开手选；筛选不重排候选或清除其他选择。
-4. 分析阶段不写 lookupWords、lookupStats、评分、进度、错词、activeSession、今日任务或 FSRS；不调用 API/AI，不保存文章原文、分析历史或候选选择。
-5. 确认时从当前 lookupWords 做一次逐步投影，只保存选中的新 ECDICT 候选，并沿既有身份链取得真实 ID；article 会话 wordIds 去重且保持文章顺序。
-6. article 会话与 reinforcement origin 可经规范化、IndexedDB 分域和备份恢复；学习卡来源准确，刷新保持完整会话快照，完成后返回词本。
-7. 未改变 ReviewKind、FSRS、四档评分、今日任务、schema/version/store/domain、红宝书/ECDICT 源数据或其他路线图目标。
+1. 最近 4 周含本周、周一为周起点、按时间升序；历史周统计到下一周周一之前，本周只统计到 now，未来与非法事件排除。
+2. 复习保持率只统计 review：rating 0 失败，rating 1/2/3 成功；困难率只统计 review：rating 0/1 命中。两者同周 denominator 完全一致。
+3. 每个周点保留 numerator / denominator / rate；无样本显示 `— (0/0)`，有样本且 numerator 为 0 显示真实 `0% (0/N)`。
+4. 周报本周摘要与 4 周图都读取 `buildWeeklyLearningReport.reviewMetricTrend`，其内部只调用一次共享 `buildReviewMetricTrend`；页面与组件没有第二套统计公式。
+5. 未来到期继续复用 `buildReviewForecast(wordProgress, now, 30)`；逾期与今天进入第 1 天，第 30 天包含，第 31 天排除，无效 dueAt 忽略，全零仍保留 30 点。
+6. 标题与披露明确 30 天图只按当前 `nextDueAt` 计算，继续学习和评分会改变排程，不是未来承诺；没有加入新词参考线或持久化预测。
+7. 轨迹页以文本和 aria-label 同时披露指标、样本量、日期与数量；30 天图内部可键盘聚焦横向滚动，320px、200% 与 400% 缩放验证通过。
+8. 未改变 successRate、buildTrueRetention 口径、FSRS、nextDueAt 写入、ReviewKind、schema/version/store/domain、备份或其他功能。
 
 ## 验证现场
 
-- V1 88/88，typecheck 通过，lint 0 error / 1 个既有 warning，Node 287/287，`git diff --check` 通过。
-- 新文章提词 E2E 3/3；文章提词、activeSession 恢复、数据生命周期与响应式联跑 16/16。
-- 真实覆盖预览零写入、新旧候选混合确认、ECDICT 排除项、真实评分、刷新恢复、失败/未命中分流、200 token 截断、非全分片请求、320px、200% / 400% 缩放与键盘路径。
-- 固定端口 3000 已释放；worker PID 53880 / listener PID 23364 已精确停止；dev 生成的 build-info 已恢复。
+- V1 66/66，typecheck 通过，lint 0 error / 1 个既有 warning，Node 291/291，`git diff --check` 通过。
+- 新趋势 E2E 3/3；趋势、signal-flow 与 responsive 联跑 25/25。
+- 覆盖 4 周 rating 语义、空周/真实 0%、周报同源、30 天首日与第 30/31 天边界、逐日可访问名称、320px 内部滚动、键盘焦点及 200% / 400% 缩放。
+- 固定端口 3000 已释放；worker PID 29068 / listener PID 26180 已精确停止；dev 生成的 build-info 已恢复为起始 HEAD blob。
 
 ## 等待规则
 
-- P0-5 已完成并停止，不自动进入 P0-6 图表或其他目标。
-- 后续目标需要用户重新授权并执行新的 Round 0；不得顺带修改统计口径、FSRS、评分、提醒、推荐、队列或用户学习数据。
+- P0-6 已完成并停止，不自动进入 P1、P2-11、提醒、真题语料或其他目标。
+- 后续目标必须由用户重新授权并执行新的 Round 0；当前检查点不构成任何后续实施授权。

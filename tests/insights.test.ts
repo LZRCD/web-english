@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildLearningInsights,
+  buildReviewMetricTrend,
   buildReviewForecast,
   buildTrueRetention,
   buildWeeklyLearningReport,
@@ -14,6 +15,7 @@ import type {
   StubbornWordMap,
   WordProgressMap,
 } from "../lib/learning.ts";
+import { addLocalDays } from "../lib/date-utils.ts";
 
 const EMPTY_TRUE_RETENTION = {
   overall: { reviewCount: 0, retainedCount: 0, rate: null },
@@ -239,6 +241,113 @@ test("True Retention 只计复习并按上一调度间隔区分 young 与 mature
   });
 });
 
+test("复习指标趋势为空时仍返回按时间升序的最近 4 个本地自然周", () => {
+  const now = new Date(2026, 7, 11, 12);
+  const trend = buildReviewMetricTrend([], now);
+
+  assert.deepEqual(trend, [
+    {
+      weekStart: "2026-07-20",
+      weekEnd: "2026-07-26",
+      retention: { numerator: 0, denominator: 0, rate: null },
+      difficulty: { numerator: 0, denominator: 0, rate: null },
+    },
+    {
+      weekStart: "2026-07-27",
+      weekEnd: "2026-08-02",
+      retention: { numerator: 0, denominator: 0, rate: null },
+      difficulty: { numerator: 0, denominator: 0, rate: null },
+    },
+    {
+      weekStart: "2026-08-03",
+      weekEnd: "2026-08-09",
+      retention: { numerator: 0, denominator: 0, rate: null },
+      difficulty: { numerator: 0, denominator: 0, rate: null },
+    },
+    {
+      weekStart: "2026-08-10",
+      weekEnd: "2026-08-16",
+      retention: { numerator: 0, denominator: 0, rate: null },
+      difficulty: { numerator: 0, denominator: 0, rate: null },
+    },
+  ]);
+  assert.deepEqual(buildReviewMetricTrend([], new Date("invalid")), []);
+  assert.deepEqual(buildReviewMetricTrend([], now, 0), []);
+  assert.deepEqual(buildReviewMetricTrend([], now, -1), []);
+  assert.deepEqual(buildReviewMetricTrend([], now, 1.5), []);
+  assert.deepEqual(buildReviewMetricTrend([], now, Number.NaN), []);
+});
+
+test("复习指标趋势按同一周窗口区分保持、困难、新学、未来与非法事件", () => {
+  const now = new Date(2026, 7, 12, 12);
+  const reviews: LearningInsightReview[] = [
+    review(localIso(2026, 8, 9, 23, 59, 59), 0, 9),
+    review(localIso(2026, 8, 10, 8), 0, 1),
+    review(localIso(2026, 8, 10, 9), 1, 2),
+    review(localIso(2026, 8, 11, 10), 2, 3),
+    review(localIso(2026, 8, 12, 11, 59, 59), 3, 4),
+    { ...review(localIso(2026, 8, 12, 8), 0, 5), kind: "new" },
+    review(localIso(2026, 8, 12, 12, 0, 1), 0, 6),
+    review(localIso(2026, 8, 17, 8), 0, 7),
+    review("invalid", 0, 8),
+    review(localIso(2026, 7, 12, 8), 0, 10),
+  ];
+
+  const trend = buildReviewMetricTrend(reviews, now);
+  const previousWeek = trend[2];
+  const currentWeek = trend[3];
+
+  assert.deepEqual(previousWeek.retention, {
+    numerator: 0,
+    denominator: 1,
+    rate: 0,
+  });
+  assert.deepEqual(previousWeek.difficulty, {
+    numerator: 1,
+    denominator: 1,
+    rate: 100,
+  });
+  assert.deepEqual(currentWeek.retention, {
+    numerator: 3,
+    denominator: 4,
+    rate: 75,
+  });
+  assert.deepEqual(currentWeek.difficulty, {
+    numerator: 2,
+    denominator: 4,
+    rate: 50,
+  });
+  for (const week of trend) {
+    assert.equal(week.retention.denominator, week.difficulty.denominator);
+  }
+
+  const currentStart = new Date(2026, 7, 10);
+  const expectedRetention = buildTrueRetention(reviews, {
+    startAt: currentStart,
+    endAt: now,
+  }).overall;
+  assert.deepEqual(currentWeek.retention, {
+    numerator: expectedRetention.retainedCount,
+    denominator: expectedRetention.reviewCount,
+    rate: expectedRetention.rate,
+  });
+});
+
+test("复习指标趋势区分无样本与困难 numerator 为零的真实 0%", () => {
+  const now = new Date(2026, 7, 12, 12);
+  const trend = buildReviewMetricTrend([
+    review(localIso(2026, 8, 10, 8), 2, 1),
+    review(localIso(2026, 8, 11, 8), 3, 2),
+  ], now);
+
+  assert.equal(trend[2].difficulty.rate, null);
+  assert.deepEqual(trend[3].difficulty, {
+    numerator: 0,
+    denominator: 2,
+    rate: 0,
+  });
+});
+
 test("当场达标占比保留窗口边界并排除未来与无效时间", () => {
   const now = new Date(2026, 6, 28, 12);
   const insights = buildLearningInsights([
@@ -286,6 +395,34 @@ test("复习预测把逾期和今天到期放入首日并跨月按本地日期�
     { date: "2026-08-01", count: 1 },
     { date: "2026-08-02", count: 1 },
   ]);
+});
+
+test("30 天复习预测保留逐日序列并包含第 30 天、排除第 31 天", () => {
+  const now = new Date(2026, 6, 31, 15);
+  const dueAt = (dayOffset: number) => {
+    const date = addLocalDays(now, dayOffset);
+    date.setHours(9, 0, 0, 0);
+    return date.toISOString();
+  };
+  const wordProgress: ReviewForecastMap = {
+    1: { nextDueAt: dueAt(-3) },
+    2: { nextDueAt: dueAt(0) },
+    3: { nextDueAt: dueAt(1) },
+    4: { nextDueAt: dueAt(29) },
+    5: { nextDueAt: dueAt(30) },
+    6: { nextDueAt: "invalid" },
+  };
+
+  const forecast = buildReviewForecast(wordProgress, now, 30);
+  assert.equal(forecast.length, 30);
+  assert.deepEqual(forecast[0], { date: "2026-07-31", count: 2 });
+  assert.deepEqual(forecast[1], { date: "2026-08-01", count: 1 });
+  assert.deepEqual(forecast[29], { date: "2026-08-29", count: 1 });
+  assert.equal(forecast.reduce((sum, day) => sum + day.count, 0), 4);
+
+  const emptyForecast = buildReviewForecast({}, now, 30);
+  assert.equal(emptyForecast.length, 30);
+  assert.equal(emptyForecast.every((day) => day.count === 0), true);
 });
 
 test("每周报告按本地周一统计变化并给出考研节奏建议", () => {
@@ -336,11 +473,12 @@ test("每周报告按本地周一统计变化并给出考研节奏建议", () =>
     focusSection: "必考词",
   } satisfies ExamPlan;
 
+  const now = new Date(2026, 7, 2, 12);
   const report = buildWeeklyLearningReport({
     reviews,
     progress,
     stubbornWords,
-    now: new Date(2026, 7, 2, 12),
+    now,
     examPlan,
     dailyNewGoal: 20,
   });
@@ -358,4 +496,8 @@ test("每周报告按本地周一统计变化并给出考研节奏建议", () =>
   assert.equal(report.nextWeekPeak?.count, 2);
   assert.equal(report.paceStatus, "adjust");
   assert.match(report.paceAdvice, /每日新词由 20 调到至少 25 个/);
+  assert.deepEqual(
+    report.reviewMetricTrend,
+    buildReviewMetricTrend(reviews, now),
+  );
 });

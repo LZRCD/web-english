@@ -4,6 +4,7 @@ import type { KeyboardEvent } from "react";
 import { dateKey, formatDueTime, buildActivityCalendar, type LookupStats, type LookupWord, type Review } from "../../lib/study";
 import type {
   LearningInsights,
+  ReviewMetricBucket,
   ReviewForecastDay,
   TrueRetentionBucket,
   WeeklyLearningReport,
@@ -35,6 +36,11 @@ function formatSuccessRateDelta(delta: number | null, hasCurrent: boolean) {
 function formatTrueRetention(bucket: TrueRetentionBucket) {
   if (bucket.rate === null) return "—";
   return `${Math.round(bucket.rate)}% (${bucket.retainedCount}/${bucket.reviewCount})`;
+}
+
+function formatReviewMetric(bucket: ReviewMetricBucket) {
+  const ratio = `${bucket.numerator}/${bucket.denominator}`;
+  return bucket.rate === null ? `— (${ratio})` : `${Math.round(bucket.rate)}% (${ratio})`;
 }
 
 type HistoryViewProps = {
@@ -234,6 +240,7 @@ export default function HistoryView({
   const selectedDayNewCount = selectedDayEvents.filter((review) => review.kind === "new").length;
   const recentReviews = [...reviews].reverse().slice(0, 8);
   const forecastMax = Math.max(1, ...reviewForecast.map((day) => day.count));
+  const currentReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-1);
   const activityTabDate = selectedActivityDate
     || (activityDays.some((day) => day.date === todayKey)
       ? todayKey
@@ -379,6 +386,59 @@ export default function HistoryView({
             </small>
           </div>
         </div>
+        {currentReviewMetricWeek && (
+          <div
+            className="review-metric-trend"
+            role="region"
+            aria-labelledby="review-metric-trend-title"
+          >
+            <div className="review-metric-trend-head">
+              <div>
+                <h3 id="review-metric-trend-title">复习保持率/困难率趋势</h3>
+                <p>最近 4 个本地自然周 · 周一为周起点 · 仅统计复习评分</p>
+              </div>
+              <small>复习保持率：非忘记评分 / 全部复习评分<br />困难率：忘记或模糊评分 / 全部复习评分</small>
+            </div>
+            <div className="review-metric-summary" aria-label="本周复习保持率与困难率摘要">
+              <div>
+                <span>本周复习保持率</span>
+                <strong>{formatReviewMetric(currentReviewMetricWeek.retention)}</strong>
+              </div>
+              <div>
+                <span>本周困难率</span>
+                <strong>{formatReviewMetric(currentReviewMetricWeek.difficulty)}</strong>
+              </div>
+            </div>
+            <div className="review-metric-weeks">
+              {weeklyReport.reviewMetricTrend.map((week, weekIndex) => {
+                const current = weekIndex === weeklyReport.reviewMetricTrend.length - 1;
+                const retentionRate = week.retention.rate ?? 0;
+                const difficultyRate = week.difficulty.rate ?? 0;
+                return (
+                  <div
+                    className={`review-metric-week${current ? " current" : ""}`}
+                    key={week.weekStart}
+                    role="group"
+                    aria-label={`${week.weekStart} 至 ${week.weekEnd}${current ? "，本周" : ""}；保持 ${week.retention.numerator}/${week.retention.denominator}；困难 ${week.difficulty.numerator}/${week.difficulty.denominator}`}
+                  >
+                    <div className="review-metric-week-label">
+                      <strong>{current ? "本周" : week.weekStart.slice(5)}</strong>
+                      <small>{week.weekStart.slice(5)} — {week.weekEnd.slice(5)}</small>
+                    </div>
+                    <div className="review-metric-value retention">
+                      <span>复习保持率 {formatReviewMetric(week.retention)}</span>
+                      <i aria-hidden="true"><b style={{ width: `${retentionRate}%` }} /></i>
+                    </div>
+                    <div className="review-metric-value difficulty">
+                      <span>困难率 {formatReviewMetric(week.difficulty)}</span>
+                      <i aria-hidden="true"><b style={{ width: `${difficultyRate}%` }} /></i>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {weakTrendSeries.length > 1 && (
           <div className="weak-trend-series" aria-label="薄弱维度近 4 周趋势">
             <div className="weak-trend-head">
@@ -917,25 +977,50 @@ export default function HistoryView({
           </div>
         </div>
         {reviewForecast.length > 0 && (
-          <div className="forecast-panel">
+          <div
+            className="forecast-panel"
+            role="region"
+            aria-labelledby="review-forecast-title"
+          >
             <div className="forecast-title">
-              <span>未来 7 天到期复习</span>
+              <div>
+                <h3 id="review-forecast-title">未来 30 天到期复习（当前排程快照）</h3>
+                <p>按当前 nextDueAt 计算；继续学习和评分后排程会变化，因此不是未来承诺。逾期与今天到期均计入第 1 天。</p>
+              </div>
               <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
             </div>
-            <div className="forecast-bars">
-              {reviewForecast.map((day) => {
-                const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
-                return (
-                  <div className="forecast-day" key={day.date} title={`${day.date} · ${day.count} 词到期`}>
-                    <small>{day.date.slice(5)}</small>
+            <div
+              className="forecast-scroll"
+              role="region"
+              aria-label="未来 30 天到期复习图表，可横向滚动"
+              tabIndex={0}
+            >
+              <div className="forecast-bars">
+                {reviewForecast.map((day, index) => {
+                  const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
+                  const accessibleLabel = index === 0
+                    ? `${day.date}，含逾期与今天到期，共 ${day.count} 词`
+                    : `${day.date}，到期复习 ${day.count} 词`;
+                  return (
                     <div
-                      className={`forecast-bar level-${level}`}
-                      style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
-                    />
-                    <span>{day.count}</span>
-                  </div>
-                );
-              })}
+                      className="forecast-day"
+                      key={day.date}
+                      data-date={day.date}
+                      title={accessibleLabel}
+                      aria-label={accessibleLabel}
+                      role="group"
+                    >
+                      <small>{index === 0 ? "今天" : day.date.slice(5)}</small>
+                      <div
+                        className={`forecast-bar level-${level}`}
+                        style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
+                        aria-hidden="true"
+                      />
+                      <span>{day.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

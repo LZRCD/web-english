@@ -1611,3 +1611,13 @@
 - ECDICT 复用既有 Range/prefix 缓存、单分片 fallback、版本 URL 与性能诊断，并发固定为 4；未命中与词典故障分开披露，部分故障不丢弃其他成功候选，也不自动调用 AI。
 - 新增 `article` SessionKind、准确学习卡来源和恢复白名单；刷新保持 id、wordIds、index 与 createdAt，完成后返回词本。未扩展 ReviewKind，未升级 schema/version，未新增 store/domain。
 - 当前验证：V1 88/88、typecheck、lint 0 error / 1 个既有 warning、Node 287/287、新文章 E2E 3/3、文章/恢复/数据生命周期/响应式联跑 16/16；固定 3000 服务已精确停止，build-info 已恢复。本批次完成并停止，不自动进入 P0-6，不 push。
+
+## Canonical P0-6 复习趋势与 30 天复习压力（第 69 轮）
+
+本轮：2026-08-11。
+
+- 最近 4 个本地自然周复用 `localWeekStart` 和 `buildTrueRetention`：保持率仅 rating 0 失败，困难率仅 rating 0/1 命中；两者使用同一复习评分分母并保留 numerator / denominator，空样本为 `—`、真实零为 0%。
+- `buildWeeklyLearningReport.reviewMetricTrend` 成为周报本周摘要与 4 周图的唯一数据对象；组件不再另算 reviews、周边界或公式。
+- 既有到期预测扩展为 30 个逐日本地日期点，逾期和今天进入第 1 天、第 30 天包含、第 31 天排除；标题与说明明确它只是当前 `nextDueAt` 排程快照，不是未来承诺。
+- 轨迹页提供样本量、周点/日期点可访问名称、30 天内部键盘滚动、320px 无 body 溢出及 200% / 400% 缩放可达布局；未修改 FSRS、进度写入、schema/version/store/domain 或持久化协议。
+- 当前验证：V1 66/66、typecheck、lint 0 error / 1 个既有 warning、Node 291/291、新趋势 E2E 3/3、趋势/signal-flow/responsive 联跑 25/25；固定 3000 服务已精确停止，build-info 已恢复。本批次完成并停止，不自动进入 P1 或 P2-11，不 push。

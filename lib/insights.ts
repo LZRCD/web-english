@@ -47,6 +47,19 @@ export type TrueRetentionSummary = {
   unclassifiedCount: number;
 };
 
+export type ReviewMetricBucket = {
+  numerator: number;
+  denominator: number;
+  rate: number | null;
+};
+
+export type ReviewMetricTrendWeek = {
+  weekStart: string;
+  weekEnd: string;
+  retention: ReviewMetricBucket;
+  difficulty: ReviewMetricBucket;
+};
+
 export const TRUE_RETENTION_MATURE_INTERVAL_MS = 21 * 24 * 60 * 60 * 1000;
 
 export type LearningInsights = {
@@ -92,6 +105,8 @@ export type WeeklyLearningReport = {
   weakTrend: WeakDimensionTrend[];
   /** 本周冲刺成效（有本周冲刺评分时存在，见 lib/weak-signals.ts） */
   sprintEffectiveness?: SprintEffectiveness;
+  /** 最近 4 个本地自然周的复习保持率与困难率，共用同一复习评分分母。 */
+  reviewMetricTrend: ReviewMetricTrendWeek[];
 };
 
 type TimedReview = LearningInsightReview & {
@@ -218,6 +233,61 @@ export function buildTrueRetention(
     mature: retentionBucket(matureCount, matureRetainedCount),
     unclassifiedCount,
   };
+}
+
+/** 最近 N 个本地自然周的复习保持率与困难率；含本周，按时间升序。 */
+export function buildReviewMetricTrend(
+  reviews: readonly TrueRetentionReview[],
+  now: Date,
+  weeks = 4,
+): ReviewMetricTrendWeek[] {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs) || !Number.isSafeInteger(weeks) || weeks <= 0) {
+    return [];
+  }
+
+  const currentWeekStart = localWeekStart(now);
+  const firstWeekStart = addLocalDays(currentWeekStart, -(weeks - 1) * 7);
+
+  return Array.from({ length: weeks }, (_, index) => {
+    const weekStart = addLocalDays(firstWeekStart, index * 7);
+    const nextWeekStart = addLocalDays(weekStart, 7);
+    const endAt = index === weeks - 1
+      ? new Date(nowMs)
+      : new Date(nextWeekStart.getTime() - 1);
+    const retention = buildTrueRetention(reviews, {
+      startAt: weekStart,
+      endAt,
+    }).overall;
+    const weekStartMs = weekStart.getTime();
+    const endAtMs = endAt.getTime();
+    const difficultCount = reviews.reduce((count, review) => {
+      const reviewedAtMs = new Date(review.reviewedAt).getTime();
+      return review.kind === "review"
+        && reviewedAtMs >= weekStartMs
+        && reviewedAtMs <= endAtMs
+        && (review.rating === 0 || review.rating === 1)
+        ? count + 1
+        : count;
+    }, 0);
+
+    return {
+      weekStart: localDateKey(weekStart),
+      weekEnd: localDateKey(addLocalDays(weekStart, 6)),
+      retention: {
+        numerator: retention.retainedCount,
+        denominator: retention.reviewCount,
+        rate: retention.rate,
+      },
+      difficulty: {
+        numerator: difficultCount,
+        denominator: retention.reviewCount,
+        rate: retention.reviewCount
+          ? (difficultCount / retention.reviewCount) * 100
+          : null,
+      },
+    };
+  });
 }
 
 export function buildLearningInsights(
@@ -390,6 +460,7 @@ export function buildWeeklyLearningReport(input: {
     (peak, day) => !peak || day.count > peak.count ? day : peak,
     undefined,
   );
+  const reviewMetricTrend = buildReviewMetricTrend(input.reviews, now);
 
   let paceStatus: WeeklyLearningReport["paceStatus"] = "unset";
   let paceAdvice = `下周预计复习 ${nextWeekReviewCount} 词，设置考研日期后可获得每日新词调整建议。`;
@@ -426,5 +497,6 @@ export function buildWeeklyLearningReport(input: {
         ? buildWeakDimensionTrend(input.weakSignals, now, input.weakThresholds)
         : [],
     sprintEffectiveness: buildSprintEffectiveness(input.reviews, now) ?? undefined,
+    reviewMetricTrend,
   };
 }

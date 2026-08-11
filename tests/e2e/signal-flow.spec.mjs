@@ -1328,7 +1328,9 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
   await expect(
     page.getByRole("heading", { name: "本次冲刺小结" }),
   ).toBeVisible();
-  await expect(page.getByText("当场达标", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("本次冲刺小结").getByText("当场达标", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("配对词冲刺均值", { exact: true })).toBeVisible();
   const pairedRecall = page.locator('[aria-label="同词配对回忆变化"]');
   await expect(pairedRecall).toContainText("2 个配对词");

@@ -399,7 +399,7 @@ export default function Home() {
     [clock, reviews],
   );
   const reviewForecast = useMemo(
-    () => buildReviewForecast(wordProgress, new Date(clock), 7),
+    () => buildReviewForecast(wordProgress, new Date(clock), 30),
     [clock, wordProgress],
   );
   const sessionCompletionSummary = useMemo(
