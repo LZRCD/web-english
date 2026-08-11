@@ -54,6 +54,13 @@ test("跨自然日后清除旧今日会话，不影响其他来源", () => {
     )?.kind,
     "favorites",
   );
+  assert.equal(
+    clearStaleTodayStudySession(
+      session({ kind: "article", title: "文章提词" }),
+      "2026-07-30",
+    )?.kind,
+    "article",
+  );
 });
 
 test("会话词条部分失效时保留有效顺序并按有效完成数夹取进度", () => {

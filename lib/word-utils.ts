@@ -1,5 +1,38 @@
 import { splitMeaning, type Word } from "./study.ts";
 
+export type ArticleTokenizationResult = {
+  tokens: string[];
+  totalUniqueCount: number;
+  truncatedCount: number;
+};
+
+export const ARTICLE_TOKEN_LIMIT = 200;
+
+/** 提取英文文章中的不同 token，保留首次出现顺序。 */
+export function tokenizeEnglishArticle(
+  value: string,
+  limit = ARTICLE_TOKEN_LIMIT,
+): ArticleTokenizationResult {
+  const normalized = value
+    .replace(/[\u2018\u2019\u201B\u2032]/g, "'")
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-");
+  const matches = normalized.match(/[A-Za-z]+(?:['-][A-Za-z]+)*/g) ?? [];
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const match of matches) {
+    const token = match.toLowerCase();
+    if (seen.has(token)) continue;
+    seen.add(token);
+    unique.push(token);
+  }
+  const safeLimit = Math.max(0, Math.trunc(limit));
+  return {
+    tokens: unique.slice(0, safeLimit),
+    totalUniqueCount: unique.length,
+    truncatedCount: Math.max(0, unique.length - safeLimit),
+  };
+}
+
 /** 清洗选中文本，去首尾标点和多余空格 */
 export function cleanSelectedText(value: string) {
   return value

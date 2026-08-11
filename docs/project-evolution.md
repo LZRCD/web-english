@@ -1601,3 +1601,13 @@
 - 当前会话的 word ID、顺序、index 和创建时间作为既有 `activeSession` 快照持久化；批中刷新或修改设置不改当前批，下一批重新从同一完整队列派生且不重复当天已处理词。
 - 设置沿既有 IndexedDB 分域、备份、导入、恢复副本、清空保留和 localStorage 兼容链往返；未升级 schema/version，未新增 store/domain。
 - 当前验证：定向 76/76、typecheck、lint 0 error / 1 个既有 warning、Node 275/275、新增分批 E2E 3/3、今日任务/恢复/并发/数据生命周期 16/16、响应式 4/4；固定 3000 服务已精确停止。本批次完成并停止，不 push。
+
+## Canonical P0-5 文章批量提取生词（第 68 轮）
+
+本轮：2026-08-11。
+
+- 词本页新增纯本地文章提词闭环：20,000 字符文本框、英文 tokenizer、前 200 个不同 token、候选预览、来源/状态筛选与显式确认；文章原文和分析选择不持久化，确认前学习状态零写入。
+- 候选固定按红宝书、既有 lookup、ECDICT、未命中解析；红宝书和既有 lookup 直接复用真实学习 ID，新 ECDICT 只在确认时沿 `upsertLookupWord` / `lookupIdentity` / `learningWordId` 链逐步分配，批内冲突不产生重复 ID。
+- ECDICT 复用既有 Range/prefix 缓存、单分片 fallback、版本 URL 与性能诊断，并发固定为 4；未命中与词典故障分开披露，部分故障不丢弃其他成功候选，也不自动调用 AI。
+- 新增 `article` SessionKind、准确学习卡来源和恢复白名单；刷新保持 id、wordIds、index 与 createdAt，完成后返回词本。未扩展 ReviewKind，未升级 schema/version，未新增 store/domain。
+- 当前验证：V1 88/88、typecheck、lint 0 error / 1 个既有 warning、Node 287/287、新文章 E2E 3/3、文章/恢复/数据生命周期/响应式联跑 16/16；固定 3000 服务已精确停止，build-info 已恢复。本批次完成并停止，不自动进入 P0-6，不 push。

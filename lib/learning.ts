@@ -21,6 +21,7 @@ export type SessionKind =
   | "stubborn"
   | "search"
   | "lookups"
+  | "article"
   | "sprint"
   | "vocab-test"
   | "reinforcement";
@@ -725,6 +726,10 @@ export function buildStudyWordSource(input: {
     lookups: {
       label: "划词集学习",
       description: "这个词来自你保存的划词集。",
+    },
+    article: {
+      label: "文章提词",
+      description: "这个词来自你粘贴并确认的英文文章。",
     },
     sprint: {
       label: "薄弱冲刺",

@@ -81,6 +81,8 @@ export type UseSelectionLookupOptions = CommonOptions & WordSource;
 
 export type UseSelectionLookupResult = {
   selectionLookup?: SelectionLookupState;
+  /** 文章提词只读查询：未命中返回 null，词典故障继续抛出。 */
+  queryLocalDictionary(query: string): Promise<LookupResult | null>;
   handleTextSelection(event: SyntheticEvent<HTMLElement>): Promise<void>;
   translateSelection(options?: { forceAi?: boolean }): Promise<void>;
   closeSelectionLookup(): void;
@@ -239,7 +241,7 @@ export function useSelectionLookup(
     }
   }, [loadDictionaryLetterIndex]);
 
-  const findInLocalDictionary = useCallback(
+  const queryLocalDictionary = useCallback(
     async (
       query: string,
       tags: PerformanceTags = {},
@@ -258,17 +260,13 @@ export function useSelectionLookup(
             : rangeError instanceof TypeError
               ? "network-error"
               : "range-unavailable";
-          try {
-            const result = await fetchJsonWithDiagnostics<DictionaryShard>(
-              versionedDataUrl(`${DICTIONARY_BASE_PATH}/${shardName}.json`),
-              "dictionary.full_shard_fallback",
-              undefined,
-              { ...tags, fallbackReason },
-            );
-            shard = result.data;
-          } catch {
-            return null;
-          }
+          const result = await fetchJsonWithDiagnostics<DictionaryShard>(
+            versionedDataUrl(`${DICTIONARY_BASE_PATH}/${shardName}.json`),
+            "dictionary.full_shard_fallback",
+            undefined,
+            { ...tags, fallbackReason },
+          );
+          shard = result.data;
           dictionaryShardCacheRef.current[shardName] = shard;
         }
       }
@@ -288,6 +286,12 @@ export function useSelectionLookup(
       };
     },
     [loadDictionaryPrefix],
+  );
+
+  const findInLocalDictionary = useCallback(
+    (query: string, tags: PerformanceTags = {}) =>
+      queryLocalDictionary(query, tags).catch(() => null),
+    [queryLocalDictionary],
   );
 
   /** 词典音标索引（秒级）优先，分片兜底 */
@@ -760,6 +764,7 @@ export function useSelectionLookup(
 
   return {
     selectionLookup,
+    queryLocalDictionary,
     handleTextSelection,
     translateSelection,
     closeSelectionLookup,

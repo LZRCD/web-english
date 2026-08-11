@@ -814,6 +814,7 @@ test("学习卡来源覆盖今日任务明细、全部会话类型和通用回�
     lookups: "划词集学习",
     favorites: "收藏复习",
     search: "搜索专项",
+    article: "文章提词",
     sprint: "薄弱冲刺",
     reinforcement: "本轮再强化",
   } as const;
@@ -830,11 +831,65 @@ test("学习卡来源覆盖今日任务明细、全部会话类型和通用回�
       now,
     }).label, label);
   }
+  assert.deepEqual(buildStudyWordSource({
+    session: createStudySession("article", "文章提词", [1], now),
+    progress: future,
+    lookupPriority: false,
+    now,
+  }), {
+    label: "文章提词",
+    description: "这个词来自你粘贴并确认的英文文章。",
+  });
   assert.equal(buildStudyWordSource({
     progress: future,
     lookupPriority: false,
     now,
   }).label, "当前词书额外练习");
+});
+
+test("article 会话和强化来源经规范化、分域与备份无损往返，非法 kind 仍拒绝", () => {
+  const articleSession = {
+    id: "article:2026-08-11T08:00:00.000Z",
+    kind: "article",
+    title: "文章提词",
+    wordIds: [1, 9_000_321, 1],
+    index: 1,
+    createdAt: "2026-08-11T08:00:00.000Z",
+  };
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeSession: articleSession,
+  }));
+  assert.deepEqual(state.activeSession, {
+    ...articleSession,
+    wordIds: [1, 9_000_321],
+  });
+  assert.equal(state.schemaVersion, 5);
+
+  const reinforcement = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeSession: {
+      ...articleSession,
+      id: "reinforcement:article",
+      kind: "reinforcement",
+      originKind: "article",
+    },
+  }));
+  assert.equal(reinforcement.activeSession?.originKind, "article");
+
+  const restoredDomain = combineStoredState(splitStoredState(state));
+  const restoredBackup = parseBackupDocument(JSON.stringify(
+    createBackupDocument(state, "2026-08-11T08:01:00.000Z"),
+  )).state;
+  assert.deepEqual(restoredDomain.activeSession, state.activeSession);
+  assert.deepEqual(restoredBackup.activeSession, state.activeSession);
+  assert.equal(clearLearningRecords(state).activeSession, undefined);
+
+  const invalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    activeSession: { ...articleSession, kind: "article-history" },
+  }));
+  assert.equal(invalid.activeSession, undefined);
 });
 
 test("回忆耗时随评分日志保存但不改变用户评分", () => {

@@ -136,6 +136,10 @@ import {
   toLookupStudyWord,
 } from "../lib/selection-lookup";
 import {
+  projectArticleConfirmation,
+  type ArticleCandidate,
+} from "../lib/article-extraction";
+import {
   buildSessionCompletionSummary,
   buildSprintCompletionSummary,
   mergeSprintWithTrend,
@@ -363,6 +367,7 @@ export default function Home() {
   );
   const {
     selectionLookup,
+    queryLocalDictionary,
     handleTextSelection,
     translateSelection,
     closeSelectionLookup,
@@ -1820,6 +1825,21 @@ export default function Home() {
     startSession("lookups", "划词集复习", wordIds);
   }
 
+  function startArticleSession(
+    candidates: readonly ArticleCandidate[],
+    selectedTokens: ReadonlySet<string>,
+  ) {
+    const projection = projectArticleConfirmation({
+      candidates,
+      selectedTokens,
+      lookupWords,
+      confirmedAt: new Date().toISOString(),
+    });
+    if (!projection.wordIds.length) return false;
+    if (projection.changed) setLookupWords(projection.lookupWords);
+    return startSession("article", "文章提词", projection.wordIds);
+  }
+
   function startSprintSession() {
     if (sprintTreatment) {
       if (sprintTreatment.dimension === "stubborn") {
@@ -2025,6 +2045,20 @@ export default function Home() {
       // 该函数仅会在按钮点击后执行，规则无法跨辅助函数识别事件边界。
       // eslint-disable-next-line react-hooks/refs
       return { label: "完成补漏学习", onClick: () => returnToFreeStudy() };
+    }
+    if (sourceKind === "article") {
+      return {
+        label: activeSession.kind === "reinforcement" ? "返回原词本" : "返回词本",
+        onClick: () => {
+          clearSession();
+          if (ratingUndoTimerRef.current !== undefined) {
+            window.clearTimeout(ratingUndoTimerRef.current);
+            ratingUndoTimerRef.current = undefined;
+          }
+          setUndoVisible(false);
+          setActiveView("wordbook");
+        },
+      };
     }
     if (!sourceKind) return undefined;
     const tab = sourceKind === "favorites"
@@ -2516,6 +2550,8 @@ export default function Home() {
             mistakeWords={mistakeWords}
             stubbornWordList={stubbornWordList}
             lookupWords={lookupWords}
+            redbookWords={redbookWords}
+            wordProgress={wordProgress}
             lookupStats={lookupStats}
             lookupWeakCandidateIds={weakLookupCandidateIds}
             weakSignalsByWordId={weakSignalsByWordId}
@@ -2531,6 +2567,8 @@ export default function Home() {
             onStartMistakes={startMistakeSession}
             onStartStubborn={startStubbornSession}
             onStartLookups={startLookupSession}
+            queryLocalDictionary={queryLocalDictionary}
+            onStartArticle={startArticleSession}
             onStartVocabTest={() => openVocabTest("wordbook")}
             vocabTestReady={vocabTestReady}
             onExportWeakCandidateCsv={exportWeakCandidateCsv}

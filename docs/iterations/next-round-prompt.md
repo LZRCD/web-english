@@ -1,28 +1,29 @@
-# 第 67 轮完成 Prompt：Canonical P0-4 今日任务会话分段
+# 第 68 轮完成 Prompt：Canonical P0-5 文章批量提取生词
 
 ## 当前状态
 
-- Canonical P0-4 已完成：今日任务完整剩余队列可按 5 / 10 / 15 / 20 词分批学习，默认 10；批中刷新与设置变化不改当前会话快照。
-- 实施报告：`docs/iterations/round-67.md`。
-- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-5，不 push。
+- Canonical P0-5 已完成：词本页可粘贴英文文章，纯本地分析并按来源/学习状态预览、筛选和选择；用户确认后才保存选中的新 ECDICT 词并创建可恢复的 article 学习会话。
+- 实施报告：`docs/iterations/round-68.md`。
+- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-6，不 push。
 
 ## 已完成契约
 
-1. `buildTodayTaskPreview` 继续生成唯一完整队列；`buildTodaySessionBatch` 只从队首截取当前批，不复制或改变到期、补漏、新词排序和配额规则。
-2. 设置仅接受 5 / 10 / 15 / 20；旧状态、缺失字段或非法值默认 10，并经现有 IndexedDB、备份、导入、恢复、清空保留与兼容存储链往返。
-3. 预览分别披露今日剩余和本批数量/预计时间；当前批完成后可继续真实下一批，只有完整剩余队列清空才显示今日任务完成。
-4. 当前 `activeSession` 继续作为真实批次快照；批中刷新、评分进度和设置变化不会改写当前 word ID、顺序、index 或 createdAt，新设置只作用于下一批。
-5. 当天已评分的精确 word ID 不会因进度投影延迟重新成为新词，跨批不重复；剩余新词目标为 0 时不额外加入新词。
-6. 未改变每日新词目标、FSRS、四档评分、考频、弱信号、红宝书数据或其他会话来源；未升级 schema/version，未新增 store/domain。
+1. tokenizer 归一大小写、ASCII/弯撇号和不同连字符，去重并保留首次出现顺序；文本框最多 20,000 字符，只分析前 200 个不同 token，并披露真实截断数。
+2. 候选固定按红宝书、既有 lookup、ECDICT、未命中解析；最多 4 个并发 ECDICT 查询，复用既有 Range/prefix/fallback/版本/诊断链，未命中和词典故障分开统计。
+3. 预览显示未学习、学习中、复习中、项目内已掌握；mastered 默认隐藏且不默认选择，可展开手选；筛选不重排候选或清除其他选择。
+4. 分析阶段不写 lookupWords、lookupStats、评分、进度、错词、activeSession、今日任务或 FSRS；不调用 API/AI，不保存文章原文、分析历史或候选选择。
+5. 确认时从当前 lookupWords 做一次逐步投影，只保存选中的新 ECDICT 候选，并沿既有身份链取得真实 ID；article 会话 wordIds 去重且保持文章顺序。
+6. article 会话与 reinforcement origin 可经规范化、IndexedDB 分域和备份恢复；学习卡来源准确，刷新保持完整会话快照，完成后返回词本。
+7. 未改变 ReviewKind、FSRS、四档评分、今日任务、schema/version/store/domain、红宝书/ECDICT 源数据或其他路线图目标。
 
 ## 验证现场
 
-- 定向 76/76，typecheck 通过，lint 0 error / 1 个既有 warning，Node 275/275。
-- 新增分批 E2E 3/3；今日任务、activeSession 恢复、并发和数据生命周期合计 16/16；响应式 4/4。
-- 真实评分完成两批时无重复，第一批后显示剩余，最终批后才完成；320px、200% / 400% 缩放无回归。
-- 固定端口 3000 已释放；生成的 build-info 噪声已恢复。
+- V1 88/88，typecheck 通过，lint 0 error / 1 个既有 warning，Node 287/287，`git diff --check` 通过。
+- 新文章提词 E2E 3/3；文章提词、activeSession 恢复、数据生命周期与响应式联跑 16/16。
+- 真实覆盖预览零写入、新旧候选混合确认、ECDICT 排除项、真实评分、刷新恢复、失败/未命中分流、200 token 截断、非全分片请求、320px、200% / 400% 缩放与键盘路径。
+- 固定端口 3000 已释放；worker PID 53880 / listener PID 23364 已精确停止；dev 生成的 build-info 已恢复。
 
 ## 等待规则
 
-- 本目标已完成并停止。
-- 若继续 Canonical P0-5 或其他目标，需重新明确授权并执行新的 Round 0；不得顺带修改通知权限、FSRS、评分、推荐、队列排序或用户学习数据。
+- P0-5 已完成并停止，不自动进入 P0-6 图表或其他目标。
+- 后续目标需要用户重新授权并执行新的 Round 0；不得顺带修改统计口径、FSRS、评分、提醒、推荐、队列或用户学习数据。

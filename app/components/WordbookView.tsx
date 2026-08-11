@@ -2,8 +2,11 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { dateKey, splitMeaning, type LookupStats, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
-import { wordRetrievability, type StubbornWordRecord, type WordProgress } from "../../lib/learning";
+import { wordRetrievability, type StubbornWordRecord, type WordProgress, type WordProgressMap } from "../../lib/learning";
 import type { WordRecallStats } from "../../lib/weak-signals";
+import type { LookupResult } from "../../lib/selection-lookup";
+import type { ArticleCandidate } from "../../lib/article-extraction";
+import ArticleWordExtractor from "./ArticleWordExtractor";
 
 type FavoriteWordItem = SavedWord & { word: Word };
 type MistakeWordItem = MistakeRecord & { word: Word };
@@ -17,6 +20,8 @@ type WordbookViewProps = {
   mistakeWords: MistakeWordItem[];
   stubbornWordList: StubbornWordItem[];
   lookupWords: LookupWord[];
+  redbookWords: readonly Word[];
+  wordProgress: WordProgressMap;
   lookupStats: LookupStats;
   /** 按当前阈值与统一薄弱画像派生的划词候选 id */
   lookupWeakCandidateIds: number[];
@@ -35,6 +40,11 @@ type WordbookViewProps = {
   onStartMistakes: () => void;
   onStartStubborn: () => void;
   onStartLookups: (wordIds?: number[]) => void;
+  queryLocalDictionary: (query: string) => Promise<LookupResult | null>;
+  onStartArticle: (
+    candidates: readonly ArticleCandidate[],
+    selectedTokens: ReadonlySet<string>,
+  ) => boolean;
   onStartVocabTest: () => void;
   vocabTestReady: boolean;
   /** 导出薄弱候选清单 CSV（复用 buildSprintCsv） */
@@ -49,6 +59,8 @@ export default function WordbookView({
   mistakeWords,
   stubbornWordList,
   lookupWords,
+  redbookWords,
+  wordProgress,
   lookupStats,
   lookupWeakCandidateIds,
   weakSignalsByWordId,
@@ -64,6 +76,8 @@ export default function WordbookView({
   onStartMistakes,
   onStartStubborn,
   onStartLookups,
+  queryLocalDictionary,
+  onStartArticle,
   onStartVocabTest,
   vocabTestReady,
   onExportWeakCandidateCsv,
@@ -180,6 +194,13 @@ export default function WordbookView({
           </button>
         </div>
       </div>
+      <ArticleWordExtractor
+        redbookWords={redbookWords}
+        lookupWords={lookupWords}
+        wordProgress={wordProgress}
+        queryDictionary={queryLocalDictionary}
+        onConfirm={onStartArticle}
+      />
       <div
         className="wordbook-tabs"
         role="tablist"

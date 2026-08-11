@@ -32,7 +32,7 @@ export type KnownLookupResolution = {
   linkedPhonetic?: { wordId: number; phonetic: string };
 };
 
-export function buildWordTextIndex(words: Word[]): WordTextIndex {
+export function buildWordTextIndex(words: readonly Word[]): WordTextIndex {
   const exact = new Map<string, Word>();
   const folded = new Map<string, Word[]>();
   for (const word of words) {

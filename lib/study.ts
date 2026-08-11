@@ -690,6 +690,7 @@ function normalizeSession(value: unknown): StudySession | undefined {
       "stubborn",
       "search",
       "lookups",
+      "article",
       "sprint",
       "vocab-test",
       "reinforcement",
@@ -710,6 +711,7 @@ function normalizeSession(value: unknown): StudySession | undefined {
     "stubborn",
     "search",
     "lookups",
+    "article",
     "sprint",
     "vocab-test",
   ].includes(String(item.originKind))
