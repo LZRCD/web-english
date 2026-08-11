@@ -3,9 +3,12 @@
 import { useRef } from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { SelectionLookupState } from "../../lib/selection-lookup";
+import type { SenseFrequencyEntry } from "../../lib/learning";
+import { splitWordSenses } from "../../lib/word-utils";
 
 type SelectionLookupPopupProps = {
   lookup: SelectionLookupState;
+  senseFrequency?: SenseFrequencyEntry[];
   onTranslate: (options?: { forceAi?: boolean }) => void;
   onSpeak: () => void;
   onClose: () => void;
@@ -13,12 +16,16 @@ type SelectionLookupPopupProps = {
 
 export default function SelectionLookupPopup({
   lookup,
+  senseFrequency,
   onTranslate,
   onSpeak,
   onClose,
 }: SelectionLookupPopupProps) {
   const dialogRef = useRef<HTMLElement>(null);
   useFocusTrap(dialogRef, true, onClose);
+  const senseItems = lookup.result && senseFrequency?.length
+    ? splitWordSenses(lookup.result)
+    : [];
 
   return (
     <section
@@ -91,7 +98,30 @@ export default function SelectionLookupPopup({
         <>
           <div className="selection-lookup-meaning">
             <span>{lookup.result.part}</span>
-            <p>{lookup.result.meaning}</p>
+            {senseItems.length ? (
+              <div className="selection-lookup-senses">
+                {senseItems.map((meaning) => {
+                  const isHigh = senseFrequency?.some(
+                    (entry) => entry.meaning === meaning && entry.level === "high",
+                  );
+                  return (
+                    <p
+                      className={isHigh
+                        ? "selection-lookup-sense sense-frequency-highlight"
+                        : "selection-lookup-sense"}
+                      key={meaning}
+                    >
+                      {meaning}
+                      {isHigh && (
+                        <small className="sense-frequency high">★ 高频常考</small>
+                      )}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : (
+              <p>{lookup.result.meaning}</p>
+            )}
           </div>
           {lookup.result.note && (
             <small className="selection-lookup-note">{lookup.result.note}</small>

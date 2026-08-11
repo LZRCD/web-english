@@ -4598,6 +4598,44 @@ kbd {
 .sense-frequency.high { color: #c0392b; }
 .sense-frequency.medium { color: #b8860b; }
 .sense-frequency.low { color: #8a948d; }
+.sense-frequency-highlight {
+  border-color: #f0d3c6;
+  background: #fff5ef;
+  font-weight: 700;
+}
+.meaning-sense.sense-frequency-highlight.familiar {
+  border-color: #ead2c6;
+  background: #fff5ef;
+  color: #6f766f;
+  font-weight: 700;
+}
+.meaning-sense.sense-frequency-highlight:hover {
+  border-color: #e6bda9;
+  background: #ffede3;
+}
+.selection-lookup-meaning,
+.selection-lookup-senses {
+  min-width: 0;
+}
+.selection-lookup-senses {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+.selection-lookup-meaning p.selection-lookup-sense {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 7px;
+  overflow-wrap: anywhere;
+}
+.selection-lookup-meaning p.selection-lookup-sense.sense-frequency-highlight {
+  border-color: #f0d3c6;
+  background: #fff5ef;
+  font-weight: 700;
+}
+.selection-lookup-sense .sense-frequency {
+  margin-left: 6px;
+}
 .sense-frequency-note {
   display: block;
   width: 100%;

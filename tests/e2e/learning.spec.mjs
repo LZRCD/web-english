@@ -342,6 +342,109 @@ test("划选例句中的英文可查义、加入划词集并持久化", async ({
   ).toBeVisible();
 });
 
+test("高频考义在学习卡与划词弹窗一致高亮", async ({ browser, context, page }) => {
+  const senseFrequency = {
+    1: [
+      { meaning: "散发", level: "high" },
+      { meaning: "流露", level: "medium" },
+    ],
+  };
+  await installStateSeed(context, createState({
+    enrichments: RADIATE_ENRICHMENT,
+    familiarMeanings: { 1: ["散发"] },
+    senseFrequency,
+  }));
+  await openApp(page);
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+
+  const highCardSense = page.locator(".meaning-sense")
+    .filter({ hasText: "散发" }).first();
+  const mediumCardSense = page.locator(".meaning-sense")
+    .filter({ hasText: "流露" }).first();
+  await expect(highCardSense).toHaveClass(/\bsense-frequency-highlight\b/);
+  await expect(highCardSense).toHaveClass(/\bfamiliar\b/);
+  await expect(highCardSense.getByText("★ 高频常考", { exact: true })).toBeVisible();
+  await expect(mediumCardSense).not.toHaveClass(/\bsense-frequency-highlight\b/);
+
+  const highCardStyle = await highCardSense.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderTopWidth: style.borderTopWidth,
+      fontWeight: Number(style.fontWeight),
+    };
+  });
+  expect(highCardStyle.backgroundColor).toBe("rgb(255, 245, 239)");
+  expect(highCardStyle.borderTopWidth).toBe("1px");
+  expect(highCardStyle.fontWeight).toBeGreaterThanOrEqual(700);
+
+  const radiateSentence = page.getByText(
+    "Stars radiate energy into space.",
+    { exact: true },
+  );
+  await selectText(radiateSentence, "radiate");
+  let popup = page.getByRole("dialog", { name: "划词查询：radiate" });
+  await expect(popup).toContainText("红宝书");
+  await expect(popup).toContainText("已加入划词集");
+  const highPopupSense = popup.locator(".selection-lookup-sense")
+    .filter({ hasText: "散发" });
+  const mediumPopupSense = popup.locator(".selection-lookup-sense")
+    .filter({ hasText: "流露" });
+  await expect(highPopupSense).toHaveClass(/\bsense-frequency-highlight\b/);
+  await expect(highPopupSense.getByText("★ 高频常考", { exact: true })).toBeVisible();
+  await expect(mediumPopupSense).not.toHaveClass(/\bsense-frequency-highlight\b/);
+  await expect(popup.locator(".sense-frequency-highlight")).toHaveCount(1);
+
+  const highPopupStyle = await highPopupSense.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderTopWidth: style.borderTopWidth,
+      fontWeight: Number(style.fontWeight),
+    };
+  });
+  expect(highPopupStyle).toEqual(highCardStyle);
+
+  await popup.getByRole("button", { name: "关闭划词查询" }).click();
+  await expect(popup).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 700 });
+  await radiateSentence.scrollIntoViewIfNeeded();
+  await selectText(radiateSentence, "radiate");
+  popup = page.getByRole("dialog", { name: "划词查询：radiate" });
+  await expect(popup.locator(".sense-frequency-highlight")).toHaveCount(1);
+  const mobileViewport = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(mobileViewport.scrollWidth).toBeLessThanOrEqual(mobileViewport.innerWidth);
+
+  const noFrequencyContext = await browser.newContext({
+    baseURL: new URL(page.url()).origin,
+  });
+  try {
+    await installStateSeed(noFrequencyContext, createState({
+      enrichments: RADIATE_ENRICHMENT,
+    }));
+    const noFrequencyPage = await noFrequencyContext.newPage();
+    await openApp(noFrequencyPage);
+    await noFrequencyPage.getByRole("button", { name: "显示单词释义" }).click();
+    await expect(noFrequencyPage.locator(".sense-frequency-highlight")).toHaveCount(0);
+    const sentenceWithoutFrequency = noFrequencyPage.getByText(
+      "Stars radiate energy into space.",
+      { exact: true },
+    );
+    await selectText(sentenceWithoutFrequency, "radiate");
+    const popupWithoutFrequency = noFrequencyPage.getByRole("dialog", {
+      name: "划词查询：radiate",
+    });
+    await expect(popupWithoutFrequency).toContainText("已加入划词集");
+    await expect(popupWithoutFrequency.locator(".sense-frequency-highlight"))
+      .toHaveCount(0);
+  } finally {
+    await noFrequencyContext.close();
+  }
+});
+
 test("词典 Range 请求返回 206，查询过的词再次划选时直显结果和音标", async ({ context, page }) => {
   await installStateSeed(context, createState({
     enrichments: RADIATE_ENRICHMENT,

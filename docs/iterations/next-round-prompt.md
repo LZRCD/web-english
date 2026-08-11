@@ -1,24 +1,25 @@
-# 第 64 轮完成 Prompt：activeQuiz 失效题组安全恢复
+# 第 65 轮完成 Prompt：Canonical P0-1 考义高亮
 
 ## 当前状态
 
-- 用户已批准第 63 轮推荐方案，第 64 轮实施与验证已完成；单轮批次达到 1/1，STOP。
-- 实施报告：`docs/iterations/round-64.md`。
-- 不自动进入其他候选，不 push。
+- Canonical P0-1 已完成：学习卡与红宝书划词弹窗现在一致突出 `senseFrequency` 中的 high 义项。
+- 实施报告：`docs/iterations/round-65.md`。
+- 单轮批次达到 1/1，STOP；不自动进入 Canonical P0-2，不 push。
 
 ## 已完成契约
 
-1. 部分失效：保留有效题原顺序与完整呈现快照，统一重算 index、answers、correctCount、complete 和结果分母，已写入的 attempt / review 不回滚。
-2. 恢复等待 hydrate 与词库 ready；修正后一次写回，并提示题目减少及结果按剩余题计算。
-3. 全部失效：清除 `activeQuiz`，保留历史作答事实，在模式页说明原因并提供重新开始入口。
-4. 旧的仅 ID 会话继续兼容；新完整快照复用现有持久化链，不提升 schema/version，不新增 store/domain。
+1. `WordCard` 的 high 义项使用稳定语义 class、浅底、轻边框和 700 字重；与 `familiar`、hover、focus-visible 正确组合。
+2. 划词弹窗只复用页面现有缓存；`linkedWordId` 命中时通过 `splitWordSenses` 拆分并按精确 meaning 标记 high。
+3. medium/low、无考频、无关联 ID、ECDICT 与 AI 结果不伪造高频标签；发音、翻译、划词入库、关闭和焦点恢复保持不变。
+4. 未修改 API、schema、IndexedDB、FSRS、评分、队列或学习记录。
 
 ## 验证现场
 
-- 定向 102/102，typecheck 通过，lint 0 error / 1 个既有 warning，Node 244/244，精选 E2E 2/2。
+- 定向 53/53，typecheck 通过，lint 0 error / 1 个既有 warning，Node 258/258。
+- 新增唯一标题 E2E 1/1，相关划词回归 4/4；320px 无横向溢出。
 - 固定端口 3000 已释放；生成的 build-info 噪声已恢复。
 
 ## 等待规则
 
 - 本目标已完成并停止。
-- 若继续其他目标，需重新明确授权并执行新的 Round 0；不得顺带修改 activeSession、FSRS、评分、推荐或用户学习数据。
+- 若继续 Canonical P0-2「词汇量测试」或其他目标，需重新明确授权并执行新的 Round 0；不得顺带修改考频数据、FSRS、评分、队列或用户学习数据。

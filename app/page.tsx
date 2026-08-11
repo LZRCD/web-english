@@ -2620,6 +2620,11 @@ export default function Home() {
       {selectionLookup && (
         <SelectionLookupPopup
           lookup={selectionLookup}
+          senseFrequency={
+            selectionLookup.result?.linkedWordId === undefined
+              ? undefined
+              : senseFrequency[selectionLookup.result.linkedWordId]
+          }
           onTranslate={translateSelection}
           onSpeak={() => {
             const result = selectionLookup.result;

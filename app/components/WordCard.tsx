@@ -507,9 +507,11 @@ export default function WordCard({
                     return (
                       <button
                         type="button"
-                        className={
-                          familiar ? "meaning-sense familiar" : "meaning-sense"
-                        }
+                        className={[
+                          "meaning-sense",
+                          familiar && "familiar",
+                          isCore && "sense-frequency-highlight",
+                        ].filter(Boolean).join(" ")}
                         key={meaning}
                         onClick={() => onToggleMeaningFamiliar(meaning)}
                         aria-pressed={familiar}
