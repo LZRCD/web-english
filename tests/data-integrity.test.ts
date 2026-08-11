@@ -39,6 +39,7 @@ function emptyState(): StoredState {
     familiarMeanings: {},
     started: false,
     dailyGoal: 20,
+    sessionBatchSize: 10,
     adaptiveNewWords: true,
     minimumNewWords: 5,
     examDate: "",
@@ -284,7 +285,11 @@ test("备份解析校验日期、文档版本和状态版本一致性", () => {
 
 test("恢复集合兼容旧单份数据并保留多份副本", () => {
   const firstRaw = JSON.stringify(emptyState());
-  const secondRaw = JSON.stringify({ ...emptyState(), dailyGoal: 30 });
+  const secondRaw = JSON.stringify({
+    ...emptyState(),
+    dailyGoal: 30,
+    sessionBatchSize: 15,
+  });
   const legacy = parseRecoveryCopies(firstRaw);
   assert.equal(legacy.length, 1);
   assert.equal(legacy[0].state?.dailyGoal, 20);
@@ -298,6 +303,10 @@ test("恢复集合兼容旧单份数据并保留多份副本", () => {
   assert.deepEqual(
     restored.map((copy) => copy.state?.dailyGoal),
     [20, 30],
+  );
+  assert.deepEqual(
+    restored.map((copy) => copy.state?.sessionBatchSize),
+    [10, 15],
   );
 });
 

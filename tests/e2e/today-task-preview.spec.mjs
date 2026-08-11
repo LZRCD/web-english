@@ -49,7 +49,8 @@ test("空白状态预览今日任务，实际会话复用同一队列并解释�
 
   const preview = page.locator(".today-task-strip");
   await expect(preview).toContainText("今日任务预览");
-  await expect(preview).toContainText("20 词 · 约 15 分钟");
+  await expect(preview).toContainText("今日剩余 20 词");
+  await expect(preview).toContainText("本批 10 词 · 约 8 分钟");
   await expect(preview).toContainText("到期 0");
   await expect(preview).toContainText("补漏 0");
   await expect(preview).toContainText("新词 20");
@@ -67,7 +68,7 @@ test("空白状态预览今日任务，实际会话复用同一队列并解释�
   await expect.poll(async () => {
     const settings = await readStoreRecord(page, "settings", "current");
     return settings?.activeSession?.wordIds?.length ?? 0;
-  }).toBe(20);
+  }).toBe(10);
   await expect(page.locator(".word-source")).toContainText("今日新词");
 });
 

@@ -16,6 +16,7 @@ export function createState(overrides = {}) {
     familiarMeanings: {},
     started: true,
     dailyGoal: 20,
+    sessionBatchSize: 10,
     adaptiveNewWords: true,
     minimumNewWords: 5,
     examDate: "",

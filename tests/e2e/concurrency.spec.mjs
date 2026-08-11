@@ -10,6 +10,7 @@ import {
   openApp,
   openSettings,
   readStoreRecord,
+  sessionBatchSizeSelect,
   waitForApp,
 } from "./helpers.mjs";
 
@@ -29,8 +30,13 @@ test("双标签并发写入时旧 revision 不会覆盖新数据", async ({ cont
     const settings = await readStoreRecord(firstPage, "settings", "current");
     return settings?.dailyGoal;
   }).toBe(30);
+  await sessionBatchSizeSelect(firstPage).selectOption("5");
+  await expect.poll(async () => {
+    const settings = await readStoreRecord(firstPage, "settings", "current");
+    return settings?.sessionBatchSize;
+  }).toBe(5);
 
-  await dailyGoalSelect(secondPage).selectOption("50");
+  await sessionBatchSizeSelect(secondPage).selectOption("20");
   await expect(
     secondPage.getByRole("status").filter({ hasText: "另一标签页已有更新" }),
   ).toBeVisible();
@@ -55,12 +61,12 @@ test("双标签并发写入时旧 revision 不会覆盖新数据", async ({ cont
     return raws;
   }, RECOVERY_COPY_PREFIX);
   expect(recoveryRaws).toEqual(
-    expect.arrayContaining([expect.stringContaining('"dailyGoal":50')]),
+    expect.arrayContaining([expect.stringContaining('"sessionBatchSize":20')]),
   );
   expect(
     recoveryRaws
       .map((raw) => JSON.parse(raw))
-      .some((recoveryState) => recoveryState.dailyGoal === 50),
+      .some((recoveryState) => recoveryState.sessionBatchSize === 20),
   ).toBe(true);
   const authoritativeSettings = await readStoreRecord(
     firstPage,
@@ -68,11 +74,13 @@ test("双标签并发写入时旧 revision 不会覆盖新数据", async ({ cont
     "current",
   );
   expect(authoritativeSettings.dailyGoal).toBe(30);
+  expect(authoritativeSettings.sessionBatchSize).toBe(5);
 
   await secondPage.reload();
   await waitForApp(secondPage);
   await openSettings(secondPage);
   await expect(dailyGoalSelect(secondPage)).toHaveValue("30");
+  await expect(sessionBatchSizeSelect(secondPage)).toHaveValue("5");
   await expect(secondPage.getByText(/发现 1 份未合并的恢复副本/)).toBeVisible();
 });
 

@@ -3,11 +3,17 @@
 import type { ChangeEvent, RefObject } from "react";
 import type { ExamPlan, ExamProgressTiers } from "../../lib/learning";
 import type { AutomaticBackup } from "../../lib/backup";
-import type { StudyMode, StudyScope, WeakThresholds } from "../../lib/study";
+import type {
+  SessionBatchSize,
+  StudyMode,
+  StudyScope,
+  WeakThresholds,
+} from "../../lib/study";
 import PerformanceDiagnostics from "./PerformanceDiagnostics";
 
 type SettingsViewProps = {
   dailyGoal: number;
+  sessionBatchSize: SessionBatchSize;
   adaptiveNewWords: boolean;
   minimumNewWords: number;
   examDate: string;
@@ -47,6 +53,7 @@ type SettingsViewProps = {
   }>;
   undoCount: number;
   onDailyGoalChange: (value: number) => void;
+  onSessionBatchSizeChange: (value: SessionBatchSize) => void;
   onAdaptiveChange: (value: boolean) => void;
   onMinWordsChange: (value: number) => void;
   onExamDateChange: (value: string) => void;
@@ -70,6 +77,7 @@ type SettingsViewProps = {
 
 export default function SettingsView({
   dailyGoal,
+  sessionBatchSize,
   adaptiveNewWords,
   minimumNewWords,
   examDate,
@@ -98,6 +106,7 @@ export default function SettingsView({
   recoveryCopies,
   undoCount,
   onDailyGoalChange,
+  onSessionBatchSizeChange,
   onAdaptiveChange,
   onMinWordsChange,
   onExamDateChange,
@@ -151,6 +160,24 @@ export default function SettingsView({
             <option value={20}>20 词</option>
             <option value={30}>30 词</option>
             <option value={50}>50 词</option>
+          </select>
+        </label>
+        <label>
+          <span>
+            <strong>每批学习词数</strong>
+            <small>只控制一次今日任务会话，不改变每日新词目标</small>
+          </span>
+          <select
+            value={sessionBatchSize}
+            disabled={dataReplacementLocked}
+            onChange={(event) => onSessionBatchSizeChange(
+              Number(event.target.value) as SessionBatchSize,
+            )}
+          >
+            <option value={5}>5 词</option>
+            <option value={10}>10 词</option>
+            <option value={15}>15 词</option>
+            <option value={20}>20 词</option>
           </select>
         </label>
         <label>

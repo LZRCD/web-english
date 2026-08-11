@@ -16,6 +16,7 @@ import {
   openWordbook,
   readStoreCount,
   readStoreRecord,
+  sessionBatchSizeSelect,
   waitForApp,
 } from "./helpers.mjs";
 
@@ -58,6 +59,7 @@ test("导入备份会替换状态，并在刷新后保持", async ({ context, pa
 
   const importedState = createState({
     dailyGoal: 50,
+    sessionBatchSize: 15,
     favorites: [{
       wordId: 1,
       addedAt: "2026-07-29T06:00:00.000Z",
@@ -74,6 +76,7 @@ test("导入备份会替换状态，并在刷新后保持", async ({ context, pa
     page.getByRole("status").filter({ hasText: "已导入 0 条评分记录" }),
   ).toBeVisible();
   await expect(dailyGoalSelect(page)).toHaveValue("50");
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("15");
   await expect.poll(() => readStoreCount(page, "favorites")).toBe(1);
   await expect.poll(
     () => readStoreRecord(page, "favorites", 1),
@@ -87,6 +90,7 @@ test("导入备份会替换状态，并在刷新后保持", async ({ context, pa
   await waitForApp(page);
   await openSettings(page);
   await expect(dailyGoalSelect(page)).toHaveValue("50");
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("15");
   await openWordbook(page);
   await expect(
     page.getByRole("tabpanel").getByRole("heading", { name: "radiate" }),
@@ -94,8 +98,8 @@ test("导入备份会替换状态，并在刷新后保持", async ({ context, pa
 });
 
 test("可从多份恢复副本中恢复指定副本，并保留其余副本", async ({ context, page }) => {
-  const firstRecovery = createState({ dailyGoal: 30 });
-  const secondRecovery = createState({ dailyGoal: 50 });
+  const firstRecovery = createState({ dailyGoal: 30, sessionBatchSize: 5 });
+  const secondRecovery = createState({ dailyGoal: 50, sessionBatchSize: 20 });
   await installStateSeed(context, createState(), {
     [`${RECOVERY_COPY_PREFIX}first`]: createRecoveryCollection({
       id: "first",
@@ -123,6 +127,7 @@ test("可从多份恢复副本中恢复指定副本，并保留其余副本", as
     page.getByRole("status").filter({ hasText: "恢复副本已写入" }),
   ).toBeVisible();
   await expect(dailyGoalSelect(page)).toHaveValue("50");
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("20");
   await expect(page.getByText("发现 1 份未合并的恢复副本")).toBeVisible();
   await expect.poll(() => readStoreCount(page, "backups")).toBeGreaterThanOrEqual(1);
 
@@ -130,6 +135,7 @@ test("可从多份恢复副本中恢复指定副本，并保留其余副本", as
   await waitForApp(page);
   await openSettings(page);
   await expect(dailyGoalSelect(page)).toHaveValue("50");
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("20");
   await expect(page.getByText("发现 1 份未合并的恢复副本")).toBeVisible();
 });
 
@@ -137,6 +143,7 @@ test("清空学习记录时清除测验与进度，保留收藏和内容缓存�
   const reviewedAt = new Date(Date.now() - 60_000).toISOString();
   const dueAt = new Date(Date.now() + 10 * 60_000).toISOString();
   await installStateSeed(context, createState({
+    sessionBatchSize: 5,
     reviews: [{
       id: "reset-review-1",
       sessionId: "reset-session",
@@ -268,6 +275,7 @@ test("清空学习记录时清除测验与进度，保留收藏和内容缓存�
   const clearedSettings = await readStoreRecord(page, "settings", "current");
   expect(clearedSettings.activeSession).toBeUndefined();
   expect(clearedSettings.activeQuiz).toBeUndefined();
+  expect(clearedSettings.sessionBatchSize).toBe(5);
   const recoveryBackup = (await readAutomaticBackups(page))
     .find((backup) => backup.reason === "manual");
   expect(recoveryBackup?.document.state.quizAttempts).toHaveLength(1);
@@ -280,6 +288,9 @@ test("清空学习记录时清除测验与进度，保留收藏和内容缓存�
   const refreshedSettings = await readStoreRecord(page, "settings", "current");
   expect(refreshedSettings.activeSession).toBeUndefined();
   expect(refreshedSettings.activeQuiz).toBeUndefined();
+  expect(refreshedSettings.sessionBatchSize).toBe(5);
+  await openSettings(page);
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("5");
   await openWordbook(page);
   await expect(
     page.getByRole("tabpanel").getByRole("heading", { name: "radiate" }),
@@ -297,15 +308,22 @@ test("IndexedDB 被禁用时使用 localStorage 兼容存储", async ({ context,
   await openApp(page, { expectIndexedDb: false });
   await openSettings(page);
   await dailyGoalSelect(page).selectOption("30");
+  await sessionBatchSizeSelect(page).selectOption("15");
 
   await expect(page.getByText("已保存到本机兼容存储")).toBeVisible();
   await expect.poll(() => page.evaluate(() =>
     JSON.parse(localStorage.getItem("wordloop-state") ?? "{}").dailyGoal,
   )).toBe(30);
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem("wordloop-state") ?? "{}").sessionBatchSize,
+  )).toBe(15);
 });
 
 test("IndexedDB 损坏异常时载入兼容副本且不覆盖原记录", async ({ context, page }) => {
-  await installStateSeed(context, createState({ dailyGoal: 30 }));
+  await installStateSeed(context, createState({
+    dailyGoal: 30,
+    sessionBatchSize: 20,
+  }));
   await context.addInitScript(() => {
     const original = globalThis.indexedDB;
     Object.defineProperty(globalThis, "indexedDB", {
@@ -322,6 +340,7 @@ test("IndexedDB 损坏异常时载入兼容副本且不覆盖原记录", async (
   await openSettings(page);
 
   await expect(dailyGoalSelect(page)).toHaveValue("30");
+  await expect(sessionBatchSizeSelect(page)).toHaveValue("20");
   await expect(page.getByText("本地数据库暂不可用，已载入兼容存储副本"))
     .toBeVisible();
 });

@@ -28,6 +28,10 @@ export type SessionCompleteViewProps = {
   onReinforce: (wordIds: number[]) => void;
   onFreeStudy: () => void;
   primaryAction?: CompletionAction;
+  todayTaskStatus?: {
+    remainingCount: number;
+    nextBatchCount: number;
+  };
   onUndo?: () => void;
 };
 
@@ -58,6 +62,7 @@ export default function SessionCompleteView({
   onReinforce,
   onFreeStudy,
   primaryAction,
+  todayTaskStatus,
   onUndo,
 }: SessionCompleteViewProps) {
   const containerRef = useRef<HTMLElement>(null);
@@ -99,6 +104,21 @@ export default function SessionCompleteView({
           </small>
         </div>
       </header>
+
+      {todayTaskStatus && (
+        <p className="today-batch-complete" role="status">
+          <strong>
+            {todayTaskStatus.remainingCount > 0
+              ? "本批已完成"
+              : "今日任务已完成"}
+          </strong>
+          <span>
+            {todayTaskStatus.remainingCount > 0
+              ? `今日剩余 ${todayTaskStatus.remainingCount} 词 · 下一批 ${todayTaskStatus.nextBatchCount} 词`
+              : "完整剩余队列已清空"}
+          </span>
+        </p>
+      )}
 
       <dl className="session-complete-stats">
         <div>

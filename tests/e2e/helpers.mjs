@@ -229,7 +229,11 @@ export async function openWordbook(page) {
 }
 
 export function dailyGoalSelect(page) {
-  return page.getByRole("combobox", { name: /每日新词/ });
+  return page.getByRole("combobox", { name: /^每日新词/ });
+}
+
+export function sessionBatchSizeSelect(page) {
+  return page.getByRole("combobox", { name: /每批学习词数/ });
 }
 
 export async function selectText(locator, query) {

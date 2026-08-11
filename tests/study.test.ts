@@ -16,6 +16,7 @@ import {
   applyRating,
   buildExamPlan,
   buildStudyWordSource,
+  buildTodaySessionBatch,
   buildTodayQueue,
   buildTodayTaskPreview,
   createStudySession,
@@ -562,6 +563,32 @@ test("今日任务划词补漏：已到期或已入队的补漏词不重复进�
   assert.deepEqual(queue, [1, 2]);
 });
 
+test("今日任务不会在进度投影短暂落后时重复加入当天已评分词", () => {
+  const queue = buildTodayQueue(
+    [1, 2, 3],
+    {},
+    3,
+    new Date("2026-08-11T08:00:00.000Z"),
+    { reviewedTodayWordIds: [1, 1] },
+  );
+
+  assert.deepEqual(queue, [2, 3]);
+});
+
+test("今日新词目标已完成时不会因零上限额外加入一个新词", () => {
+  const preview = buildTodayTaskPreview({
+    primaryWordIds: [1, 2, 3],
+    progress: {},
+    configuredNewGoal: 20,
+    effectiveNewGoal: 20,
+    learnedTodayCount: 20,
+    adaptiveEnabled: true,
+  });
+
+  assert.deepEqual(preview.newWordIds, []);
+  assert.equal(preview.complete, true);
+});
+
 test("今日任务预览与实际队列同源，并对到期、补漏和新词互斥计数", () => {
   const now = new Date("2026-07-28T00:11:00.000Z");
   const due = applyRating(undefined, {
@@ -605,7 +632,7 @@ test("今日任务预览解释自适应目标、已完成新词和空任务", ()
     adaptiveEnabled: true,
   });
   assert.match(adjusted.goalExplanation, /到期复习较多，新词目标已从 20 调整到 10/);
-  assert.match(adjusted.goalExplanation, /本轮安排 3 个/);
+  assert.match(adjusted.goalExplanation, /剩余队列含 3 个新词/);
   assert.equal(adjusted.estimatedMinutes, 3);
 
   const completed = buildTodayTaskPreview({
@@ -620,6 +647,118 @@ test("今日任务预览解释自适应目标、已完成新词和空任务", ()
   assert.equal(completed.complete, true);
   assert.equal(completed.estimatedMinutes, 0);
   assert.equal(completed.goalExplanation, "今日新词已完成，本轮只安排到期和补漏。");
+});
+
+test("每批学习词数：旧状态与非法值默认 10，四个合法值完整往返", () => {
+  for (const value of [undefined, "10", 0, 6, 25, null]) {
+    const state = parseStoredState(JSON.stringify({
+      schemaVersion: 5,
+      ...(value === undefined ? {} : { sessionBatchSize: value }),
+    }));
+    assert.equal(state.sessionBatchSize, 10);
+  }
+
+  for (const sessionBatchSize of [5, 10, 15, 20] as const) {
+    const state = parseStoredState(JSON.stringify({
+      schemaVersion: 5,
+      sessionBatchSize,
+    }));
+    assert.equal(state.sessionBatchSize, sessionBatchSize);
+    assert.equal(
+      combineStoredState(splitStoredState(state)).sessionBatchSize,
+      sessionBatchSize,
+    );
+  }
+});
+
+test("今日任务批次只截取完整队列前 5/10/15/20 词，完成态仍由完整队列决定", () => {
+  const preview = buildTodayTaskPreview({
+    primaryWordIds: Array.from({ length: 25 }, (_, index) => index + 1),
+    progress: {},
+    configuredNewGoal: 50,
+    effectiveNewGoal: 50,
+    learnedTodayCount: 0,
+    adaptiveEnabled: false,
+  });
+
+  for (const batchSize of [5, 10, 15, 20] as const) {
+    const batch = buildTodaySessionBatch(preview, batchSize);
+    assert.deepEqual(batch.batchWordIds, preview.wordIds.slice(0, batchSize));
+    assert.equal(batch.batchCount, batchSize);
+    assert.equal(batch.totalRemainingCount, 25);
+    assert.equal(batch.complete, false);
+  }
+
+  const exact = buildTodaySessionBatch({ ...preview, wordIds: preview.wordIds.slice(0, 10), totalCount: 10 }, 10);
+  const short = buildTodaySessionBatch({ ...preview, wordIds: preview.wordIds.slice(0, 3), totalCount: 3 }, 10);
+  const empty = buildTodaySessionBatch({ ...preview, wordIds: [], totalCount: 0, complete: true }, 10);
+  assert.equal(exact.batchCount, 10);
+  assert.deepEqual(short.batchWordIds, [1, 2, 3]);
+  assert.equal(short.batchCount, 3);
+  assert.equal(short.estimatedMinutes, 3);
+  assert.deepEqual(empty.batchWordIds, []);
+  assert.equal(empty.complete, true);
+});
+
+test("今日任务跨两批重新派生时不重复已处理词，最后一批后才完成", () => {
+  const primaryWordIds = Array.from({ length: 12 }, (_, index) => index + 1);
+  const firstPreview = buildTodayTaskPreview({
+    primaryWordIds,
+    progress: {},
+    configuredNewGoal: 20,
+    effectiveNewGoal: 20,
+    learnedTodayCount: 0,
+    adaptiveEnabled: true,
+  });
+  const firstBatch = buildTodaySessionBatch(firstPreview, 5);
+  const progress = Object.fromEntries(firstBatch.batchWordIds.map((wordId) => [
+    wordId,
+    applyRating(undefined, {
+      wordId,
+      word: `word-${wordId}`,
+      rating: 2,
+      reviewedAt: "2026-08-11T08:00:00.000Z",
+      reviewId: `batch:${wordId}`,
+    }).progress,
+  ]));
+  const secondPreview = buildTodayTaskPreview({
+    primaryWordIds,
+    progress,
+    configuredNewGoal: 20,
+    effectiveNewGoal: 20,
+    learnedTodayCount: 5,
+    adaptiveEnabled: true,
+    now: new Date("2026-08-11T08:01:00.000Z"),
+  });
+  const secondBatch = buildTodaySessionBatch(secondPreview, 5);
+
+  assert.equal(secondPreview.complete, false);
+  assert.deepEqual(secondBatch.batchWordIds, [6, 7, 8, 9, 10]);
+  assert.deepEqual(
+    firstBatch.batchWordIds.filter((wordId) => secondBatch.batchWordIds.includes(wordId)),
+    [],
+  );
+
+  const completedProgress = { ...progress };
+  for (const wordId of secondPreview.wordIds) {
+    completedProgress[wordId] = applyRating(undefined, {
+      wordId,
+      word: `word-${wordId}`,
+      rating: 2,
+      reviewedAt: "2026-08-11T08:02:00.000Z",
+      reviewId: `complete:${wordId}`,
+    }).progress;
+  }
+  const completed = buildTodayTaskPreview({
+    primaryWordIds,
+    progress: completedProgress,
+    configuredNewGoal: 20,
+    effectiveNewGoal: 20,
+    learnedTodayCount: 12,
+    adaptiveEnabled: true,
+    now: new Date("2026-08-11T08:03:00.000Z"),
+  });
+  assert.equal(buildTodaySessionBatch(completed, 5).complete, true);
 });
 
 test("学习卡来源覆盖今日任务明细、全部会话类型和通用回退", () => {
@@ -814,6 +953,7 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
       },
     },
     started: true,
+    sessionBatchSize: 15,
   }));
   state.ratingUndoStack = [{
     reviewId: "review:pending",
@@ -837,7 +977,36 @@ test("IndexedDB 分域快照可无损重建学习状态", () => {
   assert.equal(snapshot.enrichments[0].wordId, 1);
   assert.equal(snapshot.fsrsCards[0].reps, 1);
   assert.equal(snapshot.settings.ratingUndoStack.length, 1);
+  assert.equal(snapshot.settings.sessionBatchSize, 15);
   assert.deepEqual(restored, state);
+});
+
+test("每批设置变化只影响后续创建，不改写当前 activeSession 快照", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    sessionBatchSize: 10,
+    activeSession: {
+      id: "today:stable-batch",
+      kind: "today",
+      title: "今日任务",
+      wordIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      index: 3,
+      createdAt: "2026-08-11T08:00:00.000Z",
+    },
+  }));
+  const currentSession = structuredClone(state.activeSession);
+  const changed = combineStoredState(splitStoredState({
+    ...state,
+    sessionBatchSize: 5,
+  }));
+  const restoredBackup = parseBackupDocument(JSON.stringify(
+    createBackupDocument(changed, "2026-08-11T08:01:00.000Z"),
+  )).state;
+
+  assert.equal(changed.sessionBatchSize, 5);
+  assert.deepEqual(changed.activeSession, currentSession);
+  assert.equal(restoredBackup.sessionBatchSize, 5);
+  assert.deepEqual(restoredBackup.activeSession, currentSession);
 });
 
 test("清空本机学习记录：清除测验与学习进度，保留收藏、内容缓存和设置", () => {
@@ -907,6 +1076,7 @@ test("清空本机学习记录：清除测验与学习进度，保留收藏、�
       startedAt: reviewedAt,
     },
     dailyGoal: 30,
+    sessionBatchSize: 5,
   }));
   state.ratingUndoStack = [{
     reviewId: "clear-review",
@@ -938,6 +1108,7 @@ test("清空本机学习记录：清除测验与学习进度，保留收藏、�
   assert.deepEqual(cleared.enrichments, state.enrichments);
   assert.deepEqual(cleared.lookupWords, state.lookupWords);
   assert.equal(cleared.dailyGoal, 30);
+  assert.equal(cleared.sessionBatchSize, 5);
   assert.equal(recoverySnapshot.state.quizAttempts.length, 1);
   assert.equal(recoverySnapshot.state.activeQuiz?.id, "quiz:listening-spelling:1:clear");
 });

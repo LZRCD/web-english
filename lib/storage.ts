@@ -84,6 +84,7 @@ type StateSettings = Pick<
   | "familiarMeanings"
   | "started"
   | "dailyGoal"
+  | "sessionBatchSize"
   | "adaptiveNewWords"
   | "minimumNewWords"
   | "examDate"
@@ -214,6 +215,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       familiarMeanings: state.familiarMeanings,
       started: state.started,
       dailyGoal: state.dailyGoal,
+      sessionBatchSize: state.sessionBatchSize,
       adaptiveNewWords: state.adaptiveNewWords,
       minimumNewWords: state.minimumNewWords,
       examDate: state.examDate,

@@ -528,7 +528,7 @@ select:focus-visible {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   grid-template-areas:
     "title total action"
-    "breakdown breakdown breakdown"
+    "batch breakdown breakdown"
     "reason reason reason";
   align-items: center;
   gap: 4px 12px;
@@ -554,6 +554,13 @@ select:focus-visible {
   grid-area: total;
   min-width: 0;
   font-size: 13px;
+}
+
+.today-task-batch {
+  grid-area: batch;
+  color: #27825c;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .today-task-strip small {
@@ -1039,6 +1046,28 @@ select:focus-visible {
   margin-top: 45px;
   color: #acb0ab;
   font-size: 12px;
+}
+
+.today-batch-complete {
+  margin: 28px 0 0;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #cfe5d8;
+  border-radius: 16px;
+  background: #f3faf6;
+  color: #526158;
+}
+
+.today-batch-complete strong {
+  color: #27825c;
+  font-size: 14px;
+}
+
+.today-batch-complete span {
+  font-size: 11px;
 }
 
 .redbook-load-error {
@@ -3973,10 +4002,19 @@ kbd {
     grid-template-areas:
       "title action"
       "total total"
+      "batch batch"
       "breakdown breakdown"
       "reason reason";
     gap: 7px 10px;
     padding: 12px 13px;
+  }
+
+  .today-task-batch {
+    grid-area: batch;
+  }
+
+  .today-task-breakdown {
+    padding-top: 0;
   }
 
   .session-complete {
@@ -4254,6 +4292,11 @@ kbd {
 @media (max-width: 480px) {
   .welcome {
     padding: 12px;
+  }
+
+  .today-batch-complete {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .welcome-card {

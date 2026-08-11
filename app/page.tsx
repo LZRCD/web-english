@@ -28,6 +28,7 @@ import {
   type RatingUndo,
   type Review,
   type SavedWord,
+  type SessionBatchSize,
   type StudyMode,
   type StudyPositions,
   type StudyScope,
@@ -39,9 +40,9 @@ import {
   applyRating,
   buildExamPlan,
   buildStudyWordSource,
+  buildTodaySessionBatch,
   buildTodayTaskPreview,
   examProgressTiers,
-  dueWordIds,
   formatInterval,
   isWeakProgress,
   nextInterval,
@@ -187,7 +188,6 @@ export default function Home() {
     advanceSession,
     restoreSession,
     clearSession,
-    appendTodayDue,
     clearStaleToday,
   } = useStudySession();
   const [enrichments, setEnrichments] = useState<Record<number, WordEnrichment>>({});
@@ -218,6 +218,7 @@ export default function Home() {
   );
   const [senseFrequency, setSenseFrequency] = useState<SenseFrequencyMap>({});
   const [dailyGoal, setDailyGoal] = useState(20);
+  const [sessionBatchSize, setSessionBatchSize] = useState<SessionBatchSize>(10);
   const [adaptiveNewWords, setAdaptiveNewWords] = useState(true);
   const [minimumNewWords, setMinimumNewWords] = useState(5);
   const [examDate, setExamDate] = useState("");
@@ -679,6 +680,10 @@ export default function Home() {
       wordProgress,
     ],
   );
+  const todaySessionBatch = useMemo(
+    () => buildTodaySessionBatch(todayTaskPreview, sessionBatchSize),
+    [sessionBatchSize, todayTaskPreview],
+  );
   const remainingBySection = useMemo(() => {
     const counts = { 必考词: 0, 基础词: 0, 超纲词: 0 };
     for (const word of redbookWords) {
@@ -938,6 +943,7 @@ export default function Home() {
     familiarMeanings,
     started,
     dailyGoal,
+    sessionBatchSize,
     adaptiveNewWords,
     minimumNewWords,
     examDate,
@@ -960,6 +966,7 @@ export default function Home() {
     activeSession,
     adaptiveNewWords,
     dailyGoal,
+    sessionBatchSize,
     examDate,
     enrichments,
     familiarMeanings,
@@ -1137,10 +1144,6 @@ export default function Home() {
       setPendingWordId(null);
     });
   }, [pendingWordId, studyKey, studyWords]);
-
-  useEffect(() => {
-    appendTodayDue(dueWordIds(wordProgress, new Date(clock)));
-  }, [appendTodayDue, clock, wordProgress]);
 
   useEffect(() => {
     if (hydrated) clearStaleToday(todayKey);
@@ -1397,6 +1400,7 @@ export default function Home() {
     setFamiliarMeanings(state.familiarMeanings);
     setStarted(state.started);
     setDailyGoal(state.dailyGoal);
+    setSessionBatchSize(state.sessionBatchSize);
     setAdaptiveNewWords(state.adaptiveNewWords);
     setMinimumNewWords(state.minimumNewWords);
     setExamDate(state.examDate);
@@ -1762,7 +1766,7 @@ export default function Home() {
     return startSession(
       "today",
       "今日任务",
-      todayTaskPreview.wordIds,
+      todaySessionBatch.batchWordIds,
     );
   }
 
@@ -1981,9 +1985,13 @@ export default function Home() {
       ? activeSession.originKind
       : activeSession.kind;
     if (sourceKind === "today") {
+      if (todaySessionBatch.complete) return undefined;
       // 该函数仅会在按钮点击后执行，规则无法跨辅助函数识别事件边界。
-      // eslint-disable-next-line react-hooks/refs
-      return { label: "刷新今日任务", onClick: () => startTodaySession() };
+      return {
+        label: `继续下一批（${todaySessionBatch.batchCount} 词）`,
+        // eslint-disable-next-line react-hooks/refs
+        onClick: () => startTodaySession(),
+      };
     }
     if (sourceKind === "search") {
       return {
@@ -2326,14 +2334,19 @@ export default function Home() {
                 disabled={todayTaskPreview.complete}
                 aria-label={todayTaskPreview.complete
                   ? `今日任务已完成。${todayTaskPreview.goalExplanation}`
-                  : `开始今日任务，共 ${todayTaskPreview.totalCount} 词：到期复习 ${todayTaskPreview.dueCount}，反复查词补漏 ${todayTaskPreview.lookupCount}，新词 ${todayTaskPreview.newCount}。预计约 ${todayTaskPreview.estimatedMinutes} 分钟，粗略估算。${todayTaskPreview.goalExplanation}`}
+                  : `开始今日任务，今日剩余 ${todayTaskPreview.totalCount} 词，本批 ${todaySessionBatch.batchCount} 词：到期复习 ${todayTaskPreview.dueCount}，反复查词补漏 ${todayTaskPreview.lookupCount}，新词 ${todayTaskPreview.newCount}。本批预计约 ${todaySessionBatch.estimatedMinutes} 分钟，粗略估算。${todayTaskPreview.goalExplanation}`}
               >
                 <span className="today-task-title">今日任务预览</span>
                 <strong>
                   {todayTaskPreview.complete
                     ? "今日任务已完成"
-                    : `${todayTaskPreview.totalCount} 词 · 约 ${todayTaskPreview.estimatedMinutes} 分钟`}
+                    : `今日剩余 ${todayTaskPreview.totalCount} 词`}
                 </strong>
+                {!todayTaskPreview.complete && (
+                  <span className="today-task-batch">
+                    本批 {todaySessionBatch.batchCount} 词 · 约 {todaySessionBatch.estimatedMinutes} 分钟
+                  </span>
+                )}
                 <span className="today-task-breakdown">
                   <b>到期 {todayTaskPreview.dueCount}</b>
                   <b>补漏 {todayTaskPreview.lookupCount}</b>
@@ -2361,6 +2374,12 @@ export default function Home() {
                   );
                 }}
                 primaryAction={getSessionPrimaryAction()}
+                todayTaskStatus={activeSession?.kind === "today"
+                  ? {
+                      remainingCount: todayTaskPreview.totalCount,
+                      nextBatchCount: todaySessionBatch.batchCount,
+                    }
+                  : undefined}
                 onFreeStudy={returnToFreeStudy}
                 onUndo={undoStack.length ? undoLastRating : undefined}
               />
@@ -2618,6 +2637,7 @@ export default function Home() {
                   : null
             }
             dailyGoal={dailyGoal}
+            sessionBatchSize={sessionBatchSize}
             adaptiveNewWords={adaptiveNewWords}
             minimumNewWords={minimumNewWords}
             examDate={examDate}
@@ -2647,6 +2667,7 @@ export default function Home() {
             }))}
             undoCount={undoStack.length}
             onDailyGoalChange={setDailyGoal}
+            onSessionBatchSizeChange={setSessionBatchSize}
             onAdaptiveChange={setAdaptiveNewWords}
             onMinWordsChange={setMinimumNewWords}
             onExamDateChange={setExamDate}

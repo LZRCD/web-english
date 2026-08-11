@@ -8,6 +8,7 @@ import {
   rebuildWordProgress,
   type Rating,
   type ReviewEvent,
+  type SessionBatchSize,
   type SenseFrequencyEntry,
   type SenseFrequencyMap,
   type SerializedFsrsCard,
@@ -29,6 +30,7 @@ import { localDateKey as dateKey } from "./date-utils.ts";
 export type {
   Rating,
   ReviewEvent,
+  SessionBatchSize,
   StudySession,
   WordEnrichment,
   WordProgress,
@@ -167,6 +169,7 @@ export type StoredState = {
   familiarMeanings: FamiliarMeaningMap;
   started: boolean;
   dailyGoal: number;
+  sessionBatchSize: SessionBatchSize;
   adaptiveNewWords: boolean;
   minimumNewWords: number;
   examDate: string;
@@ -1210,6 +1213,10 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     dailyGoal: [10, 20, 30, 50].includes(Number(state.dailyGoal))
       ? Number(state.dailyGoal)
       : 20,
+    sessionBatchSize: typeof state.sessionBatchSize === "number"
+      && [5, 10, 15, 20].includes(state.sessionBatchSize)
+      ? state.sessionBatchSize as SessionBatchSize
+      : 10,
     adaptiveNewWords: state.adaptiveNewWords !== false,
     minimumNewWords: [0, 5, 10].includes(Number(state.minimumNewWords))
       ? Number(state.minimumNewWords)

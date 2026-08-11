@@ -13,6 +13,7 @@ import { canonicalWordId } from "./redbook.ts";
 export type Rating = 0 | 1 | 2 | 3;
 export type ReviewKind = "new" | "review";
 export type MemoryStatus = "learning" | "reviewing" | "mastered";
+export type SessionBatchSize = 5 | 10 | 15 | 20;
 export type SessionKind =
   | "today"
   | "favorites"
@@ -100,6 +101,14 @@ export type TodayTaskPreview = {
   newCount: number;
   estimatedMinutes: number;
   goalExplanation: string;
+  complete: boolean;
+};
+
+export type TodaySessionBatch = {
+  batchWordIds: number[];
+  batchCount: number;
+  totalRemainingCount: number;
+  estimatedMinutes: number;
   complete: boolean;
 };
 
@@ -527,8 +536,11 @@ function buildTodayQueueParts(
   const dueIds = dueWordIds(progress, now);
   const dueSet = new Set(dueIds);
   const familyKeys = options?.familyKeyByWordId ?? {};
+  const reviewedTodaySet = new Set(
+    (options?.reviewedTodayWordIds ?? []).map(canonicalWordId),
+  );
   const usedFamilyKeys = new Set(
-    (options?.reviewedTodayWordIds ?? [])
+    [...reviewedTodaySet]
       .map((wordId) => familyKeys[canonicalWordId(wordId)])
       .filter((key): key is string => Boolean(key)),
   );
@@ -551,13 +563,16 @@ function buildTodayQueueParts(
       !progress[wordId]
       && !dueSet.has(wordId)
       && !prioritySet.has(wordId)
+      && !reviewedTodaySet.has(wordId)
       && items.indexOf(wordId) === index);
-  for (const wordId of candidates) {
-    const familyKey = familyKeys[wordId];
-    if (familyKey && usedFamilyKeys.has(familyKey)) continue;
-    newIds.push(wordId);
-    if (familyKey) usedFamilyKeys.add(familyKey);
-    if (newIds.length >= dailyNewGoal) break;
+  if (dailyNewGoal > 0) {
+    for (const wordId of candidates) {
+      const familyKey = familyKeys[wordId];
+      if (familyKey && usedFamilyKeys.has(familyKey)) continue;
+      newIds.push(wordId);
+      if (familyKey) usedFamilyKeys.add(familyKey);
+      if (newIds.length >= dailyNewGoal) break;
+    }
   }
   return {
     wordIds: [...dueIds, ...priorityIds, ...newIds],
@@ -610,11 +625,11 @@ export function buildTodayTaskPreview(input: {
   if (remainingNewGoal === 0) {
     goalExplanation = "今日新词已完成，本轮只安排到期和补漏。";
   } else if (input.effectiveNewGoal < input.configuredNewGoal) {
-    goalExplanation = `到期复习较多，新词目标已从 ${input.configuredNewGoal} 调整到 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+    goalExplanation = `到期复习较多，新词目标已从 ${input.configuredNewGoal} 调整到 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，剩余队列含 ${parts.newWordIds.length} 个新词。`;
   } else if (input.adaptiveEnabled) {
-    goalExplanation = `当前到期复习量未触发调整，新词目标保持 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+    goalExplanation = `当前到期复习量未触发调整，新词目标保持 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，剩余队列含 ${parts.newWordIds.length} 个新词。`;
   } else {
-    goalExplanation = `自适应调整已关闭，新词目标按设置为 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，本轮安排 ${parts.newWordIds.length} 个。`;
+    goalExplanation = `自适应调整已关闭，新词目标按设置为 ${input.effectiveNewGoal}；今日已完成 ${input.learnedTodayCount} 个，剩余队列含 ${parts.newWordIds.length} 个新词。`;
   }
   return {
     ...parts,
@@ -625,6 +640,21 @@ export function buildTodayTaskPreview(input: {
     estimatedMinutes: Math.ceil(totalCount * 45 / 60),
     goalExplanation,
     complete: totalCount === 0,
+  };
+}
+
+/** 从完整今日剩余队列统一截取本次会话，不复制来源排序规则。 */
+export function buildTodaySessionBatch(
+  preview: TodayTaskPreview,
+  sessionBatchSize: SessionBatchSize,
+): TodaySessionBatch {
+  const batchWordIds = preview.wordIds.slice(0, sessionBatchSize);
+  return {
+    batchWordIds,
+    batchCount: batchWordIds.length,
+    totalRemainingCount: preview.totalCount,
+    estimatedMinutes: Math.ceil(batchWordIds.length * 45 / 60),
+    complete: preview.complete,
   };
 }
 
