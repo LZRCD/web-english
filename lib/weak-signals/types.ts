@@ -115,7 +115,8 @@ export type StabilizedDimension = {
     | "slow-recall"
     | "quiz-spelling"
     | "quiz-c2e"
-    | "quiz-choice";
+    | "quiz-choice"
+    | "quiz-cloze";
   /** 学习卡合并展示用的简短名称。 */
   label: string;
 };
@@ -128,6 +129,7 @@ export type WeakDimensionTrend = {
     | "quiz-spelling"
     | "quiz-c2e"
     | "quiz-choice"
+    | "quiz-cloze"
     | "slow-recall"
     | "stubborn"
     | "lapse";

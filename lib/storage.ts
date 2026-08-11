@@ -99,6 +99,7 @@ type StateSettings = Pick<
   | "selectedUnit"
   | "ratingUndoStack"
   | "activeQuiz"
+  | "dailyCloze"
 > & {
   id: typeof CURRENT_STATE_ID;
   /** 单调递增计数器，跨标签页冲突检测 */
@@ -229,6 +230,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       selectedSection: state.selectedSection,
       selectedUnit: state.selectedUnit,
       activeQuiz: state.activeQuiz,
+      dailyCloze: state.dailyCloze,
       ratingUndoStack: state.ratingUndoStack,
     },
     reviews: state.reviews.map((review) => ({ ...review })),

@@ -162,6 +162,13 @@ import {
   restoreQuizQuestions,
   shouldApplyQuizToSchedule,
 } from "../lib/quiz";
+import {
+  buildDailyClozeInputKey,
+  isCurrentDailyClozeCache,
+  selectDailyNewWordTargets,
+  type DailyClozeCacheEntry,
+  type DailyClozeInput,
+} from "../lib/daily-cloze";
 import QuizView from "./components/QuizView";
 import {
   ACTIVITY_RANGE_LABELS as activityRangeLabels,
@@ -208,6 +215,7 @@ export default function Home() {
   const [familiarMeanings, setFamiliarMeanings] = useState<FamiliarMeaningMap>({});
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<QuizSessionState | undefined>(undefined);
+  const [dailyCloze, setDailyCloze] = useState<DailyClozeCacheEntry | undefined>(undefined);
   const [quizRecoveryNotice, setQuizRecoveryNotice] = useState("");
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
@@ -398,6 +406,27 @@ export default function Home() {
     [clock, reviews, wordProgress],
   );
   const todayKey = dateKey(new Date(clock));
+  const dailyClozeInput = useMemo<DailyClozeInput>(() => ({
+    localDate: todayKey,
+    targets: selectDailyNewWordTargets(reviews, redbookWords, new Date(clock)),
+  }), [clock, redbookWords, reviews, todayKey]);
+  const currentDailyCloze = useMemo(
+    () => isCurrentDailyClozeCache(dailyCloze, dailyClozeInput)
+      ? dailyCloze
+      : undefined,
+    [dailyCloze, dailyClozeInput],
+  );
+  const dailyClozeInputKey = useMemo(
+    () => buildDailyClozeInputKey(dailyClozeInput),
+    [dailyClozeInput],
+  );
+  const quizForView = activeQuiz?.mode === "passage-cloze"
+    && (
+      !currentDailyCloze
+      || activeQuiz.inputKey !== dailyClozeInputKey
+    )
+    ? undefined
+    : activeQuiz;
   const insights = useMemo(
     () => buildLearningInsights(reviews, new Date(clock), 7),
     [clock, reviews],
@@ -977,6 +1006,7 @@ export default function Home() {
     ratingUndoStack: undoStack,
     quizAttempts,
     activeQuiz,
+    dailyCloze,
   }), [
     activeSession,
     adaptiveNewWords,
@@ -1008,6 +1038,7 @@ export default function Home() {
     undoStack,
     quizAttempts,
     activeQuiz,
+    dailyCloze,
     wordProgress,
   ]);
 
@@ -1200,6 +1231,21 @@ export default function Home() {
       || !activeQuiz
       || activeQuiz.questionWordIds === undefined
     ) return;
+    if (
+      activeQuiz.mode === "passage-cloze"
+      && (
+        !currentDailyCloze
+        || activeQuiz.inputKey !== dailyClozeInputKey
+      )
+    ) {
+      queueMicrotask(() => {
+        setActiveQuiz(undefined);
+        const message = "上次短文填词已因日期或当天新学词变化失效，请按当前真实新词重新生成";
+        setQuizRecoveryNotice(message);
+        showToast(message, 6000);
+      });
+      return;
+    }
     const questions = restoreQuizQuestions(
       activeQuiz,
       redbookWords,
@@ -1226,6 +1272,8 @@ export default function Home() {
   }, [
     activeQuiz,
     activeQuizCandidateWordIds,
+    currentDailyCloze,
+    dailyClozeInputKey,
     familiarMeanings,
     hydrated,
     lookupStats,
@@ -1431,6 +1479,7 @@ export default function Home() {
     setStubbornHistory(state.stubbornWords);
     setQuizAttempts(state.quizAttempts);
     setActiveQuiz(state.activeQuiz);
+    setDailyCloze(state.dailyCloze);
     setStudyMode(state.studyMode);
     setStudyScope(state.studyScope);
     setShuffleSeed(state.shuffleSeed);
@@ -2607,8 +2656,11 @@ export default function Home() {
             soundOn={soundOn}
             onSpeak={speakWord}
             onRecordResult={recordQuizResult}
-            savedQuiz={activeQuiz}
+            savedQuiz={quizForView}
             onQuizStateChange={setActiveQuiz}
+            dailyClozeInput={dailyClozeInput}
+            dailyClozeCache={currentDailyCloze}
+            onDailyClozeChange={setDailyCloze}
             candidateWordIds={activeQuizCandidateWordIds}
             recoveryNotice={quizRecoveryNotice}
             onRecoveryNoticeClear={() => setQuizRecoveryNotice("")}

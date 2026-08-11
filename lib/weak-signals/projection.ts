@@ -726,6 +726,7 @@ const QUIZ_MODE_LABELS: Partial<Record<QuizMode, string>> = {
   "listening-spelling": "拼写测验",
   "chinese-to-english": "中译英",
   "meaning-choice": "辨析",
+  "passage-cloze": "短文填词",
 };
 
 const REVIEW_RATING_LABELS = ["忘记", "模糊", "认识", "熟练"] as const;
@@ -896,6 +897,7 @@ function buildTrendForWeek(
     dimension("quiz-spelling", "拼写测验错", quizErrorWords("listening-spelling", weekStartMs, weekEndMs), quizErrorWords("listening-spelling", previousStartMs, weekStartMs)),
     dimension("quiz-c2e", "中译英错", quizErrorWords("chinese-to-english", weekStartMs, weekEndMs), quizErrorWords("chinese-to-english", previousStartMs, weekStartMs)),
     dimension("quiz-choice", "辨析错", quizErrorWords("meaning-choice", weekStartMs, weekEndMs), quizErrorWords("meaning-choice", previousStartMs, weekStartMs)),
+    dimension("quiz-cloze", "短文填词错", quizErrorWords("passage-cloze", weekStartMs, weekEndMs), quizErrorWords("passage-cloze", previousStartMs, weekStartMs)),
     dimension("slow-recall", "回忆偏慢", slowCount, slowPrevious),
     dimension("stubborn", "新顽固词", stubbornCount, stubbornPrevious),
     dimension("lapse", "遗忘词", lapseCount, lapsePrevious),

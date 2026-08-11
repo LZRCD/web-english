@@ -1631,3 +1631,13 @@
 - 缓存复用现有 `WordEnrichment.etymology?` 与 enrichments 分域、备份、恢复、localStorage 降级和清空保留链；双向合并防止词根助记与例句/音标/搭配互相覆盖。未升级 STORAGE/DATABASE/备份版本，未新增 store/domain。
 - 降级顺序为有效 AI 缓存、本地 root/relation、无增强；AI 失败只显示诚实错误和重试，保留所有合法缓存与本地线索。键盘、320px、200% / 400% 缩放均通过。
 - 当前验证：聚焦 74/74、typecheck、lint 0 error / 1 个既有 warning、精选 E2E 33/33、production build + Node 300/300、production smoke 通过；dev/production 服务均精确停止，端口 3000 空闲，build-info 已恢复。本批次完成并停止，不自动进入 P1-9、P1-8 或 P2。
+
+## Canonical P1-9 每日短文填词（第 71 轮）
+
+本轮：2026-08-11。
+
+- 测验页新增由用户显式生成的“每日短文填词”：目标只来自当前本地自然日真实 `kind: "new"` 事件，按真实 wordId 精确解析、稳定排序去重，最多 10 个；零目标不请求，不用旧词补足。
+- AI 返回 80–120 词原创英文短文和逐词四选一结构，API 与客户端双重严格归一化；界面始终披露“AI 原创短文 · 非历年真题”，作答前只显示安全挖空文本和中性选项，不泄漏答案、释义或解释。
+- 独立缓存使用 schemaVersion 1、promptVersion `daily-cloze-v1`、localDate 与包含有序真实 wordId/word/meaning 的确定性 inputKey，放入既有 settings；刷新、离线和重新开始复用，同日输入变化或跨日即失效，重新生成失败保留旧合法缓存。
+- 新增 `passage-cloze` QuizMode、完整 activeQuiz 快照/inputKey 恢复和真实 QuizAttempt；复用每日首次 FSRS 门禁，跨模式或同模式重答不重复改写排程。错误以独立 `quiz-cloze` 进入错词、时间线、周趋势和同维恢复，不混入 sprint 推荐/留存口径。
+- 未升级 STORAGE/DATABASE/备份版本，未新增 store/domain，未修改 FSRS、评分公式、ReviewEvent/Kind、SessionKind、Provider 协议或 Canonical。当前验证：聚焦 187/187、typecheck、lint 0 error / 1 个既有 warning、精选 E2E 35/35、production build + Node 310/310、production smoke 通过；服务均精确停止，端口 3000 空闲，build-info 已恢复。本批次完成并停止，不自动进入 P1-8 或 P2。

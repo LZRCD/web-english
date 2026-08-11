@@ -290,6 +290,15 @@ export function buildWordWeakSignalEntries(
       label: `辨析错${quizErrors["meaning-choice"]}次`,
     });
   }
+  if (
+    quizErrors["passage-cloze"]
+    && !isQuizModeRecovered(input.quizAttempts, wordId, "passage-cloze")
+  ) {
+    entries.push({
+      key: "quiz-cloze",
+      label: `短文填词错${quizErrors["passage-cloze"]}次`,
+    });
+  }
   const slowCount = slowReviewCount(input.reviews, wordId, thresholds.slowRecallMs);
   // 历史慢回忆仍保留在 review/时间线/统计中；仅当前标签在可靠恢复后淡出
   if (
@@ -487,6 +496,12 @@ export function buildWordStabilizedDimensions(
     && isQuizModeRecovered(input.quizAttempts, wordId, "meaning-choice")
   ) {
     dimensions.push({ key: "quiz-choice", label: "辨析" });
+  }
+  if (
+    (quizErrors["passage-cloze"] ?? 0) > 0
+    && isQuizModeRecovered(input.quizAttempts, wordId, "passage-cloze")
+  ) {
+    dimensions.push({ key: "quiz-cloze", label: "短文填词" });
   }
   return dimensions;
 }

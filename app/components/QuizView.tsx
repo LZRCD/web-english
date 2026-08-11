@@ -24,6 +24,13 @@ import type {
   LookupWord,
   Word,
 } from "../../lib/study";
+import {
+  buildDailyClozeCacheEntry,
+  buildDailyClozeQuestions,
+  normalizeDailyClozeContent,
+  type DailyClozeCacheEntry,
+  type DailyClozeInput,
+} from "../../lib/daily-cloze";
 
 type QuizViewProps = {
   words: Word[];
@@ -47,6 +54,9 @@ type QuizViewProps = {
   ) => void;
   savedQuiz?: QuizSessionState;
   onQuizStateChange: (session: QuizSessionState | undefined) => void;
+  dailyClozeInput: DailyClozeInput;
+  dailyClozeCache?: DailyClozeCacheEntry;
+  onDailyClozeChange: (entry: DailyClozeCacheEntry | undefined) => void;
   /** 维度化处置限定词集；未提供时保持普通测验选题。 */
   candidateWordIds?: number[];
   /** 全部题目失效后的说明；模式选择页同时提供重新开始入口。 */
@@ -72,6 +82,9 @@ export default function QuizView({
   onRecordResult,
   savedQuiz,
   onQuizStateChange,
+  dailyClozeInput,
+  dailyClozeCache,
+  onDailyClozeChange,
   candidateWordIds,
   recoveryNotice,
   onRecoveryNoticeClear,
@@ -81,12 +94,16 @@ export default function QuizView({
   const [mode, setMode] = useState<QuizMode>();
   const [seed, setSeed] = useState(0);
   const [sessionId, setSessionId] = useState("");
+  const [sessionInputKey, setSessionInputKey] = useState<string>();
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [answers, setAnswers] = useState<Record<string, AnswerResult>>({});
   const [correctCount, setCorrectCount] = useState(0);
   const [complete, setComplete] = useState(false);
+  const [dailyClozeLoading, setDailyClozeLoading] = useState(false);
+  const [dailyClozeError, setDailyClozeError] = useState("");
+  const dailyClozeRequestRef = useRef(false);
   const questionStartedAt = useRef(0);
   const quizStartedAtRef = useRef(new Date().toISOString());
   const currentQuestion = questions[questionIndex];
@@ -123,6 +140,7 @@ export default function QuizView({
         setMode(recovery.session.mode);
         setSeed(recovery.session.seed);
         setSessionId(recovery.session.id);
+        setSessionInputKey(recovery.session.inputKey);
         setQuestions(restored);
         setQuestionIndex(Math.min(recovery.session.index, restored.length - 1));
         setCorrectCount(recovery.session.correctCount);
@@ -148,15 +166,19 @@ export default function QuizView({
       seed,
       questionWordIds: questions.map((question) => question.wordId),
       questionSnapshots: snapshotQuizQuestions(questions),
+      ...(mode === "passage-cloze" && sessionInputKey
+        ? { inputKey: sessionInputKey }
+        : {}),
       startedAt: quizStartedAtRef.current,
       index: questionIndex,
       correctCount,
       answers,
       complete,
     });
-  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions, seed, sessionId]);
+  }, [answers, complete, correctCount, mode, onQuizStateChange, questionIndex, questions, seed, sessionId, sessionInputKey]);
 
   const startQuiz = (nextMode: QuizMode) => {
+    if (nextMode === "passage-cloze") return;
     onRecoveryNoticeClear?.();
     const nextSeed = new Date().getTime();
     const nextQuestions = buildQuizQuestions({
@@ -175,6 +197,7 @@ export default function QuizView({
     setMode(nextMode);
     setSeed(nextSeed);
     setSessionId(`quiz:${nextMode}:${nextSeed}`);
+    setSessionInputKey(undefined);
     setQuestions(nextQuestions);
     setQuestionIndex(0);
     setAnswer("");
@@ -186,6 +209,67 @@ export default function QuizView({
     const first = nextQuestions[0];
     if (first?.mode === "listening-spelling" && soundOn) {
       onSpeak(first.word.word, first.wordId);
+    }
+  };
+
+  const startDailyCloze = (entry: DailyClozeCacheEntry) => {
+    const nextQuestions = buildDailyClozeQuestions(entry, words);
+    if (nextQuestions.length !== dailyClozeInput.targets.length) {
+      setDailyClozeError("今日短文缓存与当前词条不一致，请重新生成");
+      return;
+    }
+    onRecoveryNoticeClear?.();
+    const nextSeed = new Date().getTime();
+    setMode("passage-cloze");
+    setSeed(nextSeed);
+    setSessionId(`quiz:passage-cloze:${entry.localDate}:${nextSeed}`);
+    setSessionInputKey(entry.inputKey);
+    setQuestions(nextQuestions);
+    setQuestionIndex(0);
+    setAnswer("");
+    setAnswers({});
+    setCorrectCount(0);
+    setComplete(false);
+    setDailyClozeError("");
+    quizStartedAtRef.current = new Date().toISOString();
+    questionStartedAt.current = new Date().getTime();
+  };
+
+  const generateDailyCloze = async () => {
+    if (!dailyClozeInput.targets.length || dailyClozeRequestRef.current) return;
+    dailyClozeRequestRef.current = true;
+    setDailyClozeLoading(true);
+    setDailyClozeError("");
+    try {
+      const response = await fetch("/api/daily-cloze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dailyClozeInput),
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        error?: unknown;
+      };
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string"
+          ? payload.error
+          : `生成失败（${response.status}）`);
+      }
+      const content = normalizeDailyClozeContent(payload, dailyClozeInput);
+      if (!content) throw new Error("AI 返回的短文结构不完整，请重试");
+      const entry = buildDailyClozeCacheEntry(
+        dailyClozeInput,
+        content,
+        new Date(),
+      );
+      onDailyClozeChange(entry);
+      startDailyCloze(entry);
+    } catch (error) {
+      setDailyClozeError(error instanceof Error
+        ? error.message
+        : "AI 原创短文生成失败，请稍后重试");
+    } finally {
+      dailyClozeRequestRef.current = false;
+      setDailyClozeLoading(false);
     }
   };
 
@@ -230,6 +314,7 @@ export default function QuizView({
     onQuizStateChange(undefined);
     setMode(undefined);
     setSessionId("");
+    setSessionInputKey(undefined);
     setQuestions([]);
     setComplete(false);
     setAnswer("");
@@ -257,7 +342,8 @@ export default function QuizView({
           </div>
         )}
         <div className="quiz-mode-grid">
-          {QUIZ_MODE_DEFINITIONS.map((definition, index) => {
+          {QUIZ_MODE_DEFINITIONS.filter(({ id }) => id !== "passage-cloze")
+            .map((definition, index) => {
             const available = availableModeIds.has(definition.id);
             return (
               <button
@@ -277,6 +363,44 @@ export default function QuizView({
             );
           })}
         </div>
+        <section
+          className="daily-cloze-panel"
+          aria-label="今日短文填词生成"
+          aria-busy={dailyClozeLoading}
+        >
+          <div>
+            <p className="eyebrow">DAILY PASSAGE CLOZE</p>
+            <h2>今日短文填词</h2>
+            <strong>AI 原创短文 · 非历年真题</strong>
+            <p>{dailyClozeInput.targets.length
+              ? `只使用今天真实新学的 ${dailyClozeInput.targets.length} 个词，生成后可离线继续。`
+              : "今天还没有新学词；完成真实新词评分后才能生成。"}</p>
+          </div>
+          <div className="daily-cloze-actions">
+            {dailyClozeCache && (
+              <button type="button" onClick={() => startDailyCloze(dailyClozeCache)}>
+                开始今日短文
+              </button>
+            )}
+            <button
+              type="button"
+              className={dailyClozeCache ? "quiet" : undefined}
+              disabled={!dailyClozeInput.targets.length || dailyClozeLoading}
+              onClick={generateDailyCloze}
+            >
+              {dailyClozeLoading
+                ? "正在生成原创短文…"
+                : dailyClozeCache
+                  ? "重新生成"
+                  : "生成今日短文"}
+            </button>
+          </div>
+          {dailyClozeError && (
+            <p className="daily-cloze-error" role="alert">
+              {dailyClozeError}{dailyClozeCache ? "；已有合法缓存会继续保留。" : "。"}
+            </p>
+          )}
+        </section>
         <div className="quiz-rule-note">
           <strong>测验如何影响复习？</strong>
           <span>每个词每天首次有效作答（或到期后首次作答）才会写入复习排程；重复作答只记录在测验历史，不再无限改写排程。错词始终进入薄弱词队列。</span>
@@ -308,7 +432,14 @@ export default function QuizView({
           <h1>{accuracy >= 80 ? "主动回忆很扎实" : "薄弱点已经找出来了"}</h1>
           <p>{questions.length} 题中答对 {correctCount} 题，答错的词已进入薄弱词队列。</p>
           <div>
-            <button type="button" onClick={() => startQuiz(mode)}>再来一组</button>
+            <button type="button" onClick={() => {
+              if (mode === "passage-cloze") {
+                if (dailyClozeCache) startDailyCloze(dailyClozeCache);
+                else returnToModes();
+              } else {
+                startQuiz(mode);
+              }
+            }}>再来一组</button>
             <button type="button" className="quiet" onClick={returnToModes}>更换模式</button>
           </div>
         </div>
@@ -331,6 +462,9 @@ export default function QuizView({
       </div>
       <section className="quiz-question-card" aria-live="polite">
         <p className="eyebrow">QUESTION {String(questionIndex + 1).padStart(2, "0")}</p>
+        {currentQuestion.mode === "passage-cloze" && (
+          <p className="daily-cloze-disclosure">AI 原创短文 · 非历年真题</p>
+        )}
         {currentQuestion.mode === "listening-spelling" ? (
           <>
             <button
@@ -395,8 +529,15 @@ export default function QuizView({
         {answerResult && (
           <div className={`quiz-feedback ${answerResult.correct ? "correct" : "wrong"}`} role="status">
             <span>{answerResult.correct ? "回答正确" : "已加入薄弱词"}</span>
-            <strong>解析：{currentQuestion.explanation}</strong>
-            {!answerResult.correct && (
+            {currentQuestion.mode === "passage-cloze" ? (
+              <>
+                <strong>正确答案：{currentQuestion.answer}</strong>
+                <small>真实释义：{currentQuestion.word.meaning} · 解析：{currentQuestion.explanation}</small>
+              </>
+            ) : (
+              <strong>解析：{currentQuestion.explanation}</strong>
+            )}
+            {!answerResult.correct && currentQuestion.mode !== "passage-cloze" && (
               <small>你的答案：{answerResult.answer} · 正确答案：{currentQuestion.answer}</small>
             )}
             <button type="button" onClick={nextQuestion} autoFocus>

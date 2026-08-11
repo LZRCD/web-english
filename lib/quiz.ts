@@ -16,7 +16,8 @@ import { localDateKey } from "./date-utils.ts";
 export type QuizMode =
   | "listening-spelling"
   | "chinese-to-english"
-  | "meaning-choice";
+  | "meaning-choice"
+  | "passage-cloze";
 
 export type QuizQuestion = {
   id: string;
@@ -26,7 +27,7 @@ export type QuizQuestion = {
   prompt: string;
   answer: string;
   options?: string[];
-  label: "听音拼写" | "中译英" | "熟词僻义" | "近义辨析";
+  label: "听音拼写" | "中译英" | "熟词僻义" | "近义辨析" | "短文填词";
   explanation: string;
 };
 
@@ -58,6 +59,12 @@ export const QUIZ_MODE_DEFINITIONS: QuizModeDefinition[] = [
     title: "熟词僻义、近义词辨析",
     description: "优先抽取未熟练义项，并用相近释义形成干扰项。",
     minimumLearnedWords: 4,
+  },
+  {
+    id: "passage-cloze",
+    title: "今日短文填词",
+    description: "只使用今天真实新学词，由你显式生成 AI 原创短文。",
+    minimumLearnedWords: 0,
   },
 ];
 
@@ -101,6 +108,7 @@ const QUIZ_QUESTION_LABELS = new Set<QuizQuestion["label"]>([
   "中译英",
   "熟词僻义",
   "近义辨析",
+  "短文填词",
 ]);
 
 /** 清洗持久化题组快照：只保留有序、唯一的有效学习项 id。 */
@@ -152,7 +160,7 @@ export function normalizeQuizQuestionSnapshots(value: unknown) {
         ))).slice(0, 4)
       : undefined;
     if (
-      record.mode === "meaning-choice"
+      (record.mode === "meaning-choice" || record.mode === "passage-cloze")
       && (options?.length !== 4 || !options.includes(record.answer))
     ) {
       continue;
@@ -164,7 +172,9 @@ export function normalizeQuizQuestionSnapshots(value: unknown) {
       wordId: record.wordId,
       prompt: record.prompt,
       answer: record.answer,
-      ...(record.mode === "meaning-choice" ? { options } : {}),
+      ...(record.mode === "meaning-choice" || record.mode === "passage-cloze"
+        ? { options }
+        : {}),
       label: record.label as QuizQuestion["label"],
       explanation: record.explanation,
     });
@@ -197,6 +207,8 @@ export type QuizSessionState = {
   questionWordIds?: number[];
   /** 题干、正确答案与选项快照；旧的仅 id 会话可缺省。 */
   questionSnapshots?: QuizQuestionSnapshot[];
+  /** passage-cloze 对应的完整每日输入身份；其他模式不使用。 */
+  inputKey?: string;
   index: number;
   correctCount: number;
   answers: Record<string, { answer: string; correct: boolean }>;
@@ -253,6 +265,7 @@ export function restoreQuizQuestions(
         : [];
     }).slice(0, 10);
   }
+  if (session.mode === "passage-cloze") return [];
   return buildQuizQuestions({
     words,
     progress,
@@ -578,6 +591,7 @@ export function buildQuizQuestions(input: {
     });
 
   return candidates.flatMap<QuizQuestion>(({ word, seedOffset }) => {
+    if (input.mode === "passage-cloze") return [];
     if (input.mode === "listening-spelling") {
       return [{
         id: `${input.mode}:${word.id}:${seed}`,

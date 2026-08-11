@@ -50,6 +50,11 @@ import {
 } from "../lib/etymology.ts";
 import { mergeWordEnrichment } from "../lib/enrichment.ts";
 import {
+  buildDailyClozeCacheEntry,
+  normalizeDailyClozeContent,
+  type DailyClozeInput,
+} from "../lib/daily-cloze.ts";
+import {
   addLocalDays,
   localDateKey,
   localDayStart,
@@ -112,6 +117,23 @@ const ETYMOLOGY_ENTRY = buildEtymologyCacheEntry(
     affixes: [{ form: "-ing", kind: "suffix", meaning: "名词后缀" }],
     mnemonic: "把省下来的钱存起来。",
   },
+  new Date("2026-08-11T08:00:00.000Z"),
+);
+
+const DAILY_CLOZE_INPUT: DailyClozeInput = {
+  localDate: "2026-08-11",
+  targets: [{ wordId: 1, word: "radiate", meaning: "散发；发出光线" }],
+};
+const DAILY_CLOZE_ENTRY = buildDailyClozeCacheEntry(
+  DAILY_CLOZE_INPUT,
+  normalizeDailyClozeContent({
+    passage: ["Readers", "radiate", ...Array(78).fill("context")].join(" "),
+    questions: [{
+      wordId: 1,
+      options: ["radiate", "reduce", "remove", "reflect"],
+      explanation: "语境表示向外传递信心。",
+    }],
+  }, DAILY_CLOZE_INPUT)!,
   new Date("2026-08-11T08:00:00.000Z"),
 );
 
@@ -1198,6 +1220,79 @@ test("词根助记不升级存储、数据库、store/domain 或备份格式", (
     "quizAttempts",
     "stateDomains",
   ]);
+});
+
+test("每日短文缓存经旧状态、分域、备份与恢复完整往返，非法字段只移除自身", () => {
+  const legacy = parseStoredState(JSON.stringify({ schemaVersion: 5, dailyGoal: 30 }));
+  assert.equal(legacy.dailyCloze, undefined);
+
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailyGoal: 30,
+    dailyCloze: DAILY_CLOZE_ENTRY,
+    activeQuiz: {
+      id: "quiz:passage-cloze:restore",
+      mode: "passage-cloze",
+      inputKey: DAILY_CLOZE_ENTRY.inputKey,
+      seed: 71,
+      questionWordIds: [1],
+      questionSnapshots: [{
+        id: "passage-cloze:2026-08-11:1:0",
+        mode: "passage-cloze",
+        wordId: 1,
+        prompt: DAILY_CLOZE_ENTRY.content.passage.replace(/radiate/i, "＿＿＿＿"),
+        answer: "radiate",
+        options: ["radiate", "reduce", "remove", "reflect"],
+        label: "短文填词",
+        explanation: "语境表示向外传递信心。",
+      }],
+      index: 0,
+      correctCount: 0,
+      answers: {},
+      complete: false,
+      startedAt: "2026-08-11T08:01:00.000Z",
+    },
+  }));
+  assert.deepEqual(state.dailyCloze, DAILY_CLOZE_ENTRY);
+  assert.equal(state.activeQuiz?.mode, "passage-cloze");
+  assert.deepEqual(combineStoredState(splitStoredState(state)), state);
+  assert.deepEqual(
+    parseBackupDocument(JSON.stringify(createBackupDocument(state))).state.dailyCloze,
+    DAILY_CLOZE_ENTRY,
+  );
+
+  const invalid = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailyGoal: 30,
+    dailyCloze: { ...DAILY_CLOZE_ENTRY, source: "local" },
+    activeQuiz: state.activeQuiz,
+  }));
+  assert.equal(invalid.dailyCloze, undefined);
+  assert.equal(invalid.dailyGoal, 30);
+  assert.equal(invalid.activeQuiz?.mode, "passage-cloze");
+});
+
+test("passage-cloze 作答正常归一化，清空学习记录同时清除缓存和会话但快照保留", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    dailyCloze: DAILY_CLOZE_ENTRY,
+    quizAttempts: [{
+      id: "passage-attempt",
+      wordId: 1,
+      mode: "passage-cloze",
+      correct: false,
+      recallMs: 3_000,
+      answeredAt: "2026-08-11T08:02:00.000Z",
+      appliedToSchedule: true,
+    }],
+  }));
+  const recovery = createBackupDocument(state, "2026-08-11T08:03:00.000Z");
+  const cleared = clearLearningRecords(state);
+  assert.equal(state.quizAttempts[0].mode, "passage-cloze");
+  assert.equal(cleared.dailyCloze, undefined);
+  assert.equal(cleared.activeQuiz, undefined);
+  assert.deepEqual(cleared.quizAttempts, []);
+  assert.deepEqual(recovery.state.dailyCloze, DAILY_CLOZE_ENTRY);
 });
 
 test("每批设置变化只影响后续创建，不改写当前 activeSession 快照", () => {

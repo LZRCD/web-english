@@ -603,6 +603,21 @@ test("辨析标签：同模式连续两次答对后淡出，跨模式不替代�
   assertQuizModeLifecycle("meaning-choice", "辨析错", "listening-spelling");
 });
 
+test("短文填词使用独立 quiz-cloze 信号、两次同模式正确后恢复且不进入冲刺推荐", () => {
+  assertQuizModeLifecycle("passage-cloze", "短文填词错", "meaning-choice");
+  const wrong = makeQuizAttempt("cloze-wrong", "passage-cloze", false, "2026-07-28T08:00:00.000Z");
+  const input = baseInput({ quizAttempts: [wrong] });
+  assert.deepEqual(buildWordWeakSignalEntries(10, input).map(({ key }) => key), ["quiz-cloze"]);
+  assert.equal(buildWordWeakSignals(10, input).includes("辨析错1次"), false);
+  assert.ok(buildWordSignalTimeline(10, input).some(({ detail }) => detail === "短文填词 答错"));
+  assert.equal(
+    buildWeakDimensionTrend(input, new Date(2026, 6, 30, 12))
+      .find(({ key }) => key === "quiz-cloze")?.count,
+    1,
+  );
+  assert.equal(buildSprintTreatmentRecommendation(input), null);
+});
+
 test("测验标签恢复按 answeredAt 稳定排序，重复 ID 不重复充当连续答对", () => {
   const wrong = makeQuizAttempt("wrong", "listening-spelling", false, "2026-07-20T00:00:00.000Z");
   const firstCorrect = makeQuizAttempt("correct-1", "listening-spelling", true, "2026-07-21T00:00:00.000Z");

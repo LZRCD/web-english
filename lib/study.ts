@@ -25,6 +25,10 @@ import {
   type QuizAttempt,
   type QuizSessionState,
 } from "./quiz.ts";
+import {
+  normalizeDailyClozeCacheEntry,
+  type DailyClozeCacheEntry,
+} from "./daily-cloze.ts";
 import { localDateKey as dateKey } from "./date-utils.ts";
 import { normalizeEtymologyCacheEntry } from "./etymology.ts";
 
@@ -160,6 +164,7 @@ export type StoredState = {
   activeSession?: StudySession;
   quizAttempts: QuizAttempt[];
   activeQuiz?: QuizSessionState;
+  dailyCloze?: DailyClozeCacheEntry;
   enrichments: Record<number, WordEnrichment>;
   lookupWords: LookupWord[];
   lookupStats: LookupStats;
@@ -204,6 +209,7 @@ export function clearLearningRecords(state: StoredState): StoredState {
     activeSession: undefined,
     quizAttempts: [],
     activeQuiz: undefined,
+    dailyCloze: undefined,
     ratingUndoStack: [],
   };
 }
@@ -917,7 +923,12 @@ function normalizeRatingUndoStack(value: unknown) {
 }
 
 
-const QUIZ_MODES = new Set(["listening-spelling", "chinese-to-english", "meaning-choice"]);
+const QUIZ_MODES = new Set([
+  "listening-spelling",
+  "chinese-to-english",
+  "meaning-choice",
+  "passage-cloze",
+]);
 
 function normalizeQuizAttempt(value: unknown): QuizAttempt | null {
   if (!value || typeof value !== "object") return null;
@@ -982,12 +993,19 @@ function normalizeQuizSession(value: unknown): QuizSessionState | undefined {
   const questionWordIds = questionSnapshots !== undefined
     ? questionSnapshots.map((question) => question.wordId)
     : normalizeQuizQuestionWordIds(session.questionWordIds);
+  const inputKey = typeof session.inputKey === "string" && session.inputKey
+    ? session.inputKey
+    : undefined;
+  if (session.mode === "passage-cloze" && (!questionSnapshots?.length || !inputKey)) {
+    return undefined;
+  }
   return {
     id: typeof session.id === "string" ? session.id : "quiz:restored",
     mode: session.mode as QuizSessionState["mode"],
     seed: Number(session.seed),
     ...(questionWordIds !== undefined ? { questionWordIds } : {}),
     ...(questionSnapshots !== undefined ? { questionSnapshots } : {}),
+    ...(inputKey ? { inputKey } : {}),
     index: Math.max(0, Math.trunc(Number(session.index))),
     correctCount: Math.max(0, Math.trunc(Number(session.correctCount) || 0)),
     answers,
@@ -1242,6 +1260,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     ratingUndoStack: normalizeRatingUndoStack(state.ratingUndoStack),
     quizAttempts: normalizeQuizAttempts(state.quizAttempts),
     activeQuiz: normalizeQuizSession(state.activeQuiz),
+    dailyCloze: normalizeDailyClozeCacheEntry(state.dailyCloze),
   };
 }
 

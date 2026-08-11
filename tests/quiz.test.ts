@@ -12,6 +12,13 @@ import {
   type QuizSessionState,
 } from "../lib/quiz.ts";
 import type { Word } from "../lib/study.ts";
+import {
+  buildDailyClozeCacheEntry,
+  buildDailyClozeQuestions,
+  normalizeDailyClozeContent,
+  type DailyClozeInput,
+} from "../lib/daily-cloze.ts";
+import { clozeSentence } from "../lib/word-utils.ts";
 
 const WORDS: Word[] = [
   { id: 1, word: "radiate", meaning: "vt. 散发;发出光线", section: "必考词", unit: 1 },
@@ -265,7 +272,78 @@ test("测验每日首次作答才写入 FSRS，重复作答不再改写排程", 
   // 昨天的作答不阻止今天首次写入
   const yesterday = { ...attempt, answeredAt: "2026-08-02T09:00:00.000Z" };
   assert.equal(shouldApplyQuizToSchedule([yesterday], 1, now), true);
+
+  // 同日任意旧模式已作答时，短文填词不得再次改写排程。
+  assert.equal(shouldApplyQuizToSchedule([attempt], 1, now), false);
 })
+
+test("clozeSentence 兼容大小写与正则字符，并且不会误挖单词子串", () => {
+  assert.equal(clozeSentence("Radiate and radiate.", "radiate"), "＿＿＿＿ and ＿＿＿＿.");
+  assert.equal(clozeSentence("C++ can coexist with C.", "C++"), "＿＿＿＿ can coexist with C.");
+  assert.equal(clozeSentence("A rational plan should not hide ratio.", "ratio"), "A rational plan should not hide ＿＿＿＿.");
+  assert.equal(clozeSentence("A rational plan.", "ratio"), "");
+});
+
+test("passage-cloze 只从合法缓存构建完整快照并保持原题恢复", () => {
+  const input: DailyClozeInput = {
+    localDate: "2026-08-11",
+    targets: [
+      { wordId: 1, word: "radiate", meaning: "散发；发出光线" },
+      { wordId: 2, word: "objective", meaning: "目标；客观的" },
+    ],
+  };
+  const passage = [
+    "Careful", "students", "radiate", "confidence", "when", "they", "read", "widely",
+    "and", "test", "their", "claims", "Their", "objective", "is", "not", "quick", "agreement",
+    "but", "a", "clear", "account", "of", "evidence", "Each", "member", "asks", "questions",
+    "compares", "sources", "and", "records", "doubts", "before", "the", "group", "reaches", "a",
+    "decision", "This", "patient", "habit", "makes", "discussion", "more", "useful", "because", "weak",
+    "assumptions", "become", "visible", "early", "and", "strong", "ideas", "receive", "better", "support",
+    "By", "the", "end", "everyone", "can", "explain", "both", "the", "result", "and", "the", "limits",
+    "of", "the", "method", "in", "plain", "language", "for", "future", "readers", "and", "new", "learners",
+  ].join(" ");
+  const content = normalizeDailyClozeContent({
+    passage,
+    questions: [
+      { wordId: 1, options: ["radiate", "reduce", "remove", "reflect"], explanation: "语境表示传播信心。" },
+      { wordId: 2, options: ["subjective", "ordinary", "objective", "optional"], explanation: "语境表示目标。" },
+    ],
+  }, input)!;
+  const entry = buildDailyClozeCacheEntry(input, content, new Date("2026-08-11T08:00:00.000Z"));
+  const questions = buildDailyClozeQuestions(entry, WORDS);
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].mode, "passage-cloze");
+  assert.equal(questions[0].label, "短文填词");
+  assert.doesNotMatch(questions[0].prompt, /radiate/i);
+  assert.equal(questions[0].answer, "radiate");
+  assert.equal(buildQuizQuestions({
+    words: WORDS,
+    progress: progressFor([2, 2]),
+    mode: "passage-cloze",
+  }).length, 0);
+
+  const session: QuizSessionState = {
+    id: "quiz:passage-cloze:2026-08-11",
+    mode: "passage-cloze",
+    inputKey: entry.inputKey,
+    seed: 71,
+    questionWordIds: questions.map(({ wordId }) => wordId),
+    questionSnapshots: snapshotQuizQuestions(questions),
+    index: 1,
+    correctCount: 1,
+    answers: { [questions[0].id]: { answer: "radiate", correct: true } },
+    complete: false,
+    startedAt: "2026-08-11T08:01:00.000Z",
+  };
+  const restored = restoreQuizQuestions(
+    session,
+    WORDS,
+    progressFor([2, 2]),
+    {},
+  );
+  assert.deepEqual(snapshotQuizQuestions(restored), snapshotQuizQuestions(questions));
+  assert.deepEqual(recoverQuizSession(session, restored).session, session);
+});
 
 test("测验会话按 seed 可重建同一组题目", () => {
   const session = createQuizSession("chinese-to-english", 2026);

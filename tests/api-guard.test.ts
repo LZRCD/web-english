@@ -20,6 +20,17 @@ import {
   normalizeEtymologyContent,
   type EtymologyInput,
 } from "../lib/etymology.ts";
+import {
+  buildDailyClozeCacheEntry,
+  buildDailyClozeInputKey,
+  isCurrentDailyClozeCache,
+  normalizeDailyClozeCacheEntry,
+  normalizeDailyClozeContent,
+  selectDailyNewWordTargets,
+  type DailyClozeInput,
+} from "../lib/daily-cloze.ts";
+import type { ReviewEvent } from "../lib/learning.ts";
+import type { Word } from "../lib/study.ts";
 
 const ETYMOLOGY_INPUT: EtymologyInput = {
   wordId: 59,
@@ -35,6 +46,155 @@ const ETYMOLOGY_INPUT: EtymologyInput = {
     confidence: "confirmed",
   },
 };
+
+const DAILY_CLOZE_INPUT: DailyClozeInput = {
+  localDate: "2026-08-11",
+  targets: [
+    { wordId: 1, word: "radiate", meaning: "散发；发出光线" },
+    { wordId: 2, word: "objective", meaning: "目标；客观的" },
+  ],
+};
+
+const DAILY_CLOZE_PASSAGE = [
+  "During", "a", "quiet", "morning", "seminar", "careful", "students", "discussed",
+  "how", "clear", "ideas", "radiate", "through", "patient", "work", "and", "shared",
+  "evidence", "Their", "main", "objective", "was", "to", "compare", "several", "methods",
+  "without", "rushing", "toward", "easy", "claims", "Each", "reader", "asked", "precise",
+  "questions", "checked", "sources", "and", "revised", "notes", "before", "speaking", "The",
+  "group", "also", "considered", "why", "small", "details", "can", "change", "a", "reasonable",
+  "conclusion", "By", "noon", "their", "discussion", "had", "become", "more", "focused", "yet",
+  "everyone", "remained", "willing", "to", "challenge", "an", "assumption", "The", "exercise",
+  "showed", "that", "steady", "attention", "often", "produces", "stronger", "understanding", "than",
+  "quick", "confidence",
+].join(" ");
+
+const DAILY_CLOZE_CONTENT = {
+  passage: DAILY_CLOZE_PASSAGE,
+  questions: [
+    {
+      wordId: 1,
+      options: [" radiate ", "reflect", "reduce", "remove"],
+      explanation: "上下文强调思想向外传播。",
+    },
+    {
+      wordId: 2,
+      options: ["subjective", "objective", "ordinary", "optional"],
+      explanation: "这里需要表示讨论的主要目标。",
+    },
+  ],
+};
+
+function dailyReview(
+  id: string,
+  wordId: number | undefined,
+  kind: "new" | "review",
+  reviewedAt: string,
+): ReviewEvent {
+  return {
+    id,
+    ...(wordId === undefined ? {} : { wordId }),
+    word: `word-${wordId ?? "missing"}`,
+    rating: 2,
+    kind,
+    intervalMs: 86_400_000,
+    dueAt: reviewedAt,
+    reviewedAt,
+  };
+}
+
+test("每日短文目标只取当天真实新学事件，确定排序、去重并最多保留 10 个", () => {
+  const now = new Date(2026, 7, 11, 12, 0, 0);
+  const at = (hour: number, minute = 0) =>
+    new Date(2026, 7, 11, hour, minute, 0).toISOString();
+  const words: Word[] = Array.from({ length: 12 }, (_, index) => ({
+    id: index + 1,
+    word: `word${index + 1}`,
+    meaning: `释义${index + 1}`,
+  }));
+  const reviews: ReviewEvent[] = [
+    dailyReview("later", 2, "new", at(9)),
+    dailyReview("same-b", 3, "new", at(8)),
+    dailyReview("same-a", 1, "new", at(8)),
+    dailyReview("duplicate", 1, "new", at(10)),
+    dailyReview("review", 4, "review", at(7)),
+    dailyReview("future", 12, "new", at(13)),
+    dailyReview("invalid", 11, "new", "invalid"),
+    dailyReview("missing-id", undefined, "new", at(6)),
+    dailyReview("unknown", 99, "new", at(6)),
+    ...Array.from({ length: 7 }, (_, index) =>
+      dailyReview(`extra-${index}`, index + 4, "new", at(9, index + 1))),
+  ];
+
+  const targets = selectDailyNewWordTargets(reviews, words, now);
+  assert.equal(targets.length, 10);
+  assert.deepEqual(targets.slice(0, 3).map(({ wordId }) => wordId), [1, 3, 2]);
+  assert.equal(new Set(targets.map(({ wordId }) => wordId)).size, targets.length);
+  assert.deepEqual(selectDailyNewWordTargets([], words, now), []);
+  assert.equal(targets.some(({ wordId }) => [11, 12, 99].includes(wordId)), false);
+});
+
+test("每日短文 inputKey 对完整有序真实输入稳定且任一身份变化都会失效", () => {
+  const key = buildDailyClozeInputKey(DAILY_CLOZE_INPUT);
+  assert.equal(buildDailyClozeInputKey(structuredClone(DAILY_CLOZE_INPUT)), key);
+  const variants: DailyClozeInput[] = [
+    { ...DAILY_CLOZE_INPUT, localDate: "2026-08-12" },
+    { ...DAILY_CLOZE_INPUT, targets: [...DAILY_CLOZE_INPUT.targets].reverse() },
+    { ...DAILY_CLOZE_INPUT, targets: [{ ...DAILY_CLOZE_INPUT.targets[0], wordId: 9 }, DAILY_CLOZE_INPUT.targets[1]] },
+    { ...DAILY_CLOZE_INPUT, targets: [{ ...DAILY_CLOZE_INPUT.targets[0], word: "radiant" }, DAILY_CLOZE_INPUT.targets[1]] },
+    { ...DAILY_CLOZE_INPUT, targets: [{ ...DAILY_CLOZE_INPUT.targets[0], meaning: "辐射" }, DAILY_CLOZE_INPUT.targets[1]] },
+  ];
+  for (const variant of variants) assert.notEqual(buildDailyClozeInputKey(variant), key);
+});
+
+test("每日短文内容严格校验篇幅、题目映射、选项、解释与安全命中", () => {
+  const normalized = normalizeDailyClozeContent(DAILY_CLOZE_CONTENT, DAILY_CLOZE_INPUT);
+  assert.ok(normalized);
+  assert.equal(normalized.questions[0].options[0], "radiate");
+
+  const invalidValues = [
+    { ...DAILY_CLOZE_CONTENT, passage: "too short" },
+    { ...DAILY_CLOZE_CONTENT, passage: Array(121).fill("word").join(" ") },
+    { ...DAILY_CLOZE_CONTENT, passage: 42 },
+    { ...DAILY_CLOZE_CONTENT, passage: DAILY_CLOZE_PASSAGE.replace("radiate", "shine") },
+    { ...DAILY_CLOZE_CONTENT, passage: DAILY_CLOZE_PASSAGE.replace("radiate", "＿＿＿＿") },
+    { ...DAILY_CLOZE_CONTENT, questions: DAILY_CLOZE_CONTENT.questions.slice(0, 1) },
+    { ...DAILY_CLOZE_CONTENT, questions: [{ ...DAILY_CLOZE_CONTENT.questions[0], wordId: 99 }, DAILY_CLOZE_CONTENT.questions[1]] },
+    { ...DAILY_CLOZE_CONTENT, questions: [DAILY_CLOZE_CONTENT.questions[0], { ...DAILY_CLOZE_CONTENT.questions[1], wordId: 1 }] },
+    { ...DAILY_CLOZE_CONTENT, questions: [{ ...DAILY_CLOZE_CONTENT.questions[0], options: ["radiate", "one", "two"] }, DAILY_CLOZE_CONTENT.questions[1]] },
+    { ...DAILY_CLOZE_CONTENT, questions: [{ ...DAILY_CLOZE_CONTENT.questions[0], options: ["radiate", "same", " same ", "other"] }, DAILY_CLOZE_CONTENT.questions[1]] },
+    { ...DAILY_CLOZE_CONTENT, questions: [{ ...DAILY_CLOZE_CONTENT.questions[0], options: ["shine", "one", "two", "three"] }, DAILY_CLOZE_CONTENT.questions[1]] },
+    { ...DAILY_CLOZE_CONTENT, questions: [{ ...DAILY_CLOZE_CONTENT.questions[0], explanation: " " }, DAILY_CLOZE_CONTENT.questions[1]] },
+  ];
+  for (const value of invalidValues) {
+    assert.equal(normalizeDailyClozeContent(value, DAILY_CLOZE_INPUT), null);
+  }
+});
+
+test("每日短文缓存按 schema、prompt、日期、输入与生成来源诚实失效", () => {
+  const content = normalizeDailyClozeContent(DAILY_CLOZE_CONTENT, DAILY_CLOZE_INPUT)!;
+  const entry = buildDailyClozeCacheEntry(
+    DAILY_CLOZE_INPUT,
+    content,
+    new Date("2026-08-11T08:00:00.000Z"),
+  );
+  assert.deepEqual(normalizeDailyClozeCacheEntry(entry), entry);
+  assert.equal(isCurrentDailyClozeCache(entry, DAILY_CLOZE_INPUT), true);
+  assert.equal(isCurrentDailyClozeCache(entry, { ...DAILY_CLOZE_INPUT, localDate: "2026-08-12" }), false);
+  assert.equal(isCurrentDailyClozeCache({ ...entry, promptVersion: "old" } as unknown as typeof entry, DAILY_CLOZE_INPUT), false);
+  for (const invalid of [
+    { ...entry, schemaVersion: 2 },
+    { ...entry, source: "local" },
+    { ...entry, generatedAt: "invalid" },
+    { ...entry, targetWordIds: [1, 1] },
+  ]) {
+    assert.equal(normalizeDailyClozeCacheEntry(invalid), undefined);
+  }
+});
+
+test("每日短文结构可复用 parseJsonContent 清理 Markdown JSON 围栏", () => {
+  const raw = `\`\`\`json\n${JSON.stringify(DAILY_CLOZE_CONTENT)}\n\`\`\``;
+  assert.ok(normalizeDailyClozeContent(parseJsonContent(raw), DAILY_CLOZE_INPUT));
+});
 
 test("请求体在 JSON 解析前按字节上限拒绝", async () => {
   const declared = new Request("http://localhost/api", {

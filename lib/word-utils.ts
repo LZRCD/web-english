@@ -80,7 +80,10 @@ export function maskWord(value: string) {
 /** 在句子中将目标单词替换为填空线，用于完形填空练习 */
 export function clozeSentence(sentence: string, word: string) {
   const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const cloze = sentence.replace(new RegExp(escapedWord, "gi"), "＿＿＿＿");
+  const cloze = sentence.replace(
+    new RegExp(`(?<![\\p{L}\\p{N}])${escapedWord}(?![\\p{L}\\p{N}])`, "giu"),
+    "＿＿＿＿",
+  );
   return cloze === sentence ? "" : cloze;
 }
 
