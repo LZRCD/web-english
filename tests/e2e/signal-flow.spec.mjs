@@ -8,6 +8,7 @@ import {
   installStateSeed,
   openApp,
   openSettings,
+  openTraceAnalysis,
   openWordbook,
   readStoreRecord,
   selectText,
@@ -687,6 +688,7 @@ test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
 
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
@@ -738,6 +740,7 @@ test("信号联动：拼写薄弱从冲刺入口直达听音拼写并归因结�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("听音拼写", { exact: true })).toBeVisible();
 });
@@ -749,6 +752,7 @@ test("信号联动：拼写恢复后中译英接管冲刺并完成同维回流",
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
 
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
@@ -813,6 +817,7 @@ test("信号联动：拼写恢复后中译英接管冲刺并完成同维回流",
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
 });
@@ -824,6 +829,7 @@ test("信号联动：维度化 Quiz、主动回忆、刷新、历史与 generic 
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
 
   await page.getByRole("button", { name: /开始考前薄弱冲刺（2 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
@@ -906,6 +912,7 @@ test("信号联动：维度化 Quiz、主动回忆、刷新、历史与 generic 
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
   await expect.poll(async () => {
@@ -926,6 +933,7 @@ test("信号联动：维度化 Quiz、主动回忆、刷新、历史与 generic 
     .toBe(lookupSession.id);
 
   await page.getByRole("button", { name: "返回轨迹页" }).click();
+  await openTraceAnalysis(page);
   const history = page.locator(".sprint-history");
   await expect(history).toContainText("共 2 次 · 覆盖 2 个不同单词");
   await history.locator(".sprint-history-row").first()
@@ -949,6 +957,7 @@ test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
 
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("熟词僻义", { exact: true })).toBeVisible();
@@ -1014,6 +1023,7 @@ test("信号联动：拼写与中译英恢复后辨析接管冲刺并完成同�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(page.locator(".sprint-history")).toContainText("覆盖 1 个不同单词");
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("熟词僻义", { exact: true })).toBeVisible();
@@ -1028,6 +1038,7 @@ test("信号联动：查词薄弱进入主动回忆，真实评分淡出并在�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
 
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
@@ -1053,6 +1064,7 @@ test("信号联动：查词薄弱进入主动回忆，真实评分淡出并在�
     lookupLastAt: initialLookupLastAt,
   });
   await page.getByRole("button", { name: "返回轨迹页" }).click();
+  await openTraceAnalysis(page);
   await expect(page.getByRole("button", { name: /开始考前薄弱冲刺/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "词环首页" }).click();
@@ -1074,6 +1086,7 @@ test("信号联动：查词薄弱进入主动回忆，真实评分淡出并在�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText(/考前薄弱冲刺 · 词义主动回忆/).first()).toBeVisible();
 });
@@ -1134,6 +1147,7 @@ test("信号联动：顽固词按真实 review 跨主动回忆、听音拼写与
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(page.locator(".sprint-history")).toContainText("覆盖 1 个不同单词");
   await page.getByRole("button", { name: /开始考前薄弱冲刺（1 词）/ }).click();
   await expect(page.getByText("中译英", { exact: true })).toBeVisible();
@@ -1150,6 +1164,7 @@ test("信号联动：轨迹页冲刺记录出现并支持再跑一次", async ({
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
@@ -1288,6 +1303,7 @@ test("信号联动：完整冲刺交互（入口→词卡原因→完成小结�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   const sprintStart = page.getByRole("button", {
     name: /开始考前薄弱冲刺（2 词）/,
   });
@@ -1355,6 +1371,7 @@ test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
@@ -1481,6 +1498,7 @@ test("信号联动：词书薄弱分布与冲刺后当前仍薄弱追踪", async
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
@@ -1504,6 +1522,7 @@ test("信号联动：当前仍薄弱词一键再冲刺与词书薄弱单元", as
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
@@ -1623,6 +1642,7 @@ test("信号联动：冲刺后首次正常复习保持披露覆盖、截断与�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   await expect(
     page.getByRole("heading", { name: "每一次回忆都算数" }),
   ).toBeVisible();
@@ -1680,6 +1700,7 @@ test("信号联动：分维度观察固定并列 known、unknown、generic 与�
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
+  await openTraceAnalysis(page);
   const report = page.locator('[aria-label="分维度观察报告（最近 4 个完整周）"]');
   await expect(report).toBeVisible();
   await report.locator("summary").click();

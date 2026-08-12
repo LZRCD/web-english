@@ -394,7 +394,7 @@ export default function WordCard({
               : "未能读取本地红宝书词库"}
           </span>
         ) : (
-          !revealed && <span>先在脑中回忆，再点击查看</span>
+          !revealed && <span>点击 / Space 查看释义</span>
         )}
       </button>
 

@@ -2410,8 +2410,32 @@ export default function Home() {
                 : navigation.find((item) => item.id === activeView)?.label}
             </p>
           </div>
-          {activeView === "learn" && (
-            <div className="study-tools">
+          <button
+            type="button"
+            className="daily-sentence-trigger"
+            onClick={() => setDailySentenceOpen(true)}
+            aria-label="今日长难句"
+            aria-haspopup="dialog"
+            aria-expanded={dailySentenceOpen}
+            title={currentDailySentence ? "今日长难句 · 今日已生成" : "今日长难句 · 点击查看"}
+          >
+            <span className="daily-sentence-trigger-label full">今日长难句</span>
+            <span className="daily-sentence-trigger-label short">长难句</span>
+            {currentDailySentence && <i className="daily-sentence-ready-dot" aria-hidden="true" />}
+          </button>
+          <button className="search-trigger" type="button" onClick={() => setSearchOpen(true)}>
+            <span>⌕</span> <span className="search-label">查词</span> <kbd>/</kbd>
+          </button>
+          <div className="daily-progress" aria-label={`今日新学 ${stats.newCount} 个，当前目标 ${effectiveNewGoal} 个`}>
+            <span>{stats.newCount}</span>
+            <i />
+            <span>{effectiveNewGoal}</span>
+          </div>
+        </header>
+
+        {activeView === "learn" && (
+          <div className="learn-view">
+            <div className="learning-context" role="group" aria-label="学习范围">
               {redbookWords.length > 0 && (
                 <div className="study-picker">
                   <select
@@ -2468,35 +2492,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-          )}
-          <button
-            type="button"
-            className="daily-sentence-trigger"
-            onClick={() => setDailySentenceOpen(true)}
-            aria-label="今日长难句"
-            aria-haspopup="dialog"
-            aria-expanded={dailySentenceOpen}
-            title={currentDailySentence ? "今日长难句 · 今日已生成" : "今日长难句 · 点击查看"}
-          >
-            <span className="daily-sentence-trigger-label full">今日长难句</span>
-            <span className="daily-sentence-trigger-label short">长难句</span>
-            {currentDailySentence && <i className="daily-sentence-ready-dot" aria-hidden="true" />}
-          </button>
-          <button className="search-trigger" type="button" onClick={() => setSearchOpen(true)}>
-            <span>⌕</span> <span className="search-label">查词</span> <kbd>/</kbd>
-          </button>
-          <div className="daily-progress" aria-label={`今日新学 ${stats.newCount} 个，当前目标 ${effectiveNewGoal} 个`}>
-            <span>{stats.newCount}</span>
-            <i />
-            <span>{effectiveNewGoal}</span>
-          </div>
-        </header>
-
-        {activeView === "learn" && (
-          <div className={!activeSession && redbookReady
-            ? "learn-view has-today-preview"
-            : "learn-view"}
-          >
             {!activeSession && redbookReady && (
               <button
                 type="button"
@@ -2560,6 +2555,7 @@ export default function Home() {
             <div className="study-main-stack">
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
+              <div className="card-viewport">
               <WordCard
                 wordCardRef={wordCardRef}
                 reinforcementInputRef={reinforcementInputRef}
@@ -2653,6 +2649,7 @@ export default function Home() {
                 onSubmitReinforcement={submitReinforcement}
                 onSkipReinforcement={skipReinforcement}
               />
+              </div>
               <div className="orbit-label orbit-label-bottom">
                 {!redbookReady
                   ? "LOCAL · REDBOOK"

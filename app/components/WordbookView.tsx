@@ -195,26 +195,30 @@ export default function WordbookView({
           <p className="eyebrow">PERSONAL WORD LEDGER</p>
           <h1>把难词留在手边</h1>
         </div>
-        <div className="wordbook-counts">
-          <span><strong>{favoriteWords.length}</strong> 个收藏</span>
-          <span><strong>{mistakeWords.length}</strong> 个错词</span>
-          <span><strong>{stubbornWordList.length}</strong> 个顽固词</span>
-          <span><strong>{lookupWords.length}</strong> 个划词</span>
-        </div>
-        <div className="wordbook-vocab-action">
-          <button
-            type="button"
-            onClick={onStartVocabTest}
-            disabled={!vocabTestReady}
-          >
-            测试我的词汇量
-          </button>
-          {!vocabTestReady && <small>本地红宝书载入后可用</small>}
-        </div>
-        <div className="wordbook-batch-actions">
-          <button onClick={batchAction.run} disabled={batchAction.disabled}>
-            {batchAction.label}
-          </button>
+        <div className="wordbook-heading-actions">
+          <div className="wordbook-counts">
+            <span><strong>{favoriteWords.length}</strong> 个收藏</span>
+            <span><strong>{mistakeWords.length}</strong> 个错词</span>
+            <span><strong>{stubbornWordList.length}</strong> 个顽固词</span>
+            <span><strong>{lookupWords.length}</strong> 个划词</span>
+          </div>
+          <div className="wordbook-actions-row">
+            <div className="wordbook-vocab-action">
+              <button
+                type="button"
+                onClick={onStartVocabTest}
+                disabled={!vocabTestReady}
+              >
+                测试我的词汇量
+              </button>
+              {!vocabTestReady && <small>本地红宝书载入后可用</small>}
+            </div>
+            <div className="wordbook-batch-actions">
+              <button onClick={batchAction.run} disabled={batchAction.disabled}>
+                {batchAction.label}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <ArticleWordExtractor

@@ -38,7 +38,7 @@ export default function BooksView({
   const due = new Set(dueWordIds(wordProgress, now));
 
   return (
-    <div className="content-view">
+    <div className="content-view books-view">
       <div className="section-heading">
         <div><p className="eyebrow">2027 考研英语红宝书</p><h1>按红宝书顺序开始</h1></div>
         <div className="book-heading-actions">
@@ -102,7 +102,7 @@ export default function BooksView({
         <button className="book-card empty-book all-book-card" onClick={onAllShuffle}>
           <span>{learningItemCount}</span>
           <h2>全书乱序</h2>
-          <p>保留 6550 条原书来源，变体不重复进入每日新词</p>
+          <p className="all-book-cta">随机开始 →</p>
         </button>
       </div>
     </div>

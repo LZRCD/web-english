@@ -208,6 +208,19 @@ export async function openApp(page, options) {
   await waitForApp(page, options);
 }
 
+/**
+ * 展开轨迹页「详细学习分析」折叠面板。
+ * 轨迹页高级数据默认渐进披露（折叠），断言内部模块前先展开；幂等。
+ */
+export async function openTraceAnalysis(page) {
+  const details = page.locator(".trace-details");
+  if (await details.count()) {
+    await details.evaluate((el) => {
+      if (!el.open) el.open = true;
+    });
+  }
+}
+
 export async function openSettings(page) {
   await page
     .getByRole("complementary", { name: "主导航" })

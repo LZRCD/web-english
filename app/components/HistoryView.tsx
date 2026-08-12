@@ -241,6 +241,11 @@ export default function HistoryView({
   const recentReviews = [...reviews].reverse().slice(0, 8);
   const forecastMax = Math.max(1, ...reviewForecast.map((day) => day.count));
   const currentReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-1);
+  // 本周最值得注意的薄弱维度：只保留发生过且值得关注的项目，0 值不占核心视觉空间
+  const topWeakDimensions = weeklyReport.weakTrend
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4);
   const activityTabDate = selectedActivityDate
     || (activityDays.some((day) => day.date === todayKey)
       ? todayKey
@@ -270,80 +275,22 @@ export default function HistoryView({
   };
 
   return (
-    <div className="content-view">
+    <div className="content-view history-view">
       <div className="section-heading">
         <div><p className="eyebrow">MEMORY TRACE</p><h1>每一次回忆都算数</h1></div>
         <div className="streak"><strong>{stats.streak}</strong><span>连续学习天</span></div>
       </div>
+
+      <p className="trace-section">今天</p>
       <div className="stat-grid">
         <div><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
         <div><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
-        <div><span>完成次数</span><strong>{stats.completionCount}</strong><small>{stats.coveredCount} 个不同单词</small></div>
-        <div><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
         <button type="button" onClick={onStartTodaySession}>
           <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
         </button>
+        <div><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
       </div>
-      {lookupWords.length > 0 && (
-        <section className="lookup-trace" aria-labelledby="lookup-trace-title">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">LOOKUP TRACE</p>
-              <h2 id="lookup-trace-title">划词集</h2>
-            </div>
-            {recentLookupAt && (
-              <small>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
-            )}
-          </div>
-          <div className="exam-progress-grid">
-            <div><span>累计查询</span><strong>{totalLookupCount}</strong><small>划词查义次数</small></div>
-            <div><span>划词收录</span><strong>{lookupWords.length}</strong><small>累计加入划词集</small></div>
-            <div><span>本周新增</span><strong>{weekNewLookups}</strong><small>新查询并收录的词</small></div>
-          </div>
-          <div className="lookup-distribution" aria-label="查询次数分布">
-            <div className="lookup-dist-head">
-              <strong>查询次数分布</strong>
-              <small>反复查询 = 薄弱词依据，共 {weakLookupCount} 个词查过 2 次以上</small>
-            </div>
-            {[
-              { key: "once", label: "查过 1 次", count: lookupDistribution.once },
-              { key: "twice", label: "查过 2 次", count: lookupDistribution.twice },
-              { key: "repeated", label: "查过 3-5 次", count: lookupDistribution.repeated },
-              { key: "frequent", label: "查过 6 次以上", count: lookupDistribution.frequent },
-            ].map((row) => (
-              <div className="lookup-dist-row" key={row.key}>
-                <span>{row.label}</span>
-                <div className="lookup-dist-bar">
-                  <i
-                    className={row.key === "frequent" ? "hot" : ""}
-                    style={{ width: `${Math.max(4, (row.count / lookupDistribution.max) * 100)}%` }}
-                  />
-                </div>
-                <strong>{row.count}</strong>
-              </div>
-            ))}
-          </div>
-          <p className="lookup-trace-note">
-            在词本「划词集」标签可直接复习；查询过的释义会缓存复用，同一语境再次划选会秒出结果。
-          </p>
-        </section>
-      )}
-      {examProgress && (
-        <section className="exam-progress" aria-labelledby="exam-progress-title">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">EXAM READINESS</p>
-              <h2 id="exam-progress-title">考研备考就绪度</h2>
-            </div>
-            <small>考试日 {examProgress.examDate.replaceAll("-", ".")} · 可提取率 ≥ {examProgress.thresholdPercent}%</small>
-          </div>
-          <div className="exam-progress-grid">
-            <div><span>已覆盖</span><strong>{examProgress.covered}</strong><small>至少学习一次</small></div>
-            <div><span>已掌握</span><strong>{examProgress.mastered}</strong><small>达到稳定性门槛</small></div>
-            <div><span>考试日就绪</span><strong>{examProgress.examReady}</strong><small>预测考试当天仍可提取</small></div>
-          </div>
-        </section>
-      )}
+      <p className="trace-section">本周</p>
 
       <section className="weekly-report" aria-labelledby="weekly-report-title">
         <div className="panel-title">
@@ -439,6 +386,277 @@ export default function HistoryView({
             </div>
           </div>
         )}
+        {topWeakDimensions.length > 0 && (
+          <div className="weak-dim-highlight" aria-label="本周最值得注意的薄弱维度">
+            <div className="weak-trend-head">
+              <strong>本周最值得注意</strong>
+              <small>发生过的薄弱信号 · 按不同单词数排序</small>
+            </div>
+            <div className="weak-dim-highlight-row">
+              {topWeakDimensions.map((row) => (
+                <span key={row.key}><b>{row.count}</b>{row.label}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+<div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
+          <span aria-hidden="true">↗</span>
+          <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>
+        </div>
+      </section>
+
+      <section className="insights-panel" aria-labelledby="insights-title">
+        <div className="panel-title">
+          <h2 id="insights-title">学习趋势</h2>
+          <small>近 7 天截至目前</small>
+        </div>
+        <div className="insights-grid">
+          <div className="insight-card">
+            <span>当场达标占比</span>
+            <strong>
+              {insights.successRate === null
+                ? "—"
+                : `${Math.round(insights.successRate)}%`}
+            </strong>
+            <small>rating≥2 / 全部评分事件；不代表长期记住</small>
+            <small>
+              {formatSuccessRateDelta(
+                insights.successRateDelta,
+                insights.successRate !== null,
+              )}
+            </small>
+          </div>
+          <div className="insight-card">
+            <span>真实复习保持率</span>
+            <strong>{formatTrueRetention(insights.trueRetention.overall)}</strong>
+            <small>仅复习：忘记失败，其余评分成功</small>
+            <small>
+              年轻 &lt;21天 {formatTrueRetention(insights.trueRetention.young)}
+              {" · "}成熟 ≥21天 {formatTrueRetention(insights.trueRetention.mature)}
+              {insights.trueRetention.unclassifiedCount > 0
+                ? ` · 未分桶 ${insights.trueRetention.unclassifiedCount}`
+                : ""}
+            </small>
+          </div>
+          <div className="insight-card">
+            <span>平均回忆</span>
+            <strong>
+              {insights.averageRecallMs !== null
+                ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
+                : "—"}
+            </strong>
+            <small>反应耗时</small>
+          </div>
+          <div className="insight-card">
+            <span>学习天数</span>
+            <strong>{insights.activeDays}</strong>
+            <small>/ 7 天</small>
+          </div>
+        </div>
+        <div className="insights-meta">
+          <span>不同单词 <strong>{insights.uniqueWordCount}</strong> · {insights.reviewCount} 次评分</span>
+          <span>完成次数 <strong>{stats.completionCount}</strong> · {stats.coveredCount} 个不同单词</span>
+        </div>
+      </section>
+
+      <p className="trace-section">未来</p>
+      {examProgress && (
+        <section className="exam-progress" aria-labelledby="exam-progress-title">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">EXAM READINESS</p>
+              <h2 id="exam-progress-title">考研备考就绪度</h2>
+            </div>
+            <small>考试日 {examProgress.examDate.replaceAll("-", ".")} · 可提取率 ≥ {examProgress.thresholdPercent}%</small>
+          </div>
+          <div className="exam-progress-grid">
+            <div><span>已覆盖</span><strong>{examProgress.covered}</strong><small>至少学习一次</small></div>
+            <div><span>已掌握</span><strong>{examProgress.mastered}</strong><small>达到稳定性门槛</small></div>
+            <div><span>考试日就绪</span><strong>{examProgress.examReady}</strong><small>预测考试当天仍可提取</small></div>
+          </div>
+        </section>
+      )}
+
+        {reviewForecast.length > 0 && (
+          <div
+            className="forecast-panel"
+            role="region"
+            aria-labelledby="review-forecast-title"
+          >
+            <div className="forecast-title">
+              <div>
+                <h3 id="review-forecast-title">未来 30 天到期复习（当前排程快照）</h3>
+                <p>按当前 nextDueAt 计算；继续学习和评分后排程会变化，因此不是未来承诺。逾期与今天到期均计入第 1 天。</p>
+              </div>
+              <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
+            </div>
+            <div
+              className="forecast-scroll"
+              role="region"
+              aria-label="未来 30 天到期复习图表，可横向滚动"
+              tabIndex={0}
+            >
+              <div className="forecast-bars">
+                {reviewForecast.map((day, index) => {
+                  const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
+                  const accessibleLabel = index === 0
+                    ? `${day.date}，含逾期与今天到期，共 ${day.count} 词`
+                    : `${day.date}，到期复习 ${day.count} 词`;
+                  return (
+                    <div
+                      className="forecast-day"
+                      key={day.date}
+                      data-date={day.date}
+                      title={accessibleLabel}
+                      aria-label={accessibleLabel}
+                      role="group"
+                    >
+                      <small>{index === 0 ? "今天" : day.date.slice(5)}</small>
+                      <div
+                        className={`forecast-bar level-${level}`}
+                        style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
+                        aria-hidden="true"
+                      />
+                      <span>{day.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+      <p className="trace-section">薄弱项</p>
+        {weakConcentration.length > 0 && (
+          <div className="weak-concentration" aria-label="薄弱集中区">
+            <div className="weak-trend-head">
+              <strong>薄弱集中区</strong>
+              <small>按词本分册统计薄弱词分布 · 悬停查看单元明细</small>
+            </div>
+            {weakConcentration.map((section) => {
+              const sectionTotal = [...(sectionUnitTotals.get(section.section)?.values() ?? [])]
+                .reduce((sum, count) => sum + count, 0);
+              const sectionPct = sectionTotal > 0
+                ? Math.round((section.total / sectionTotal) * 100)
+                : 0;
+              return (
+                <div className="weak-concentration-row" key={section.section}>
+                  <span className="weak-concentration-label">{section.section}</span>
+                  <div className="weak-concentration-track">
+                    <div
+                      className="weak-concentration-fill"
+                      style={{ width: `${Math.round((section.total / maxConcentrationTotal) * 100)}%` }}
+                    />
+                  </div>
+                  <strong className="weak-concentration-count">
+                    {section.total}
+                    {sectionTotal > 0 && <small>{sectionPct}%</small>}
+                  </strong>
+                  <small
+                    className="weak-concentration-units"
+                    title={section.units
+                      .map((unit) => {
+                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
+                        const unitPct = unitTotal > 0
+                          ? Math.round((unit.count / unitTotal) * 100)
+                          : 0;
+                        return `${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`;
+                      })
+                      .join("；")}
+                  >
+                    {onScopedSprint
+                      ? section.units.slice(0, 5).map((unit) => {
+                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
+                        const unitPct = unitTotal > 0
+                          ? Math.round((unit.count / unitTotal) * 100)
+                          : 0;
+                        return (
+                          <button
+                            type="button"
+                            className="concentration-unit"
+                            key={unit.unit}
+                            title={`${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`}
+                            onClick={() => onScopedSprint(section.section, unit.unit)}
+                          >
+                            {unit.unit} {unit.count}词
+                          </button>
+                        );
+                      })
+                      : section.units
+                        .slice(0, 3)
+                        .map((unit) => `${unit.unit} ${unit.count}词`)
+                        .join("、")}
+                    {section.units.length > 5 && onScopedSprint
+                      ? ` 等 ${section.units.length} 个单元`
+                      : section.units.length > 3 && !onScopedSprint
+                        ? ` 等 ${section.units.length} 个单元`
+                        : ""}
+                  </small>
+                  {onScopedSprint && (
+                    <button
+                      type="button"
+                      className="concentration-sprint"
+                      onClick={() => onScopedSprint(section.section)}
+                      disabled={section.total === 0}
+                    >
+                      冲刺
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      <details className="trace-details" aria-label="详细学习分析">
+        <summary>详细学习分析<span>查询行为 · 薄弱维度 · 冲刺与 cohort</span></summary>
+        <div className="trace-details-body">
+        {lookupWords.length > 0 && (
+          <section className="lookup-trace" aria-labelledby="lookup-trace-title">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">LOOKUP TRACE</p>
+                <h2 id="lookup-trace-title">划词集</h2>
+              </div>
+              {recentLookupAt && (
+                <small>最近查询 {new Date(recentLookupAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
+              )}
+            </div>
+            <div className="exam-progress-grid">
+              <div><span>累计查询</span><strong>{totalLookupCount}</strong><small>划词查义次数</small></div>
+              <div><span>划词收录</span><strong>{lookupWords.length}</strong><small>累计加入划词集</small></div>
+              <div><span>本周新增</span><strong>{weekNewLookups}</strong><small>新查询并收录的词</small></div>
+            </div>
+            <div className="lookup-distribution" aria-label="查询次数分布">
+              <div className="lookup-dist-head">
+                <strong>查询次数分布</strong>
+                <small>反复查询 = 薄弱词依据，共 {weakLookupCount} 个词查过 2 次以上</small>
+              </div>
+              {[
+                { key: "once", label: "查过 1 次", count: lookupDistribution.once },
+                { key: "twice", label: "查过 2 次", count: lookupDistribution.twice },
+                { key: "repeated", label: "查过 3-5 次", count: lookupDistribution.repeated },
+                { key: "frequent", label: "查过 6 次以上", count: lookupDistribution.frequent },
+              ].map((row) => (
+                <div className="lookup-dist-row" key={row.key}>
+                  <span>{row.label}</span>
+                  <div className="lookup-dist-bar">
+                    <i
+                      className={row.key === "frequent" ? "hot" : ""}
+                      style={{ width: `${Math.max(4, (row.count / lookupDistribution.max) * 100)}%` }}
+                    />
+                  </div>
+                  <strong>{row.count}</strong>
+                </div>
+              ))}
+            </div>
+            <p className="lookup-trace-note">
+              在词本「划词集」标签可直接复习；查询过的释义会缓存复用，同一语境再次划选会秒出结果。
+            </p>
+          </section>
+        )}
+
         {weakTrendSeries.length > 1 && (
           <div className="weak-trend-series" aria-label="薄弱维度近 4 周趋势">
             <div className="weak-trend-head">
@@ -794,91 +1012,6 @@ export default function HistoryView({
             </div>
           </div>
         )}
-        {weakConcentration.length > 0 && (
-          <div className="weak-concentration" aria-label="薄弱集中区">
-            <div className="weak-trend-head">
-              <strong>薄弱集中区</strong>
-              <small>按词本分册统计薄弱词分布 · 悬停查看单元明细</small>
-            </div>
-            {weakConcentration.map((section) => {
-              const sectionTotal = [...(sectionUnitTotals.get(section.section)?.values() ?? [])]
-                .reduce((sum, count) => sum + count, 0);
-              const sectionPct = sectionTotal > 0
-                ? Math.round((section.total / sectionTotal) * 100)
-                : 0;
-              return (
-                <div className="weak-concentration-row" key={section.section}>
-                  <span className="weak-concentration-label">{section.section}</span>
-                  <div className="weak-concentration-track">
-                    <div
-                      className="weak-concentration-fill"
-                      style={{ width: `${Math.round((section.total / maxConcentrationTotal) * 100)}%` }}
-                    />
-                  </div>
-                  <strong className="weak-concentration-count">
-                    {section.total}
-                    {sectionTotal > 0 && <small>{sectionPct}%</small>}
-                  </strong>
-                  <small
-                    className="weak-concentration-units"
-                    title={section.units
-                      .map((unit) => {
-                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
-                        const unitPct = unitTotal > 0
-                          ? Math.round((unit.count / unitTotal) * 100)
-                          : 0;
-                        return `${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`;
-                      })
-                      .join("；")}
-                  >
-                    {onScopedSprint
-                      ? section.units.slice(0, 5).map((unit) => {
-                        const unitTotal = sectionUnitTotals.get(section.section)?.get(unit.unit) ?? 0;
-                        const unitPct = unitTotal > 0
-                          ? Math.round((unit.count / unitTotal) * 100)
-                          : 0;
-                        return (
-                          <button
-                            type="button"
-                            className="concentration-unit"
-                            key={unit.unit}
-                            title={`${unit.unit}：${unit.count} 词 / ${unitTotal} 词${unitPct > 0 ? `（${unitPct}%）` : ""}`}
-                            onClick={() => onScopedSprint(section.section, unit.unit)}
-                          >
-                            {unit.unit} {unit.count}词
-                          </button>
-                        );
-                      })
-                      : section.units
-                        .slice(0, 3)
-                        .map((unit) => `${unit.unit} ${unit.count}词`)
-                        .join("、")}
-                    {section.units.length > 5 && onScopedSprint
-                      ? ` 等 ${section.units.length} 个单元`
-                      : section.units.length > 3 && !onScopedSprint
-                        ? ` 等 ${section.units.length} 个单元`
-                        : ""}
-                  </small>
-                  {onScopedSprint && (
-                    <button
-                      type="button"
-                      className="concentration-sprint"
-                      onClick={() => onScopedSprint(section.section)}
-                      disabled={section.total === 0}
-                    >
-                      冲刺
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-<div className={`weekly-pace-advice ${weeklyReport.paceStatus}`}>
-          <span aria-hidden="true">↗</span>
-          <p><strong>考研节奏建议</strong>{weeklyReport.paceAdvice}</p>
-        </div>
-      </section>
       {sprintHistory.totalCount > 0 && (
         <section className="sprint-history" aria-labelledby="sprint-history-title">
           <div className="panel-title">
@@ -923,108 +1056,11 @@ export default function HistoryView({
           </div>
         </section>
       )}
-      <section className="insights-panel" aria-labelledby="insights-title">
-        <div className="panel-title">
-          <h2 id="insights-title">学习趋势</h2>
-          <small>近 7 天截至目前</small>
         </div>
-        <div className="insights-grid">
-          <div className="insight-card">
-            <span>当场达标占比</span>
-            <strong>
-              {insights.successRate === null
-                ? "—"
-                : `${Math.round(insights.successRate)}%`}
-            </strong>
-            <small>rating≥2 / 全部评分事件；不代表长期记住</small>
-            <small>
-              {formatSuccessRateDelta(
-                insights.successRateDelta,
-                insights.successRate !== null,
-              )}
-            </small>
-          </div>
-          <div className="insight-card">
-            <span>真实复习保持率</span>
-            <strong>{formatTrueRetention(insights.trueRetention.overall)}</strong>
-            <small>仅复习：忘记失败，其余评分成功</small>
-            <small>
-              年轻 &lt;21天 {formatTrueRetention(insights.trueRetention.young)}
-              {" · "}成熟 ≥21天 {formatTrueRetention(insights.trueRetention.mature)}
-              {insights.trueRetention.unclassifiedCount > 0
-                ? ` · 未分桶 ${insights.trueRetention.unclassifiedCount}`
-                : ""}
-            </small>
-          </div>
-          <div className="insight-card">
-            <span>平均回忆</span>
-            <strong>
-              {insights.averageRecallMs !== null
-                ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
-                : "—"}
-            </strong>
-            <small>反应耗时</small>
-          </div>
-          <div className="insight-card">
-            <span>学习天数</span>
-            <strong>{insights.activeDays}</strong>
-            <small>/ 7 天</small>
-          </div>
-          <div className="insight-card">
-            <span>不同单词</span>
-            <strong>{insights.uniqueWordCount}</strong>
-            <small>{insights.reviewCount} 次评分</small>
-          </div>
-        </div>
-        {reviewForecast.length > 0 && (
-          <div
-            className="forecast-panel"
-            role="region"
-            aria-labelledby="review-forecast-title"
-          >
-            <div className="forecast-title">
-              <div>
-                <h3 id="review-forecast-title">未来 30 天到期复习（当前排程快照）</h3>
-                <p>按当前 nextDueAt 计算；继续学习和评分后排程会变化，因此不是未来承诺。逾期与今天到期均计入第 1 天。</p>
-              </div>
-              <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
-            </div>
-            <div
-              className="forecast-scroll"
-              role="region"
-              aria-label="未来 30 天到期复习图表，可横向滚动"
-              tabIndex={0}
-            >
-              <div className="forecast-bars">
-                {reviewForecast.map((day, index) => {
-                  const level = day.count === 0 ? 0 : day.count < 5 ? 1 : day.count < 10 ? 2 : day.count < 20 ? 3 : 4;
-                  const accessibleLabel = index === 0
-                    ? `${day.date}，含逾期与今天到期，共 ${day.count} 词`
-                    : `${day.date}，到期复习 ${day.count} 词`;
-                  return (
-                    <div
-                      className="forecast-day"
-                      key={day.date}
-                      data-date={day.date}
-                      title={accessibleLabel}
-                      aria-label={accessibleLabel}
-                      role="group"
-                    >
-                      <small>{index === 0 ? "今天" : day.date.slice(5)}</small>
-                      <div
-                        className={`forecast-bar level-${level}`}
-                        style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
-                        aria-hidden="true"
-                      />
-                      <span>{day.count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+      </details>
+
+      <p className="trace-section">历史</p>
+
       <section className="activity-panel" aria-labelledby="activity-title">
         <div className="panel-title">
           <div className="activity-heading">
