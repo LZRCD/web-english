@@ -1178,7 +1178,6 @@ test("信号联动：设置页阈值预览随阈值变化", async ({ context, pa
   await expect(preview).toContainText("冲刺 2 词");
   // 把「反复查词」阈值调到 10：薄弱候选清零；插队（独立阈值）与冲刺（lapse 命中）不变
   const lookupWeakInput = page
-    .locator(".weak-thresholds-settings")
     .getByRole("spinbutton", { name: /反复查词/ });
   await lookupWeakInput.fill("10");
   await expect(preview).toContainText("薄弱候选 0 词");
@@ -1186,7 +1185,6 @@ test("信号联动：设置页阈值预览随阈值变化", async ({ context, pa
   await expect(preview).toContainText("冲刺 2 词");
   // 把「插队复习」阈值调到 10：插队清零
   const lookupPriorityInput = page
-    .locator(".weak-thresholds-settings")
     .getByRole("spinbutton", { name: /插队复习/ });
   await lookupPriorityInput.fill("10");
   await expect(preview).toContainText("插队 0 词");
@@ -1237,12 +1235,11 @@ test("信号联动：薄弱阈值与猜错累计经分域写盘和完整刷新�
   await page.reload();
   await waitForApp(page);
   await openSettings(page);
-  const thresholds = page.locator(".weak-thresholds-settings");
-  await expect(thresholds.getByRole("spinbutton", { name: /反复查词/ })).toHaveValue("7");
-  await expect(thresholds.getByRole("spinbutton", { name: /插队复习/ })).toHaveValue("8");
-  await expect(thresholds.getByRole("spinbutton", { name: /回忆偏慢/ })).toHaveValue("22");
+  await expect(page.getByRole("spinbutton", { name: /反复查词/ })).toHaveValue("7");
+  await expect(page.getByRole("spinbutton", { name: /插队复习/ })).toHaveValue("8");
+  await expect(page.getByRole("spinbutton", { name: /回忆偏慢/ })).toHaveValue("22");
 
-  await thresholds.getByRole("spinbutton", { name: /反复查词/ }).fill("6");
+  await page.getByRole("spinbutton", { name: /反复查词/ }).fill("6");
   await expect.poll(readSettings).toEqual({
     weakThresholds: {
       lookupWeak: 6,
@@ -1262,8 +1259,7 @@ test("信号联动：薄弱阈值与猜错累计经分域写盘和完整刷新�
   await waitForApp(page);
   await openSettings(page);
   await expect(
-    page.locator(".weak-thresholds-settings")
-      .getByRole("spinbutton", { name: /反复查词/ }),
+    page.getByRole("spinbutton", { name: /反复查词/ }),
   ).toHaveValue("6");
 });
 

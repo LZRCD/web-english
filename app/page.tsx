@@ -131,6 +131,7 @@ import WordbookView from "./components/WordbookView";
 import {
   clozeSentence,
   formatRecallTime,
+  seededScore,
   shuffleWithSeed,
   splitWordSenses,
 } from "../lib/word-utils";
@@ -175,7 +176,7 @@ import {
   type DailyClozeInput,
 } from "../lib/daily-cloze";
 import QuizView from "./components/QuizView";
-import DailySentenceCard from "./components/DailySentenceCard";
+import DailySentenceOverlay from "./components/DailySentenceOverlay";
 import {
   isCurrentDailySentenceCache,
   type DailySentenceCacheEntry,
@@ -228,6 +229,7 @@ export default function Home() {
   const [activeQuiz, setActiveQuiz] = useState<QuizSessionState | undefined>(undefined);
   const [dailyCloze, setDailyCloze] = useState<DailyClozeCacheEntry | undefined>(undefined);
   const [dailySentence, setDailySentence] = useState<DailySentenceCacheEntry | undefined>(undefined);
+  const [dailySentenceOpen, setDailySentenceOpen] = useState(false);
   const [quizRecoveryNotice, setQuizRecoveryNotice] = useState("");
   const [stubbornHistory, setStubbornHistory] = useState<StubbornWordMap>({});
   const [studyMode, setStudyMode] = useState<StudyMode>("ordered");
@@ -755,6 +757,8 @@ export default function Home() {
         familyKeyByWordId,
         reviewedTodayWordIds,
         lookupPriorityIds,
+        // 以日期为种子：当天固定一套乱序，跨批次/预览保持一致，次日自动换新
+        shuffleSeed: seededScore(todayKey, 1),
       },
     }),
     [
@@ -767,6 +771,7 @@ export default function Home() {
       primaryWordIds,
       reviewedTodayWordIds,
       stats.newCount,
+      todayKey,
       wordProgress,
     ],
   );
@@ -1431,6 +1436,7 @@ export default function Home() {
             closeVocabTest();
             return;
           }
+          setDailySentenceOpen(false);
           setSearchOpen(false);
           setAiOpen(false);
           closeSelectionLookup();
@@ -1567,6 +1573,7 @@ export default function Home() {
     vocabTestTriggerRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
+    setDailySentenceOpen(false);
     setSearchOpen(false);
     setAiOpen(false);
     closeSelectionLookup();
@@ -2462,8 +2469,21 @@ export default function Home() {
               </div>
             </div>
           )}
+          <button
+            type="button"
+            className="daily-sentence-trigger"
+            onClick={() => setDailySentenceOpen(true)}
+            aria-label="今日长难句"
+            aria-haspopup="dialog"
+            aria-expanded={dailySentenceOpen}
+            title={currentDailySentence ? "今日长难句 · 今日已生成" : "今日长难句 · 点击查看"}
+          >
+            <span className="daily-sentence-trigger-label full">今日长难句</span>
+            <span className="daily-sentence-trigger-label short">长难句</span>
+            {currentDailySentence && <i className="daily-sentence-ready-dot" aria-hidden="true" />}
+          </button>
           <button className="search-trigger" type="button" onClick={() => setSearchOpen(true)}>
-            <span>⌕</span> 查词 <kbd>/</kbd>
+            <span>⌕</span> <span className="search-label">查词</span> <kbd>/</kbd>
           </button>
           <div className="daily-progress" aria-label={`今日新学 ${stats.newCount} 个，当前目标 ${effectiveNewGoal} 个`}>
             <span>{stats.newCount}</span>
@@ -2538,12 +2558,6 @@ export default function Home() {
             {!sessionComplete && (
               <>
             <div className="study-main-stack">
-            <DailySentenceCard
-              key={dailySentenceInput.localDate}
-              input={dailySentenceInput}
-              cache={currentDailySentence}
-              onChange={setDailySentence}
-            />
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <WordCard
@@ -2939,6 +2953,16 @@ export default function Home() {
             startSession("search", `专项学习${word ? ` · ${word.word}` : ""}`, wordIds);
           }}
           onClose={() => setSearchOpen(false)}
+        />
+      )}
+
+      {dailySentenceOpen && vocabTestSource === null && (
+        <DailySentenceOverlay
+          open={dailySentenceOpen}
+          input={dailySentenceInput}
+          cache={currentDailySentence}
+          onChange={setDailySentence}
+          onClose={() => setDailySentenceOpen(false)}
         />
       )}
 

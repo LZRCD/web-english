@@ -10,6 +10,7 @@ import {
 } from "ts-fsrs";
 import { canonicalWordId } from "./redbook.ts";
 import type { EtymologyCacheEntry } from "./etymology.ts";
+import { seededScore } from "./word-utils.ts";
 
 export type Rating = 0 | 1 | 2 | 3;
 export type ReviewKind = "new" | "review";
@@ -90,6 +91,11 @@ export type TodayQueueOptions = {
   reviewedTodayWordIds?: number[];
   /** 划词补漏：反复查询(≥3 次)的词 id，插在到期词之后、新词之前 */
   lookupPriorityIds?: number[];
+  /**
+   * 今日任务整体乱序种子（通常按日期派生，当天固定、每天换新）。
+   * 提供时把到期/补漏/新词完全混合随机；缺省保持「到期 → 补漏 → 新词」顺序。
+   */
+  shuffleSeed?: number;
 };
 
 export type TodayTaskPreview = {
@@ -529,6 +535,14 @@ export function stubbornWordIds(
     .map((record) => record.wordId);
 }
 
+/** 基于种子的确定性洗牌（与 quiz/study 共用同一 FNV-1a 评分） */
+function shuffleWordIds(wordIds: number[], seed: number) {
+  return [...wordIds].sort(
+    (first, second) =>
+      seededScore(String(first), seed) - seededScore(String(second), seed),
+  );
+}
+
 function buildTodayQueueParts(
   primaryWordIds: number[],
   progress: WordProgressMap,
@@ -577,8 +591,12 @@ function buildTodayQueueParts(
       if (newIds.length >= dailyNewGoal) break;
     }
   }
+  const orderedIds = [...dueIds, ...priorityIds, ...newIds];
+  const wordIds = options?.shuffleSeed !== undefined
+    ? shuffleWordIds(orderedIds, options.shuffleSeed)
+    : orderedIds;
   return {
-    wordIds: [...dueIds, ...priorityIds, ...newIds],
+    wordIds,
     dueWordIds: dueIds,
     lookupWordIds: priorityIds,
     newWordIds: newIds,

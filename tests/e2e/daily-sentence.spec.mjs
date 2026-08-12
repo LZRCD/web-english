@@ -73,6 +73,14 @@ function localDateKey(date = new Date()) {
   ].join("-");
 }
 
+/** 从顶部导航栏打开「今日长难句」弹层（桌面与窄屏均可用，aria-label 固定）。 */
+async function openDailySentence(page) {
+  await page.getByRole("button", { name: "今日长难句", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "今日长难句" }),
+  ).toBeVisible();
+}
+
 function inputKey(localDate) {
   return JSON.stringify({
     schemaVersion: 1,
@@ -150,6 +158,10 @@ test("每日长难句 A：显式单请求并展示完整结构且零学习事实
     });
   });
   await openApp(page);
+  // 主页不再内嵌大卡片：入口收进顶部导航栏
+  await expect(page.locator(".study-main-stack .daily-sentence-card")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "今日长难句", exact: true })).toBeVisible();
+  await openDailySentence(page);
   const region = page.getByRole("region", { name: "今日长难句" });
   await expect(region).toContainText("AI 原创长难句 · 非历年真题");
   expect(requestCount).toBe(0);
@@ -188,9 +200,11 @@ test("每日长难句 B：刷新与离线复用当日缓存，昨天缓存不冒
     return route.abort("internetdisconnected");
   });
   await openApp(page);
+  await openDailySentence(page);
   await expect(page.getByText(SENTENCE, { exact: true })).toBeVisible();
   expect(requestCount).toBe(0);
   await page.reload();
+  await openDailySentence(page);
   await expect(page.getByText(SENTENCE, { exact: true })).toBeVisible();
   expect(requestCount).toBe(0);
 
@@ -208,6 +222,7 @@ test("每日长难句 B：刷新与离线复用当日缓存，昨天缓存不冒
       dailySentence: cacheEntry(localDateKey(yesterday)),
     }));
     await openApp(stalePage);
+    await openDailySentence(stalePage);
     await expect(stalePage.getByText(SENTENCE, { exact: true })).toHaveCount(0);
     await expect(stalePage.getByRole("button", { name: "生成今日长难句" })).toBeVisible();
     expect(staleRequests).toBe(0);
@@ -226,6 +241,7 @@ test("每日长难句 C：重新生成失败保留旧缓存，无缓存失败诚
     body: JSON.stringify({ error: "未配置云端模型，暂时无法生成今日长难句" }),
   }));
   await openApp(page);
+  await openDailySentence(page);
   const before = await readLearningSnapshot(page);
   await page.getByRole("button", { name: "重新生成", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("未配置云端模型");
@@ -244,6 +260,7 @@ test("每日长难句 C：重新生成失败保留旧缓存，无缓存失败诚
       body: JSON.stringify({ error: "AI 原创长难句生成失败，请稍后重试" }),
     }));
     await openApp(emptyPage);
+    await openDailySentence(emptyPage);
     await emptyPage.getByRole("button", { name: "生成今日长难句" }).click();
     await expect(emptyPage.getByRole("alert")).toContainText("生成失败");
     await expect(emptyPage.getByText(SENTENCE, { exact: true })).toHaveCount(0);
@@ -294,6 +311,7 @@ test("每日长难句 D：朗读控制、内容替换取消、不可用降级与
   }));
   await page.setViewportSize({ width: 320, height: 720 });
   await openApp(page);
+  await openDailySentence(page);
   expect((await page.evaluate(() => globalThis.__dailySentenceSpeechCalls.speak)).length).toBe(0);
 
   const readButton = page.getByRole("button", { name: "朗读", exact: true });
@@ -354,6 +372,7 @@ test("每日长难句 D：朗读控制、内容替换取消、不可用降级与
     }));
     const unsupportedPage = await unsupportedContext.newPage();
     await openApp(unsupportedPage);
+    await openDailySentence(unsupportedPage);
     await expect(unsupportedPage.getByText(
       "当前浏览器不支持长句朗读，文字与解析仍可正常使用。",
       { exact: true },

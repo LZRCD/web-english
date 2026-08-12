@@ -272,68 +272,71 @@ export default function SettingsView({
             onChange={(event) => onGuessContextFirstChange(event.target.checked)}
           />
         </label>
-        <div className="weak-thresholds-settings">
-          <span className="weak-thresholds-title">
+        <label className="weak-thresholds-heading">
+          <span>
             <strong>薄弱判定阈值</strong>
-            <small>调整后词本薄弱标签、划词补漏插队、考前冲刺与周报趋势都会同步生效</small>
-            <em
+            <small>调整后会同步影响词本薄弱标签、划词补漏插队、考前冲刺与周报趋势</small>
+            <small
               className="weak-thresholds-preview"
               title={weakLookupCandidateWords.length
                 ? `薄弱候选：${weakLookupCandidateWords.slice(0, 10).join("、")}${weakLookupCandidateWords.length > 10 ? ` … 等 ${weakLookupCandidateWords.length} 词` : ""}`
                 : "当前无薄弱候选词"}
             >
-              当前将影响：薄弱候选 {weakLookupCandidateCount} 词 · 插队 {weakLookupPriorityCount} 词 · 冲刺 {weakSprintCount} 词
-            </em>
+              当前影响：薄弱候选 {weakLookupCandidateCount} 词 · 插队 {weakLookupPriorityCount} 词 · 冲刺 {weakSprintCount} 词
+            </small>
           </span>
-          <label>
-            <span><strong>反复查词</strong><small>查过 ≥ 该次数的词标为薄弱候选并进入冲刺</small></span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={weakThresholds.lookupWeak}
-              disabled={dataReplacementLocked}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                if (Number.isFinite(value) && value >= 1 && value <= 20) {
-                  onWeakThresholdsChange({ ...weakThresholds, lookupWeak: Math.trunc(value) });
-                }
-              }}
-            />
-          </label>
-          <label>
-            <span><strong>插队复习</strong><small>查过 ≥ 该次数的词自动插队今日任务</small></span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={weakThresholds.lookupPriority}
-              disabled={dataReplacementLocked}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                if (Number.isFinite(value) && value >= 1 && value <= 20) {
-                  onWeakThresholdsChange({ ...weakThresholds, lookupPriority: Math.trunc(value) });
-                }
-              }}
-            />
-          </label>
-          <label>
-            <span><strong>回忆偏慢</strong><small>单次评分回忆 ≥ 该秒数判定为偏慢</small></span>
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={Math.round(weakThresholds.slowRecallMs / 1000)}
-              disabled={dataReplacementLocked}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                if (Number.isFinite(value) && value >= 1 && value <= 120) {
-                  onWeakThresholdsChange({ ...weakThresholds, slowRecallMs: Math.trunc(value) * 1000 });
-                }
-              }}
-            />
-          </label>
-        </div>
+        </label>
+        <label>
+          <span><strong>反复查词</strong><small>查过 ≥ 该次数的词标为薄弱候选并进入冲刺</small></span>
+          <input
+            type="number"
+            className="weak-threshold-input"
+            min={1}
+            max={20}
+            value={weakThresholds.lookupWeak}
+            disabled={dataReplacementLocked}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value >= 1 && value <= 20) {
+                onWeakThresholdsChange({ ...weakThresholds, lookupWeak: Math.trunc(value) });
+              }
+            }}
+          />
+        </label>
+        <label>
+          <span><strong>插队复习</strong><small>查过 ≥ 该次数的词自动插队今日任务</small></span>
+          <input
+            type="number"
+            className="weak-threshold-input"
+            min={1}
+            max={20}
+            value={weakThresholds.lookupPriority}
+            disabled={dataReplacementLocked}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value >= 1 && value <= 20) {
+                onWeakThresholdsChange({ ...weakThresholds, lookupPriority: Math.trunc(value) });
+              }
+            }}
+          />
+        </label>
+        <label>
+          <span><strong>回忆偏慢</strong><small>单次评分回忆 ≥ 该秒数判定为偏慢</small></span>
+          <input
+            type="number"
+            className="weak-threshold-input"
+            min={1}
+            max={120}
+            value={Math.round(weakThresholds.slowRecallMs / 1000)}
+            disabled={dataReplacementLocked}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value >= 1 && value <= 120) {
+                onWeakThresholdsChange({ ...weakThresholds, slowRecallMs: Math.trunc(value) * 1000 });
+              }
+            }}
+          />
+        </label>
         <label>
           <span><strong>学习顺序</strong><small>可打乱当前单元，也可跨越全书 {learningItemCount} 个学习项</small></span>
           <select

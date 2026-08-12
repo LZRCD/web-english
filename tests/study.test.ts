@@ -562,6 +562,68 @@ test("今日任务把到期词排在新词前并限制每日新词数", () => {
   assert.deepEqual(sessionProgress(session), { completed: 0, total: 2, percent: 0 });
 });
 
+test("今日任务带日期种子：整队完全混排为确定性排列，成员与计数不变", () => {
+  const now = new Date("2026-07-28T00:11:00.000Z");
+  const due = applyRating(undefined, {
+    wordId: 1,
+    word: "due",
+    rating: 0,
+    reviewedAt: "2026-07-28T00:00:00.000Z",
+    reviewId: "seeded-due",
+  }).progress;
+  const options = {
+    lookupPriorityIds: [3, 4],
+    familyKeyByWordId: { 3: "lemma:3", 4: "lemma:4" },
+    shuffleSeed: 20260728,
+  };
+  const ordered = buildTodayQueue(
+    [1, 2, 3, 4, 5],
+    { 1: due },
+    2,
+    now,
+    { ...options, shuffleSeed: undefined },
+  );
+  const seeded = buildTodayQueue([1, 2, 3, 4, 5], { 1: due }, 2, now, options);
+  // 无种子保持「到期 → 补漏 → 新词」；带种子只是打乱、不增删词
+  assert.deepEqual(ordered, [1, 3, 4, 2, 5]);
+  assert.deepEqual([...seeded].sort((first, second) => first - second), [1, 2, 3, 4, 5]);
+  assert.equal(new Set(seeded).size, seeded.length);
+  // 同种子确定性：重复派生结果一致
+  assert.deepEqual(
+    seeded,
+    buildTodayQueue([1, 2, 3, 4, 5], { 1: due }, 2, now, options),
+  );
+  // 预览计数与实际队列同源且互斥
+  const preview = buildTodayTaskPreview({
+    primaryWordIds: [1, 2, 3, 4, 5],
+    progress: { 1: due },
+    configuredNewGoal: 20,
+    effectiveNewGoal: 2,
+    learnedTodayCount: 0,
+    adaptiveEnabled: false,
+    now,
+    options,
+  });
+  assert.deepEqual(preview.wordIds, seeded);
+  assert.equal(preview.totalCount, ordered.length);
+  assert.equal(preview.dueCount + preview.lookupCount + preview.newCount, ordered.length);
+});
+
+test("今日任务乱序：不同日期种子产生不同顺序", () => {
+  const now = new Date("2026-07-28T00:11:00.000Z");
+  const queueFor = (seed: number) => buildTodayQueue(
+    [1, 2, 3, 4, 5, 6, 7, 8],
+    {},
+    8,
+    now,
+    { shuffleSeed: seed },
+  );
+  const firstDay = queueFor(20260728);
+  const secondDay = queueFor(20260729);
+  assert.notDeepEqual(firstDay, secondDay);
+  assert.deepEqual([...firstDay].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
 test("到期积压动态减少新词并允许最低量和手动覆盖", () => {
   assert.equal(adaptiveNewWordGoal({
     dailyGoal: 20,

@@ -1675,3 +1675,11 @@
 - 起点 `WeakThresholds.leechLapses`（默认 8，归一化下限 1、上限 99）走既有设置归一化路径，设置页不新增输入 UI。唯一新增持久化是 `leechMuted`（settings 分域可选字段，随备份导入/导出与恢复副本链路）；未升级 STORAGE/DATABASE/备份版本，未新增 store/domain，未修改 backup/learning/quiz/FSRS/daily-cloze/daily-sentence/etymology。
 - 诚实口径：leech 是「累计遗忘次数达到档位」的薄弱信号，不是掌握度/恢复/长期记忆结论；UI 与文档未使用相关措辞。当前验证：红测 0/1（首个真实失败为缺失 `deriveLeechDerivation` 导出）、聚焦 107/107、typecheck、lint 0 error / 1 个既有 warning、新 leech E2E 5/5、signal-flow + learning + responsive 41/41、production build + Node 341/341、production smoke 通过；dev/production 服务均精确停止，端口 3000 空闲，build-info 已恢复。
 - 本轮完成后 STOP；P2-12「每日学习提醒」需用户重新授权并执行新的 Round 0，不 push。
+
+## 方案裁决：True Retention「ease==1 记失败」关闭（2026-08-12，第 74 轮后）
+
+- 评估结论：`buildTrueRetention`（`lib/insights.ts`）已完整实现：只统计 `kind === "review"` 的复习、Again（rating 0）记失败、young/mature 按同词上一条评分间隔分桶（21 天为界）、未分类计数、困难率（忘记或模糊 / 全部复习评分）、4 周趋势；HistoryView「复习保持率/困难率趋势」卡片与 `tests/insights.test.ts`、signal-flow E2E 断言均已覆盖。
+- 规划清单中「ease==1 记失败」为 Anki 专属口径；本项目 `SerializedFsrsCard` 无 ease 字段，reviews 亦无调度重放数据源。引入 difficulty 阈值等替代口径会改变既有统计结果与断言，违反「FSRS/评分/指标口径不擅改」红线。
+- 裁决：该项**关闭**，不纳入任何轮次；不修改 `lib/insights.ts` 与既有断言。
+- 同时更正规划旧快照（2026-08-10）：任务长度可选（5/10/15/20）已在第 67 轮「今日任务会话分段」落地（`SettingsView.tsx`「每批学习词数」select + `buildTodaySessionBatch`），不再是缺口。
+- 未改动任何未跟踪规划/研究文档（提升方案、lean-v3 等保持原样）。

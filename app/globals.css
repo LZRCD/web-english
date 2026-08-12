@@ -488,7 +488,7 @@ select:focus-visible {
 }
 
 .search-trigger {
-  margin-left: auto;
+  margin-left: 0;
   margin-right: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
@@ -503,6 +503,39 @@ select:focus-visible {
   margin: 0 0 0 5px;
   height: 19px;
   min-width: 19px;
+}
+
+/* 顶部导航「今日长难句」入口：搜索框左侧的轻量文字按钮 */
+.daily-sentence-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: #59615a;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.daily-sentence-trigger .daily-sentence-trigger-label.short {
+  display: none;
+}
+
+.daily-sentence-ready-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mint);
+}
+
+.topbar.learn-topbar .daily-sentence-trigger {
+  margin-left: 0;
 }
 
 .learn-view {
@@ -3711,6 +3744,53 @@ kbd {
   box-shadow: 0 0 0 3px rgba(76, 180, 128, 0.1);
 }
 
+/* 顶部导航「今日长难句」弹层：与搜索弹层同套视觉语言 */
+.daily-sentence-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding: 8vh 18px 90px;
+  background: rgba(28, 35, 30, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.daily-sentence-panel {
+  width: min(760px, 100%);
+  max-height: 82vh;
+  overflow-y: auto;
+  border: 1px solid rgba(218, 226, 220, 0.9);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 32px 100px rgba(20, 32, 25, 0.18);
+  padding: 20px;
+}
+
+.daily-sentence-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.daily-sentence-panel-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mist);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* 卡片自身的 DAILY SENTENCE 眉标与弹层头部重复，隐藏一份 */
+.daily-sentence-panel .daily-sentence-heading .eyebrow {
+  display: none;
+}
+
 .search-summary {
   min-height: 48px;
   display: flex;
@@ -4948,6 +5028,32 @@ kbd {
   }
 }
 
+@media (max-width: 900px) {
+  /* 小屏顶栏让位：入口缩短为「长难句」，隐藏已生成状态点与「查词」文字 */
+  .daily-sentence-trigger .daily-sentence-trigger-label.full {
+    display: none;
+  }
+
+  .daily-sentence-trigger .daily-sentence-trigger-label.short {
+    display: inline;
+  }
+
+  .daily-sentence-trigger .daily-sentence-ready-dot {
+    display: none;
+  }
+
+  .search-trigger .search-label {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 顶栏让位给「今日长难句」入口：隐藏今日进度计数器 */
+  .daily-progress {
+    display: none;
+  }
+}
+
 @media (max-width: 480px) {
   .welcome {
     padding: 12px;
@@ -5174,11 +5280,7 @@ kbd {
   }
 
   .study-picker select {
-    max-width: 82px;
-  }
-
-  .daily-progress {
-    display: none;
+    max-width: 72px;
   }
 
   .topbar {
@@ -5194,13 +5296,21 @@ kbd {
   }
 
   .order-switch button {
-    min-width: 32px;
-    padding-inline: 5px;
+    min-width: 28px;
+    padding-inline: 4px;
+  }
+
+  .daily-sentence-trigger {
+    padding-inline: 9px;
   }
 
   .search-trigger {
     margin-left: 0;
     flex-shrink: 0;
+  }
+
+  .daily-sentence-panel {
+    padding: 16px;
   }
 
   .orbit-label-top {
@@ -6391,18 +6501,9 @@ kbd {
   color: #34835f;
 }
 
-/* ---- 信号联动八轮：阈值设置 / 冲刺记录 ---- */
-.weak-thresholds-settings {
-  display: grid;
-  gap: 2px;
-  padding: 13px 0;
-  border-top: 1px dashed rgba(218, 226, 220, 0.8);
-  border-bottom: 1px dashed rgba(218, 226, 220, 0.8);
-}
-.weak-thresholds-title {
-  margin-bottom: 6px;
-}
-.weak-thresholds-settings input[type="number"] {
+/* ---- 信号联动八轮：阈值设置 / 冲刺记录 ----
+   阈值设置改为标准设置行：标题行 + 反复查词 / 插队复习 / 回忆偏慢 三行 */
+.weak-threshold-input {
   width: 72px;
   border: 1px solid #cfe3d7;
   border-radius: 10px;
@@ -6453,13 +6554,6 @@ kbd {
   .sprint-history-row > span {
     text-align: left;
   }
-}
-
-.weak-thresholds-preview {
-  display: block;
-  margin-top: 5px;
-  color: #34835f;
-  font: 600 10px/1.5 "Courier New", monospace;
 }
 
 .sprint-history-row {
