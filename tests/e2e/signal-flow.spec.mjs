@@ -1383,9 +1383,9 @@ test("信号联动：集中区按分册冲刺与薄弱候选导出入口", async
   const concentration = page.locator('[aria-label="薄弱集中区"]');
   await expect(concentration).toBeVisible();
   await expect(concentration).toContainText("必考词");
-  // 点必考词分册「冲刺」按钮，进入限定范围冲刺会话
+  // 点必考词分册「复习 →」按钮，进入限定范围冲刺会话
   const sectionSprint = concentration.getByRole("button", {
-    name: "冲刺",
+    name: "复习 →",
     exact: true,
   }).first();
   await expect(sectionSprint).toBeEnabled();

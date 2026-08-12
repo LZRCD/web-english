@@ -10,7 +10,6 @@ import {
 } from "react";
 import type {
   SenseFrequencyEntry,
-  StudySession,
   StudyWordSource,
   WordEnrichment,
   WordProgress,
@@ -92,9 +91,7 @@ type WordCardProps = {
   onFocusSourceWord?: (sourceId: number | undefined, sourceWord: string) => void;
 
   // 上下文
-  activeSession?: StudySession;
   wordSource: StudyWordSource;
-  newCount: number;
   clock: number;
 
   // 强化表单
@@ -175,9 +172,7 @@ export default function WordCard({
   onMuteLeech,
   onAddToToday,
   onFocusSourceWord,
-  activeSession,
   wordSource,
-  newCount,
   clock,
   reinforcementInput,
   reinforcementFeedback,
@@ -315,24 +310,16 @@ export default function WordCard({
         if (event.pointerType !== "mouse") onTextSelection(event);
       }}
     >
-      <div
-        className="word-source"
-        role="note"
-        aria-label={`当前单词来源：${wordSource.label}。${wordSource.description}`}
-      >
-        <span>{wordSource.label}</span>
-        <small>{wordSource.description}</small>
-      </div>
-
-      {/* 词头：计数 + 收藏/发音 */}
+      {/* 卡片 Header：状态 chip + 说明（左），收藏/发音（右），一个整体 */}
       <div className="word-heading">
-        <p className="word-count">
-          {redbookReady
-            ? activeSession
-              ? `${String(Math.min(activeSession.index + 1, activeSession.wordIds.length)).padStart(2, "0")} / ${activeSession.wordIds.length}`
-              : `${String(newCount).padStart(2, "0")} 新词`
-            : "— / —"}
-        </p>
+        <div
+          className="word-source"
+          role="note"
+          aria-label={`当前单词来源：${wordSource.label}。${wordSource.description}`}
+        >
+          <span>{wordSource.label}</span>
+          <small>{wordSource.description}</small>
+        </div>
         <div className="word-actions">
           <button
             className={isFavorite ? "favorite-button saved" : "favorite-button"}

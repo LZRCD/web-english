@@ -196,6 +196,25 @@ import {
   type ReinforcementRating,
 } from "./constants";
 
+// 卡片上方 metadata 的短状态码：回答「我现在为什么看到这个词」
+const WORD_SOURCE_CODE: Record<string, string> = {
+  "今日到期": "DUE",
+  "今日新词": "NEW",
+  "反复查词补漏": "REVIEW",
+  "手动加入今日任务": "TODAY",
+  "今日任务": "TODAY",
+  "收藏复习": "FAV",
+  "错词强化": "FIX",
+  "顽固词专项": "STUBBORN",
+  "搜索专项": "SEARCH",
+  "划词集学习": "LOOKUP",
+  "文章提词": "ARTICLE",
+  "薄弱冲刺": "SPRINT",
+  "词汇量测试补漏": "TEST",
+  "本轮再强化": "REINFORCE",
+  "当前词书额外练习": "FREE",
+};
+
 export default function Home() {
   const [started, setStarted] = useState(false);
   // 移动端判断：手机端 AI 面板打开时隔离底层焦点
@@ -1020,15 +1039,20 @@ export default function Home() {
         || String(word.id ?? "").includes(query))
       .slice(0, 40);
   }, [redbookWords, searchQuery]);
-  const currentLocation = redbookStatus === "loading"
-    ? "2027 红宝书 · 正在载入"
+  // 卡片上方 metadata：回答「我现在为什么看到这个词」，不复读顶部进度数字
+  const cardMetadata = redbookStatus === "loading"
+    ? "LOADING · 2027 红宝书"
     : redbookStatus === "error"
-      ? "2027 红宝书 · 读取失败"
-      : activeSession
-        ? `${activeSession.title} · ${activeSessionStats.completed}/${activeSessionStats.total}`
-        : studyScope === "all"
-        ? `全书乱序 · ${current.section ?? "红宝书"} ${current.unit ? `Unit ${current.unit}` : ""}`
-        : `${current.section ?? selectedSection} · ${current.unit ? `Unit ${current.unit}` : "全书"}`;
+      ? "READ FAILED · 2027 红宝书"
+      : `${WORD_SOURCE_CODE[currentWordSource.label] ?? "STUDY"} · ${current.section ?? selectedSection} · ${current.unit ? `UNIT ${current.unit}` : "全书"}`;
+  // 卡片下方状态提示：仅在需要给出行为指引时出现（不重复卡内「点击 / Space」）
+  const bottomLabel = !redbookReady
+    ? "LOCAL · REDBOOK"
+    : reinforcementRating !== null
+      ? "RETRIEVE · 再提取一次"
+      : revealed
+        ? "请依据查看释义前的回忆状态评分"
+        : undefined;
   // 持久化快照：仅保存用户手动标记的顽固词，自动计算的顽固词在每次 load 时从 reviews 重建
   const persistedState = useMemo<StoredState>(() => ({
     schemaVersion: STORAGE_VERSION,
@@ -2553,8 +2577,8 @@ export default function Home() {
             {!sessionComplete && (
               <>
             <div className="study-main-stack">
+            <p className="card-metadata" role="note">{cardMetadata}</p>
             <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
-              <div className="orbit-label orbit-label-top">NEW · {currentLocation}</div>
               <div className="card-viewport">
               <WordCard
                 wordCardRef={wordCardRef}
@@ -2619,9 +2643,7 @@ export default function Home() {
                 }
                 stabilizedDimensions={currentStabilizedDimensions}
                 onFocusSourceWord={focusSourceWord}
-                activeSession={activeSession}
                 wordSource={currentWordSource}
-                newCount={stats.newCount}
                 clock={clock}
                 reinforcementInput={reinforcementInput}
                 reinforcementFeedback={reinforcementFeedback}
@@ -2650,16 +2672,10 @@ export default function Home() {
                 onSkipReinforcement={skipReinforcement}
               />
               </div>
-              <div className="orbit-label orbit-label-bottom">
-                {!redbookReady
-                  ? "LOCAL · REDBOOK"
-                  : reinforcementRating !== null
-                    ? "RETRIEVE · 再提取一次"
-                    : revealed
-                      ? "请依据查看释义前的回忆状态评分"
-                      : "SPACE · 查看释义"}
               </div>
-            </div>
+              {bottomLabel && (
+                <div className="orbit-label orbit-label-bottom">{bottomLabel}</div>
+              )}
             </div>
 
             <RatingBar

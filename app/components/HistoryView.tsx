@@ -246,6 +246,51 @@ export default function HistoryView({
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count)
     .slice(0, 4);
+  // 学习趋势：近 7 天每日评分事件数（展示层派生，不改变统计口径）
+  const last7Days = (() => {
+    const days: { key: string; label: string; count: number }[] = [];
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const day = new Date(dayStart);
+      day.setDate(dayStart.getDate() - offset);
+      days.push({
+        key: dateKey(day),
+        label: offset === 0 ? "今天" : `${day.getMonth() + 1}/${day.getDate()}`,
+        count: 0,
+      });
+    }
+    const byKey = new Map(days.map((day) => [day.key, day]));
+    for (const review of reviews) {
+      const day = byKey.get(dateKey(review.reviewedAt));
+      if (day) day.count += 1;
+    }
+    return days;
+  })();
+  const last7Max = Math.max(1, ...last7Days.map((day) => day.count));
+  // 背诵日历摘要：连续学习 / 最长连续 / 活跃日（仅由当前展示范围派生）
+  const calendarSummary = (() => {
+    const activeDays = activityDays.filter((day) => day.count > 0).map((day) => day.date);
+    const activeSet = new Set(activeDays);
+    let streak = 0;
+    for (let offset = 0; offset < activeDays.length; offset += 1) {
+      const probe = new Date(now);
+      probe.setDate(now.getDate() - offset);
+      if (activeSet.has(dateKey(probe))) streak += 1;
+      else break;
+    }
+    let longest = 0;
+    let run = 0;
+    for (const day of activityDays) {
+      run = day.count > 0 ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    return {
+      streak,
+      longest,
+      activeDays: activeDays.length,
+    };
+  })();
   const activityTabDate = selectedActivityDate
     || (activityDays.some((day) => day.date === todayKey)
       ? todayKey
@@ -276,19 +321,29 @@ export default function HistoryView({
 
   return (
     <div className="content-view history-view">
-      <div className="section-heading">
-        <div><p className="eyebrow">MEMORY TRACE</p><h1>每一次回忆都算数</h1></div>
-        <div className="streak"><strong>{stats.streak}</strong><span>连续学习天</span></div>
+      <div className="section-heading trace-hero">
+        <div>
+          <p className="eyebrow">MEMORY TRACE</p>
+          <h1>每一次回忆都算数</h1>
+          <p className="trace-hero-note">记录不是为了证明学过，而是为了知道什么真正留下来了。</p>
+        </div>
+        <div className="trace-hero-stats">
+          <div className="trace-hero-total">
+            <strong>{reviews.length}</strong>
+            <span>次记忆记录</span>
+          </div>
+          <div className="streak"><strong>{stats.streak}</strong><span>连续学习天</span></div>
+        </div>
       </div>
 
       <p className="trace-section">今天</p>
       <div className="stat-grid">
-        <div><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
-        <div><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
-        <button type="button" onClick={onStartTodaySession}>
+        <div className="stat-cell"><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
+        <div className="stat-cell"><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
+        <button type="button" className="stat-cell stat-due" onClick={onStartTodaySession}>
           <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
         </button>
-        <div><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
+        <div className="stat-cell stat-retention"><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
       </div>
       <p className="trace-section">本周</p>
 
@@ -389,8 +444,8 @@ export default function HistoryView({
         {topWeakDimensions.length > 0 && (
           <div className="weak-dim-highlight" aria-label="本周最值得注意的薄弱维度">
             <div className="weak-trend-head">
-              <strong>本周最值得注意</strong>
-              <small>发生过的薄弱信号 · 按不同单词数排序</small>
+              <strong>本周值得注意</strong>
+              <small>发生过的记忆信号 · 按不同单词数排序</small>
             </div>
             <div className="weak-dim-highlight-row">
               {topWeakDimensions.map((row) => (
@@ -454,6 +509,25 @@ export default function HistoryView({
             <small>/ 7 天</small>
           </div>
         </div>
+        <div className="insights-trend" aria-label="最近 7 天每日学习量">
+          <div className="insights-trend-head">
+            <strong>学习量</strong>
+            <small>每日评分事件数</small>
+          </div>
+          {last7Days.every((day) => day.count === 0) ? (
+            <p className="insights-trend-empty">最近 7 天还没有学习记录</p>
+          ) : (
+            <div className="insights-trend-bars">
+              {last7Days.map((day) => (
+                <div className="insights-trend-col" key={day.key} title={`${day.key} · ${day.count} 次评分`}>
+                  <i className={day.count > 0 ? "active" : ""} style={{ height: `${Math.max(3, (day.count / last7Max) * 40)}px` }} aria-hidden="true" />
+                  <small>{day.label}</small>
+                  <b>{day.count}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="insights-meta">
           <span>不同单词 <strong>{insights.uniqueWordCount}</strong> · {insights.reviewCount} 次评分</span>
           <span>完成次数 <strong>{stats.completionCount}</strong> · {stats.coveredCount} 个不同单词</span>
@@ -512,7 +586,7 @@ export default function HistoryView({
                       aria-label={accessibleLabel}
                       role="group"
                     >
-                      <small>{index === 0 ? "今天" : day.date.slice(5)}</small>
+                      <small>{index === 0 ? "今天" : index % 5 === 0 ? day.date.slice(5) : ""}</small>
                       <div
                         className={`forecast-bar level-${level}`}
                         style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
@@ -600,7 +674,7 @@ export default function HistoryView({
                       onClick={() => onScopedSprint(section.section)}
                       disabled={section.total === 0}
                     >
-                      冲刺
+                      复习 →
                     </button>
                   )}
                 </div>
@@ -1133,6 +1207,7 @@ export default function HistoryView({
               <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
             </div>
           ) : (
+          <div className="activity-body">
           <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
             {activityDays.map((day, index) => (
               <button
@@ -1148,6 +1223,24 @@ export default function HistoryView({
                 onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
               />
             ))}
+          </div>
+          <div className="activity-summary" aria-label="背诵日历摘要">
+            <div>
+              <span>连续学习</span>
+              <strong>{calendarSummary.streak}</strong>
+              <small>天</small>
+            </div>
+            <div>
+              <span>最长连续</span>
+              <strong>{calendarSummary.longest}</strong>
+              <small>天</small>
+            </div>
+            <div>
+              <span>活跃日</span>
+              <strong>{calendarSummary.activeDays}</strong>
+              <small>天</small>
+            </div>
+          </div>
           </div>
           )}
           <div className="activity-legend" aria-hidden="true">
