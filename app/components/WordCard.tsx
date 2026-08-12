@@ -299,153 +299,137 @@ export default function WordCard({
     .filter(Boolean)
     .join(" ");
 
-  return (
-    <article
-      ref={wordCardRef as RefObject<HTMLElement>}
-      className={cardClass}
-      aria-busy={redbookStatus === "loading"}
-      tabIndex={-1}
-      onMouseUp={onTextSelection}
-      onPointerUp={(event) => {
-        if (event.pointerType !== "mouse") onTextSelection(event);
-      }}
-    >
-      {/* 卡片 Header：状态 chip + 说明（左），收藏/发音（右），一个整体 */}
-      <div className="word-heading">
-        <div
-          className="word-source"
-          role="note"
-          aria-label={`当前单词来源：${wordSource.label}。${wordSource.description}`}
-        >
-          <span>{wordSource.label}</span>
-          <small>{wordSource.description}</small>
-        </div>
-        <div className="word-actions">
-          <button
-            className={isFavorite ? "favorite-button saved" : "favorite-button"}
-            onClick={onToggleFavorite}
-            disabled={!redbookReady}
-            aria-label={
-              isFavorite
-                ? `将 ${current.word} 移出词本`
-                : `将 ${current.word} 加入词本`
-            }
-            aria-pressed={isFavorite}
-            title={isFavorite ? "移出词本" : "加入词本"}
-          >
-            {isFavorite ? "◆" : "◇"}
-          </button>
-          <button
-            className="sound-button"
-            onClick={onSpeak}
-            disabled={!redbookReady}
-            aria-label={`播放 ${current.word} 的发音`}
-            title={
-              hasRecordedAudio
-                ? "2027 红宝书原声"
-                : "浏览器 TTS 回退"
-            }
-          >
-            ◖))
-          </button>
-        </div>
-      </div>
+  // 展开态：不再把全部详情塞进超长 Flashcard，切换为独立的 Study Detail 布局
+  const showDetail = revealed && redbookReady && reinforcementRating === null;
+  // 紧凑 Header 状态行：今日到期 · 必考词 · Unit N
+  const statusParts: { text: string; highlight: boolean }[] = [];
+  if (currentProgress) {
+    const dueAt = new Date(currentProgress.nextDueAt);
+    const now = new Date(clock);
+    if (dueAt.getTime() <= now.getTime() || dueAt.toDateString() === now.toDateString()) {
+      statusParts.push({ text: "今日到期", highlight: true });
+    }
+  }
+  if (current.section) statusParts.push({ text: current.section, highlight: false });
+  if (current.unit) statusParts.push({ text: `Unit ${current.unit}`, highlight: false });
 
-      {/* 词面：单词 + 音标 + 揭示按钮 */}
-      <button
-        className="word-face"
-        onClick={() => {
-          if (!redbookReady) return;
-          onReveal();
-          onSpeak();
+  if (showDetail) {
+    return (
+      <div
+        className="meaning-panel study-detail"
+        ref={wordCardRef as RefObject<HTMLDivElement | null>}
+        onMouseUp={onTextSelection}
+        onPointerUp={(event) => {
+          if (event.pointerType !== "mouse") onTextSelection(event);
         }}
-        disabled={!redbookReady}
-        aria-label="显示单词释义"
       >
-        <h1>
-          {reinforcementRating === null
-            ? current.word
-            : maskWord(current.word)}
-        </h1>
-        <p>
-          {redbookReady
-            ? reinforcementRating === null
-              ? current.phonetic || " "
-              : `${current.word.replace(/\s/g, "").length} LETTERS`
-            : "LOCAL VOCABULARY"}
-        </p>
-        {!redbookReady ? (
-          <span>
-            {redbookStatus === "loading"
-              ? "正在读取 6550 个考研词汇…"
-              : "未能读取本地红宝书词库"}
-          </span>
-        ) : (
-          !revealed && <span>点击 / Space 查看释义</span>
+        {/* WordSummary：紧凑 Header（词 + 音标 + 发音 + 状态行） */}
+        <header className="detail-summary">
+          <div className="detail-summary-row">
+            {/* 词本身仍是揭示/发音按钮（保留既有交互与焦点锚点），但不再是大面积词面 */}
+            <button
+              type="button"
+              className="detail-word-button"
+              onClick={() => {
+                onReveal();
+                onSpeak();
+              }}
+              aria-label="显示单词释义"
+              title={`播放 ${current.word} 的发音`}
+            >
+              <h1 className="detail-word">{current.word}</h1>
+            </button>
+            <p className="detail-phonetic">{current.phonetic || " "}</p>
+            <div className="detail-summary-actions">
+              <button
+                className={isFavorite ? "favorite-button saved" : "favorite-button"}
+                onClick={onToggleFavorite}
+                disabled={!redbookReady}
+                aria-label={
+                  isFavorite
+                    ? `将 ${current.word} 移出词本`
+                    : `将 ${current.word} 加入词本`
+                }
+                aria-pressed={isFavorite}
+                title={isFavorite ? "移出词本" : "加入词本"}
+              >
+                {isFavorite ? "◆" : "◇"}
+              </button>
+              <button
+                className="sound-button"
+                onClick={onSpeak}
+                disabled={!redbookReady}
+                aria-label={`播放 ${current.word} 的发音`}
+                title={hasRecordedAudio ? "2027 红宝书原声" : "浏览器 TTS 回退"}
+              >
+                ◖))
+              </button>
+            </div>
+          </div>
+          <p className="detail-summary-status">
+            {statusParts.map((part, index) => (
+              <span key={part.text}>
+                {index > 0 && " · "}
+                {part.highlight
+                  ? <b className="detail-status-due">{part.text}</b>
+                  : part.text}
+              </span>
+            ))}
+          </p>
+        </header>
+
+        {/* 划词补漏 / 回忆统计 / 薄弱信号：状态提示 */}
+        {currentLookupStat && currentLookupStat.count > 0 && (
+          <p className="lookup-hint">
+            你之前查过 {currentLookupStat.count} 次，最近查于{" "}
+            {new Date(currentLookupStat.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+          </p>
         )}
-      </button>
-
-      {redbookStatus === "error" && redbookLoadGuidance && (
-        <section className="redbook-load-error" role="alert" aria-live="assertive">
-          <strong>{redbookLoadGuidance.title}</strong>
-          <p>{redbookLoadGuidance.detail}</p>
-          <button type="button" onClick={onRetryRedbookLoad}>
-            重新读取词库
-          </button>
-        </section>
-      )}
-
-      {/* 揭示后：释义面板 */}
-      {revealed && redbookReady && reinforcementRating === null && (
-        <div className="meaning-panel">
-          {/* 划词补漏提示：查过多少次、最近查于何时 */}
-          {currentLookupStat && currentLookupStat.count > 0 && (
-            <p className="lookup-hint">
-              你之前查过 {currentLookupStat.count} 次，最近查于{" "}
-              {new Date(currentLookupStat.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          )}
-          {currentRecallStats && (
-            <p className="lookup-hint recall">
-              平均回忆 {(currentRecallStats.averageMs / 1000).toFixed(1)}s
-              {" · "}中位 {(currentRecallStats.medianMs / 1000).toFixed(1)}s
-              {" · "}{currentRecallStats.sampleCount} 次评分
-            </p>
-          )}
-          {sprintWeakSignals && sprintWeakSignals.length > 0 && (
-            <div className="sprint-weak-reasons" title={signalTimelineText}>
-              <span>{sprintWeakLabel ?? "本词存在薄弱信号："}</span>
-              <div className="weak-signal-tags">
-                {sprintWeakSignals.map((signal) => (
-                  <span className="weak-signal-tag" key={signal}>{signal}</span>
-                ))}
-                {currentLeech?.label && onMuteLeech
-                  && sprintWeakSignals.includes(currentLeech.label) && (
-                  <button
-                    type="button"
-                    className="weak-signal-mute"
-                    aria-label={`不再提醒：${currentLeech.label}`}
-                    onClick={onMuteLeech}
-                  >
-                    不再提醒
-                  </button>
-                )}
-              </div>
-              {onAddToToday && (
-                <button type="button" className="weak-add-today" onClick={onAddToToday}>
-                  加入今日任务
+        {currentRecallStats && (
+          <p className="lookup-hint recall">
+            平均回忆 {(currentRecallStats.averageMs / 1000).toFixed(1)}s
+            {" · "}中位 {(currentRecallStats.medianMs / 1000).toFixed(1)}s
+            {" · "}{currentRecallStats.sampleCount} 次评分
+          </p>
+        )}
+        {sprintWeakSignals && sprintWeakSignals.length > 0 && (
+          <div className="sprint-weak-reasons" title={signalTimelineText}>
+            <span>{sprintWeakLabel ?? "本词存在薄弱信号："}</span>
+            <div className="weak-signal-tags">
+              {sprintWeakSignals.map((signal) => (
+                <span className="weak-signal-tag" key={signal}>{signal}</span>
+              ))}
+              {currentLeech?.label && onMuteLeech
+                && sprintWeakSignals.includes(currentLeech.label) && (
+                <button
+                  type="button"
+                  className="weak-signal-mute"
+                  aria-label={`不再提醒：${currentLeech.label}`}
+                  onClick={onMuteLeech}
+                >
+                  不再提醒
                 </button>
               )}
             </div>
-          )}
-          {stabilizedDimensions && stabilizedDimensions.length > 0 && (
-            <div className="weak-stabilized" title="曾有薄弱记录，满足各维度既有恢复条件后已稳定">
-              <span className="weak-stabilized-tag">
-                已稳定 · {stabilizedDimensions.map((dimension) => dimension.label).join("、")}弱点已消除
-              </span>
-            </div>
-          )}
-          {hideSenses && !sensesExpanded && (
+            {onAddToToday && (
+              <button type="button" className="weak-add-today" onClick={onAddToToday}>
+                加入今日任务
+              </button>
+            )}
+          </div>
+        )}
+        {stabilizedDimensions && stabilizedDimensions.length > 0 && (
+          <div className="weak-stabilized" title="曾有薄弱记录，满足各维度既有恢复条件后已稳定">
+            <span className="weak-stabilized-tag">
+              已稳定 · {stabilizedDimensions.map((dimension) => dimension.label).join("、")}弱点已消除
+            </span>
+          </div>
+        )}
+
+        {/* 1. 猜词 */}
+        {hideSenses && !sensesExpanded && (
+          <section className="detail-section detail-guess" aria-label="猜词">
+            <h2 className="detail-section-title">猜词</h2>
             <div className="meaning-hidden">
               {guessSentence ? (
                 <>
@@ -465,7 +449,6 @@ export default function WordCard({
                   释义已隐藏，先在心里回忆 {current.word} 的含义
                 </p>
               )}
-              {/* 猜词：输入中文猜测词义 */}
               <div className="guess-input-row">
                 <input
                   value={guessInput}
@@ -509,17 +492,19 @@ export default function WordCard({
                 显示释义
               </button>
             </div>
+          </section>
+        )}
+
+        {/* 2. 释义与例句 */}
+        <section className="detail-section detail-definition" aria-label="释义与例句">
+          {guessFeedback?.kind === "correct" && (
+            <p className="guess-correct">
+              {guessFeedback.matched
+                ? `猜中了「${guessFeedback.matched}」，看下完整释义确认`
+                : "猜中了，看下完整释义确认"}
+            </p>
           )}
-          {(!hideSenses || sensesExpanded) && (
-            <>
-              {guessFeedback?.kind === "correct" && (
-                <p className="guess-correct">
-                  {guessFeedback.matched
-                    ? `猜中了「${guessFeedback.matched}」，看下完整释义确认`
-                    : "猜中了，看下完整释义确认"}
-                </p>
-              )}
-              <div className="meaning-main">
+          <div className="meaning-main">
             {currentSenses.map((sense) => (
               <div className="meaning-row" key={sense.part}>
                 <span>{sense.part}</span>
@@ -542,9 +527,7 @@ export default function WordCard({
                         key={meaning}
                         onClick={() => onToggleMeaningFamiliar(meaning)}
                         aria-pressed={familiar}
-                        title={
-                          familiar ? "取消熟练标记" : "标记为熟练义项"
-                        }
+                        title={familiar ? "取消熟练标记" : "标记为熟练义项"}
                       >
                         <span className="sense-index">{senseIndex + 1}</span>
                         {meaning}
@@ -566,17 +549,15 @@ export default function WordCard({
                 </div>
               </div>
             ))}
-              </div>
-              {hideSenses && sensesExpanded && (
-                <button
-                  type="button"
-                  className="meaning-collapse"
-                  onClick={() => setSensesExpanded(false)}
-                >
-                  收起释义
-                </button>
-              )}
-            </>
+          </div>
+          {hideSenses && sensesExpanded && (
+            <button
+              type="button"
+              className="meaning-collapse"
+              onClick={() => setSensesExpanded(false)}
+            >
+              收起释义
+            </button>
           )}
 
           {kaoyanExamples.length > 0 && (
@@ -792,7 +773,10 @@ export default function WordCard({
               )}
             </div>
           )}
+        </section>
 
+        {/* 3. AI 助记 */}
+        <section className="detail-section detail-ai-memory" aria-label="AI 助记">
           {/* AI 词根拆解只在揭示后由用户显式生成；缓存命中时直接展示。 */}
           {currentEtymology ? (
             <section
@@ -890,16 +874,21 @@ export default function WordCard({
               <p>{current.root}</p>
             </div>
           )}
+        </section>
 
-          {/* 常用搭配 */}
-          {current.collocation && (
+        {/* 4. 常用搭配 */}
+        {current.collocation && (
+          <section className="detail-section detail-collocation" aria-label="常用搭配">
+            <h2 className="detail-section-title">常用搭配</h2>
             <div className="collocation-block">
-              <span>常用搭配</span>
               <p>{current.collocation}</p>
             </div>
-          )}
+          </section>
+        )}
 
-          {/* 单词详情 */}
+        {/* 5. 词条信息 */}
+        <section className="detail-section detail-metadata" aria-label="词条信息">
+          <h2 className="detail-section-title">词条信息</h2>
           <div className="word-details">
             <div>
               <span>所在分组</span>
@@ -928,7 +917,105 @@ export default function WordCard({
               </div>
             )}
           </div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <article
+      ref={wordCardRef as RefObject<HTMLElement>}
+      className={cardClass}
+      aria-busy={redbookStatus === "loading"}
+      tabIndex={-1}
+      onMouseUp={onTextSelection}
+      onPointerUp={(event) => {
+        if (event.pointerType !== "mouse") onTextSelection(event);
+      }}
+    >
+      {/* 卡片 Header：状态 chip + 说明（左），收藏/发音（右），一个整体 */}
+      <div className="word-heading">
+        <div
+          className="word-source"
+          role="note"
+          aria-label={`当前单词来源：${wordSource.label}。${wordSource.description}`}
+        >
+          <span>{wordSource.label}</span>
+          <small>{wordSource.description}</small>
         </div>
+        <div className="word-actions">
+          <button
+            className={isFavorite ? "favorite-button saved" : "favorite-button"}
+            onClick={onToggleFavorite}
+            disabled={!redbookReady}
+            aria-label={
+              isFavorite
+                ? `将 ${current.word} 移出词本`
+                : `将 ${current.word} 加入词本`
+            }
+            aria-pressed={isFavorite}
+            title={isFavorite ? "移出词本" : "加入词本"}
+          >
+            {isFavorite ? "◆" : "◇"}
+          </button>
+          <button
+            className="sound-button"
+            onClick={onSpeak}
+            disabled={!redbookReady}
+            aria-label={`播放 ${current.word} 的发音`}
+            title={
+              hasRecordedAudio
+                ? "2027 红宝书原声"
+                : "浏览器 TTS 回退"
+            }
+          >
+            ◖))
+          </button>
+        </div>
+      </div>
+
+      {/* 词面：单词 + 音标 + 揭示按钮 */}
+      <button
+        className="word-face"
+        onClick={() => {
+          if (!redbookReady) return;
+          onReveal();
+          onSpeak();
+        }}
+        disabled={!redbookReady}
+        aria-label="显示单词释义"
+      >
+        <h1>
+          {reinforcementRating === null
+            ? current.word
+            : maskWord(current.word)}
+        </h1>
+        <p>
+          {redbookReady
+            ? reinforcementRating === null
+              ? current.phonetic || " "
+              : `${current.word.replace(/\s/g, "").length} LETTERS`
+            : "LOCAL VOCABULARY"}
+        </p>
+        {!redbookReady ? (
+          <span>
+            {redbookStatus === "loading"
+              ? "正在读取 6550 个考研词汇…"
+              : "未能读取本地红宝书词库"}
+          </span>
+        ) : (
+          !revealed && <span>点击 / Space 查看释义</span>
+        )}
+      </button>
+
+      {redbookStatus === "error" && redbookLoadGuidance && (
+        <section className="redbook-load-error" role="alert" aria-live="assertive">
+          <strong>{redbookLoadGuidance.title}</strong>
+          <p>{redbookLoadGuidance.detail}</p>
+          <button type="button" onClick={onRetryRedbookLoad}>
+            重新读取词库
+          </button>
+        </section>
       )}
 
       {/* 揭示后：强化拼写表单 */}

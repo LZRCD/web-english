@@ -1053,6 +1053,8 @@ export default function Home() {
       : revealed
         ? "请依据查看释义前的回忆状态评分"
         : undefined;
+  // 详情模式：查看释义后切换为独立的 Study Detail 布局（不再把详情塞进超长 Flashcard）
+  const detailMode = revealed && redbookReady && reinforcementRating === null;
   // 持久化快照：仅保存用户手动标记的顽固词，自动计算的顽固词在每次 load 时从 reviews 重建
   const persistedState = useMemo<StoredState>(() => ({
     schemaVersion: STORAGE_VERSION,
@@ -2458,7 +2460,7 @@ export default function Home() {
         </header>
 
         {activeView === "learn" && (
-          <div className="learn-view">
+          <div className={detailMode ? "learn-view detail-mode" : "learn-view"}>
             <div className="learning-context" role="group" aria-label="学习范围">
               {redbookWords.length > 0 && (
                 <div className="study-picker">
@@ -2578,7 +2580,7 @@ export default function Home() {
               <>
             <div className="study-main-stack">
             <p className="card-metadata" role="note">{cardMetadata}</p>
-            <div className="orbit-stage" style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
+            <div className={detailMode ? "orbit-stage detail-mode" : "orbit-stage"} style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="card-viewport">
               <WordCard
                 wordCardRef={wordCardRef}

@@ -1210,8 +1210,8 @@ select:focus-visible {
 }
 
 .word-card:focus-visible {
-  outline: 3px solid #27825c;
-  outline-offset: 4px;
+  /* 卡片只是接收键盘事件的容器，不绘制强 focus ring（聚焦指示交给卡内真实控件） */
+  outline: none;
 }
 
 .word-card.revealed {
@@ -1368,6 +1368,15 @@ select:focus-visible {
   margin-top: 26px;
   color: #a6aca6;
   font-size: 13px;
+}
+
+/* 词面是整块巨型按钮，不绘制大面积 focus 矩形；键盘聚焦时仅点亮提示文案 */
+.word-face:focus-visible {
+  outline: none;
+}
+
+.word-face:focus-visible span {
+  color: #27825c;
 }
 
 .today-batch-complete {
@@ -5356,6 +5365,11 @@ kbd {
     border-radius: 15px;
   }
 
+  .learn-view.detail-mode .rating-bar {
+    width: calc(100% - 24px);
+    bottom: 10px;
+  }
+
   .rating-bar button {
     padding: 11px 5px;
     grid-template-columns: 1fr;
@@ -7678,4 +7692,265 @@ kbd {
   .article-mastered-toggle {
     justify-content: flex-start;
   }
+}
+
+/* =====================================================================
+   Study Detail Layout（查看释义后）
+   ---------------------------------------------------------------------
+   - 展开态不再使用「超长 Flashcard」：切换为独立的详情布局
+   - 详情宽度 880–980px：min(960px, calc(100% - 48px))
+   - 详情内容自然撑开页面；MainContent（learn-view）是唯一纵向滚动源
+   - 评分栏为 Sticky Action Bar；详情底部保留 120px 留白防遮挡
+   - 切换动画：Word 主区淡出 → Detail 内容 0→1（180–240ms），无高度动画
+   ===================================================================== */
+
+/* ---- 滚动模型：learn-view 唯一滚动源，study-main-stack 不再形成嵌套滚动 ---- */
+.learn-view.detail-mode {
+  scrollbar-gutter: stable;
+}
+
+.learn-view.detail-mode .card-metadata {
+  width: min(960px, calc(100% - 48px));
+  margin-top: 2px;
+}
+
+.learn-view.detail-mode .study-main-stack {
+  flex: 1 1 auto;
+  /* 不压缩详情内容：内容高过视口时由 learn-view 滚动 */
+  min-height: min-content;
+  overflow: visible;
+}
+
+.learn-view.detail-mode .orbit-stage {
+  width: min(960px, calc(100% - 48px));
+}
+
+.learn-view.detail-mode .orbit-stage::before,
+.learn-view.detail-mode .orbit-stage::after {
+  display: none;
+}
+
+/* ---- 底部评分栏：Sticky Action Bar ---- */
+.learn-view.detail-mode .rating-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 6;
+  flex-shrink: 0;
+  width: min(860px, calc(100% - 48px));
+  box-shadow: 0 14px 34px rgba(31, 42, 35, 0.1);
+}
+
+/* ---- 详情容器：不是卡片、不构成独立滚动 ---- */
+.study-detail {
+  width: 100%;
+  display: grid;
+  gap: 24px;
+  /* 保证最后内容不被 sticky 评分栏遮挡 */
+  padding-bottom: 120px;
+  animation: detail-in 240ms ease-out both;
+}
+
+@keyframes detail-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.study-detail .detail-section {
+  animation: detail-in 240ms ease-out 70ms both;
+}
+
+/* ---- WordSummary：紧凑 Header ---- */
+.detail-summary {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.detail-summary-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.detail-word {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(40px, 3.6vw, 48px);
+  line-height: 1.06;
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  color: #17191a;
+}
+
+.detail-phonetic {
+  margin: 0;
+  font: 400 17px/1 "Courier New", monospace;
+  color: #969d98;
+}
+
+.detail-summary-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.detail-summary-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 0;
+  color: #6b746d;
+  font-size: 12px;
+}
+
+.detail-status-due {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---- 详情分节：绿色仅用于小标题 / 状态，正文保持白底 ---- */
+.detail-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.detail-section-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #33936a;
+  font: 700 11px/1 "Courier New", monospace;
+  letter-spacing: 0.1em;
+}
+
+.detail-section-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* 猜词区：随 section 网格布局，去掉旧面板的下边距 */
+.study-detail .meaning-hidden {
+  margin-bottom: 0;
+}
+
+/* 主要释义区：白色或极浅背景 */
+.study-detail .meaning-main {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 18px 20px;
+}
+
+.study-detail .meaning-collapse {
+  margin: 0;
+}
+
+/* 例句：不独立成 Card，使用 divider 分隔 */
+.study-detail .context-block {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.study-detail .sense-examples {
+  gap: 0;
+}
+
+.study-detail .sense-example {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.study-detail .sense-example:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+/* 内容补充 CTA：保持按钮形态，浅色虚线框 */
+.study-detail .context-block.context-ai {
+  width: 100%;
+  border: 1px dashed #cfe3d7;
+  border-radius: 12px;
+  background: #f8fbf9;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.study-detail .sense-frequency-generate {
+  margin: 0;
+}
+
+/* 真题原句：同样以 divider 分隔，不再是独立大 Card */
+.study-detail .kaoyan-examples {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.study-detail .kaoyan-examples ol {
+  gap: 0;
+}
+
+.study-detail .kaoyan-examples li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.study-detail .kaoyan-examples li:last-child {
+  border-bottom: 0;
+}
+
+/* AI 助记保持唯一的浅色模块卡（蓝调，区别于绿色主卡），其余模块不再各自成卡 */
+.study-detail .etymology-card,
+.study-detail .etymology-generate {
+  margin-bottom: 0;
+}
+
+/* 常用搭配：左缘强调线，无卡片背景 */
+.study-detail .collocation-block {
+  padding: 2px 0 2px 14px;
+}
+
+.study-detail .collocation-block p {
+  margin: 0;
+  color: #3c463f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 词条信息 */
+.study-detail .word-details {
+  margin-top: 0;
+}
+
+/* 详情态的词按钮：保留「揭示/发音」交互与焦点锚点，但视觉上只是紧凑文字，无按钮外观 */
+.detail-word-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.detail-word-button:focus-visible {
+  outline: none;
+}
+
+.detail-word-button:focus-visible .detail-word {
+  text-decoration: underline;
+  text-decoration-color: #55c996;
+  text-underline-offset: 6px;
 }
