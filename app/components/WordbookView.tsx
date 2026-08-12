@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { dateKey, splitMeaning, type LookupStats, type LookupWord, type MistakeRecord, type SavedWord, type Word } from "../../lib/study";
 import { wordRetrievability, type StubbornWordRecord, type WordProgress, type WordProgressMap } from "../../lib/learning";
-import type { WordRecallStats } from "../../lib/weak-signals";
+import type { LeechDerivation, WordRecallStats } from "../../lib/weak-signals";
 import type { LookupResult } from "../../lib/selection-lookup";
 import type { ArticleCandidate } from "../../lib/article-extraction";
 import ArticleWordExtractor from "./ArticleWordExtractor";
@@ -29,6 +29,10 @@ type WordbookViewProps = {
   weakSignalsByWordId: Record<number, string[]>;
   /** 词级回忆耗时统计：key 为学习项 wordId */
   weakRecallByWordId: Record<number, WordRecallStats>;
+  /** leech 派生：key 为学习项 wordId（有档位时存在） */
+  leechByWordId: Record<number, LeechDerivation>;
+  /** 静默该词当前 leech 档位（写入 leechMuted，仅 wordId 与档位） */
+  onMuteLeech: (wordId: number) => void;
   ratingLabels: string[];
   clock: number;
   favorites: SavedWord[];
@@ -65,6 +69,8 @@ export default function WordbookView({
   lookupWeakCandidateIds,
   weakSignalsByWordId,
   weakRecallByWordId,
+  leechByWordId,
+  onMuteLeech,
   ratingLabels,
   clock,
   favorites,
@@ -104,6 +110,23 @@ export default function WordbookView({
       <span className="recall-tag">
         回忆 {(recall.averageMs / 1000).toFixed(1)}s · {recall.sampleCount} 次
       </span>
+    );
+  };
+  // 「不再提醒」：仅当该词 leech 标签当前可见时提供，与词卡同源同文案
+  const leechMuteButton = (wordId: number) => {
+    const leech = leechByWordId[wordId];
+    if (!leech?.label || !(weakSignalsByWordId[wordId] ?? []).includes(leech.label)) {
+      return null;
+    }
+    return (
+      <button
+        type="button"
+        className="weak-signal-mute"
+        aria-label={`不再提醒：${leech.label}`}
+        onClick={() => onMuteLeech(wordId)}
+      >
+        不再提醒
+      </button>
     );
   };
   const totalLookupCount = Object.values(lookupStats)
@@ -270,6 +293,7 @@ export default function WordbookView({
                 {(weakSignalsByWordId[item.wordId] ?? []).map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
+                {leechMuteButton(item.wordId)}
               </div>
             </div>
             <div className="saved-word-actions">
@@ -290,6 +314,7 @@ export default function WordbookView({
                 {(weakSignalsByWordId[item.wordId] ?? []).map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
+                {leechMuteButton(item.wordId)}
               </div>
             </div>
             <div className="saved-word-actions">
@@ -322,6 +347,7 @@ export default function WordbookView({
                 {(weakSignalsByWordId[item.record.wordId] ?? []).map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
+                {leechMuteButton(item.record.wordId)}
               </div>
             </div>
             <div className="saved-word-actions">
@@ -423,6 +449,7 @@ export default function WordbookView({
                 {(weakSignalsByWordId[item.linkedWordId ?? item.id] ?? []).map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
+                {leechMuteButton(item.linkedWordId ?? item.id)}
               </div>
             </div>
             <div className="saved-word-actions">

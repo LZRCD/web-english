@@ -5709,6 +5709,22 @@ kbd {
   font: 600 9px/1.5 "Courier New", monospace;
   white-space: nowrap;
 }
+.weak-signal-mute {
+  padding: 2px 7px;
+  border: 1px solid rgba(176, 100, 63, 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: #b0643f;
+  font: 600 9px/1.5 "Courier New", monospace;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.weak-signal-mute:hover,
+.weak-signal-mute:focus-visible {
+  background: #fdf0e7;
+  outline: 2px solid rgba(176, 100, 63, 0.4);
+  outline-offset: 1px;
+}
 .lookup-candidate-mark {
   display: inline-block;
   margin-top: 6px;

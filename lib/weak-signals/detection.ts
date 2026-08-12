@@ -10,8 +10,12 @@ import {
   type WeakThresholds,
 } from "../study.ts";
 import {
+  LEECH_TIERS,
   STUBBORN_TREATMENT_SEQUENCE,
   SPRINT_TREATMENT_DIMENSIONS,
+  type LeechDerivation,
+  type LeechMuteRecord,
+  type LeechTier,
   type ParsedSprintSession,
   type SprintTreatmentDimension,
   type StabilizedDimension,
@@ -131,8 +135,7 @@ export function wordRecallStats(
 }
 
 /** 词 id → 划词统计：通过划词记录把查询词关联回学习项 */
-export function lookupStatByWordId(input: WeakSignalInput): Map<number, LookupStat> {
-  const byId = new Map<number, LookupStat>();
+export function lookupStatByWordId(input: WeakSignalInput): Map<number, LookupStat> {  const byId = new Map<number, LookupStat>();
   for (const word of input.lookupWords) {
     const stat = input.lookupStats[word.query.trim().toLowerCase()];
     if (!stat) continue;
@@ -239,8 +242,157 @@ function isSlowRecallRecovered(
   return false;
 }
 
+/** 该词的事件按 (reviewedAt, id) 升序；与 normalizeStoredState 的排序口径一致 */
+function orderedWordReviews(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+): ReviewEvent[] {
+  return reviews
+    .filter((review) => review.wordId === wordId)
+    .sort((first, second) =>
+      first.reviewedAt.localeCompare(second.reviewedAt)
+      || first.id.localeCompare(second.id));
+}
+
 /**
- * 聚合单个词的多维薄弱信号条目（查词/猜错/各模式测验/回忆/顽固/lapse）。
+ * leech 档位：8 + 4k 中满足 lapses >= tier 且 tier >= leechLapses 的最大档位。
+ * 档位只由累计 lapses 决定，单调推进，不因成功清除而回退。
+ */
+export function leechTierFor(
+  lapses: number,
+  leechLapses = DEFAULT_WEAK_THRESHOLDS.leechLapses,
+): LeechTier | null {
+  return LEECH_TIERS
+    .filter((tier) => tier >= leechLapses && lapses >= tier)
+    .at(-1) ?? null;
+}
+
+/**
+ * leech 派生三元组 + 档位：与 lapse 时间线同一数据源（review.rating === 0），
+ * 纯派生不持久化；muted 来自静默集合（当前档位等于静默档位时为 true）。
+ */
+export function deriveLeechDerivation(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+  leechMuted: readonly LeechMuteRecord[],
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): LeechDerivation {
+  const ordered = orderedWordReviews(reviews, wordId);
+  let lapses = 0;
+  let latestLapseAt: string | null = null;
+  for (const review of ordered) {
+    if (review.rating !== 0) continue;
+    lapses += 1;
+    latestLapseAt = review.reviewedAt;
+  }
+  let currentStreak: number | null = null;
+  if (latestLapseAt !== null) {
+    currentStreak = 0;
+    for (const review of ordered) {
+      if (review.rating === 0) {
+        currentStreak = 0;
+        continue;
+      }
+      if (review.rating > 0) currentStreak += 1;
+    }
+  }
+  const tier = leechTierFor(lapses, thresholds.leechLapses);
+  const muted = tier !== null
+    && leechMuted.some((record) => record.wordId === wordId && record.tier === tier);
+  return {
+    lapses,
+    latestLapseAt,
+    currentStreak,
+    muted,
+    tier,
+    label: tier === null ? null : `leech ${tier}`,
+  };
+}
+
+/** 静默集合幂等写入：同词替换静默档位，不产生重复条目。 */
+export function upsertLeechMute(
+  leechMuted: readonly LeechMuteRecord[],
+  wordId: number,
+  tier: LeechTier,
+): LeechMuteRecord[] {
+  return [
+    ...leechMuted.filter((record) => record.wordId !== wordId),
+    { wordId, tier },
+  ];
+}
+
+/**
+ * 跨档自动解除静默：剔除静默档位已低于当前档位的过期条目。
+ * 纯函数；调用方按长度变化判断是否需要幂等维护写入。
+ */
+export function pruneExpiredLeechMutes(
+  leechMuted: readonly LeechMuteRecord[],
+  reviews: readonly ReviewEvent[],
+  thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
+): LeechMuteRecord[] {
+  const kept = leechMuted.filter((record) => {
+    const tier = leechTierFor(
+      orderedWordReviews(reviews, record.wordId)
+        .filter((review) => review.rating === 0).length,
+      thresholds.leechLapses,
+    );
+    return tier === null || tier <= record.tier;
+  });
+  return kept;
+}
+
+/**
+ * 同档位只显示一次：跨档触发之后若出现过连续 ≥3 次 rating>0，
+ * 本档位标签已被自动解除，未跨档的再次 lapse 不重新点亮。
+ */
+function isLeechTagSuppressed(
+  reviews: readonly ReviewEvent[],
+  wordId: number,
+  leechLapses: number,
+  tier: LeechTier,
+): boolean {
+  let cumulative = 0;
+  let crossingAt: string | null = null;
+  for (const review of orderedWordReviews(reviews, wordId)) {
+    if (review.rating !== 0) continue;
+    cumulative += 1;
+    if (cumulative === tier) crossingAt = review.reviewedAt;
+  }
+  if (crossingAt === null || cumulative < leechLapses) return true;
+  let consecutive = 0;
+  for (const review of orderedWordReviews(reviews, wordId)) {
+    if (review.reviewedAt <= crossingAt) continue;
+    if (review.rating > 0) {
+      consecutive += 1;
+      if (consecutive >= 3) return true;
+      continue;
+    }
+    consecutive = 0;
+  }
+  return false;
+}
+
+/** leech 标签条目：档位有效、未静默且未被本档位连续成功解除时显示。 */
+function leechSignalEntry(
+  wordId: number,
+  input: WeakSignalInput,
+  thresholds: WeakThresholds,
+): WeakSignalEntry | null {
+  const derivation = deriveLeechDerivation(
+    input.reviews,
+    wordId,
+    input.leechMuted ?? [],
+    thresholds,
+  );
+  if (derivation.tier === null || derivation.muted) return null;
+  if (isLeechTagSuppressed(input.reviews, wordId, thresholds.leechLapses, derivation.tier)) {
+    return null;
+  }
+  return { key: "leech", label: derivation.label! };
+}
+
+/**
+ * 聚合单个词的多维薄弱信号条目（查词/猜错/各模式测验/回忆/顽固/lapse/leech）。
  * 条目按固定顺序排列，空数组表示当前没有薄弱信号；
  * key 为稳定通信协议（与 WeakDimensionTrend.key 同源），label 为展示文案。
  */
@@ -249,8 +401,7 @@ export function buildWordWeakSignalEntries(
   input: WeakSignalInput,
   lookupById = lookupStatByWordId(input),
   thresholds: WeakThresholds = DEFAULT_WEAK_THRESHOLDS,
-): WeakSignalEntry[] {
-  const entries: WeakSignalEntry[] = [];
+): WeakSignalEntry[] {  const entries: WeakSignalEntry[] = [];
   const lookupStat = lookupById.get(wordId);
   const lookupCount = lookupStat?.count ?? 0;
   // 答对且查询不再增长（isLookupDemoted）→ 查词标签淡出，与插队队列降级口径贯通
@@ -316,6 +467,9 @@ export function buildWordWeakSignalEntries(
   if (lapseCount > 0 && isWeakProgress(progress)) {
     entries.push({ key: "lapse", label: `FSRS lapse ${lapseCount}` });
   }
+  // leech 渐进阈值：固定顺序置于既有 lapse 之后；静默/被本档位解除时完全不显示
+  const leechEntry = leechSignalEntry(wordId, input, thresholds);
+  if (leechEntry) entries.push(leechEntry);
   return entries;
 }
 
@@ -358,10 +512,17 @@ export function buildWeakProfiles(
   const profiles: Record<number, WeakWordProfile> = {};
   for (const wordId of wordIds) {
     const recall = wordRecallStats(input.reviews, wordId);
+    const leech = deriveLeechDerivation(
+      input.reviews,
+      wordId,
+      input.leechMuted ?? [],
+      thresholds,
+    );
     profiles[wordId] = {
       signals: buildWordWeakSignals(wordId, input, lookupById, thresholds),
       lookupCount: lookupById.get(wordId)?.count ?? 0,
       ...(recall ? { recall } : {}),
+      ...(leech.tier !== null ? { leech } : {}),
     };
   }
   return profiles;

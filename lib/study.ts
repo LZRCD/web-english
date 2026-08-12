@@ -35,6 +35,11 @@ import {
 } from "./daily-sentence.ts";
 import { localDateKey as dateKey } from "./date-utils.ts";
 import { normalizeEtymologyCacheEntry } from "./etymology.ts";
+import {
+  LEECH_TIERS,
+  type LeechMuteRecord,
+  type LeechTier,
+} from "./weak-signals/types.ts";
 
 export type {
   Rating,
@@ -142,12 +147,15 @@ export type WeakThresholds = {
   lookupPriority: number;
   /** 回忆 ≥ 该毫秒数判定为回忆偏慢 */
   slowRecallMs: number;
+  /** leech 起点档位（8 + 4k 系列的最低触发档位，默认 8） */
+  leechLapses: number;
 };
 
 export const DEFAULT_WEAK_THRESHOLDS: WeakThresholds = {
   lookupWeak: 2,
   lookupPriority: 3,
   slowRecallMs: 15_000,
+  leechLapses: 8,
 };
 
 /** 隐藏释义阶段猜词猜错的累计次数：key 为学习项 wordId */
@@ -191,6 +199,8 @@ export type StoredState = {
   guessContextFirst: boolean;
   /** 薄弱判定阈值（设置页可调；可选，缺省用默认值） */
   weakThresholds?: WeakThresholds;
+  /** leech 静默集合：仅存 wordId 与静默时档位，跨档自动解除（可选字段） */
+  leechMuted?: LeechMuteRecord[];
   studyMode: StudyMode;
   studyScope: StudyScope;
   shuffleSeed: number;
@@ -415,11 +425,30 @@ function normalizeWeakThresholds(value: unknown): WeakThresholds {
   const lookupWeak = normalizeCount(raw.lookupWeak, DEFAULT_WEAK_THRESHOLDS.lookupWeak);
   const lookupPriority = normalizeCount(raw.lookupPriority, DEFAULT_WEAK_THRESHOLDS.lookupPriority);
   const slowRecallMs = normalizeCount(raw.slowRecallMs, DEFAULT_WEAK_THRESHOLDS.slowRecallMs);
+  const leechLapses = normalizeCount(raw.leechLapses, DEFAULT_WEAK_THRESHOLDS.leechLapses);
   return {
     lookupWeak: Math.min(20, Math.max(1, lookupWeak)),
     lookupPriority: Math.min(20, Math.max(1, lookupPriority)),
     slowRecallMs: Math.min(120_000, Math.max(1_000, slowRecallMs)),
+    leechLapses: Math.min(99, Math.max(1, leechLapses)),
   };
+}
+
+/** leech 静默集合归一化：只保留合法 wordId 与档位系列成员，同词去重保留最后一条 */
+function normalizeLeechMuted(value: unknown): LeechMuteRecord[] {
+  if (!Array.isArray(value)) return [];
+  const byWordId = new Map<number, LeechMuteRecord>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const wordId = canonicalWordId(Number(record.wordId));
+    const tier = Number(record.tier);
+    if (!isValidStudyWordId(wordId) || !LEECH_TIERS.includes(tier as LeechTier)) {
+      continue;
+    }
+    byWordId.set(wordId, { wordId, tier: tier as LeechTier });
+  }
+  return [...byWordId.values()];
 }
 
 function normalizeGuessMistakes(value: unknown): GuessMistakeMap {
@@ -1257,6 +1286,7 @@ export function normalizeStoredState(parsed: unknown): StoredState {
     hideChineseMeaning: state.hideChineseMeaning === true,
     guessContextFirst: state.guessContextFirst === true,
     weakThresholds: normalizeWeakThresholds(state.weakThresholds),
+    leechMuted: normalizeLeechMuted(state.leechMuted),
     studyMode,
     studyScope,
     shuffleSeed,

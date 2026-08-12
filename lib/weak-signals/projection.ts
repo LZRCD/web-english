@@ -5,9 +5,11 @@ import {
   parseSprintSessionId,
 } from "./detection.ts";
 import {
+  LEECH_TIERS,
   SPRINT_TREATMENT_DIMENSIONS,
   STUBBORN_TREATMENT_SEQUENCE,
   type DimensionObservationReport,
+  type LeechTier,
   type PairedRecallChange,
   type SprintEffectiveness,
   type SprintEffectivenessWeek,
@@ -802,6 +804,30 @@ export function buildWordSignalTimeline(
       type: "stubborn",
       detail: "进入顽固词",
     });
+  }
+  // leech 档位触发点：按 (reviewedAt, id) 升序累计 rating===0 事件，
+  // 命中档位系列（且不低于 leechLapses 起点）时标注含档位文案。
+  const sortedWordReviews = input.reviews
+    .filter((review) => review.wordId === wordId)
+    .sort((first, second) =>
+      first.reviewedAt.localeCompare(second.reviewedAt)
+      || first.id.localeCompare(second.id));
+  const seenLapseIds = new Set<string>();
+  let cumulativeLapses = 0;
+  for (const review of sortedWordReviews) {
+    if (review.rating !== 0 || seenLapseIds.has(review.id)) continue;
+    seenLapseIds.add(review.id);
+    cumulativeLapses += 1;
+    if (
+      cumulativeLapses >= thresholds.leechLapses
+      && LEECH_TIERS.includes(cumulativeLapses as LeechTier)
+    ) {
+      events.push({
+        at: review.reviewedAt,
+        type: "leech",
+        detail: `leech ${cumulativeLapses} 触发（累计遗忘 ${cumulativeLapses} 次）`,
+      });
+    }
   }
   return events.sort((first, second) => first.at.localeCompare(second.at));
 }

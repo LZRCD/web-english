@@ -20,6 +20,7 @@ import { wordRetrievability } from "../../lib/learning";
 import type {
   StabilizedDimension,
   WordRecallStats,
+  LeechDerivation,
 } from "../../lib/weak-signals";
 import type { LookupStat, Word } from "../../lib/study";
 import { formatDueTime } from "../../lib/study";
@@ -75,6 +76,10 @@ type WordCardProps = {
   currentRecallStats?: WordRecallStats;
   /** 该词薄弱信号标签（任意会话态展示） */
   sprintWeakSignals?: string[];
+  /** 该词 leech 派生（有档位时存在；供「不再提醒」按钮） */
+  currentLeech?: LeechDerivation;
+  /** 静默当前 leech 档位（写入 leechMuted，仅 wordId 与档位） */
+  onMuteLeech?: () => void;
   /** 薄弱信号区文案（冲刺态/日常态区分） */
   sprintWeakLabel?: string;
   /** 一键把当前词加入今日任务 */
@@ -166,6 +171,8 @@ export default function WordCard({
   sprintWeakLabel,
   signalTimelineText,
   stabilizedDimensions,
+  currentLeech,
+  onMuteLeech,
   onAddToToday,
   onFocusSourceWord,
   activeSession,
@@ -425,6 +432,17 @@ export default function WordCard({
                 {sprintWeakSignals.map((signal) => (
                   <span className="weak-signal-tag" key={signal}>{signal}</span>
                 ))}
+                {currentLeech?.label && onMuteLeech
+                  && sprintWeakSignals.includes(currentLeech.label) && (
+                  <button
+                    type="button"
+                    className="weak-signal-mute"
+                    aria-label={`不再提醒：${currentLeech.label}`}
+                    onClick={onMuteLeech}
+                  >
+                    不再提醒
+                  </button>
+                )}
               </div>
               {onAddToToday && (
                 <button type="button" className="weak-add-today" onClick={onAddToToday}>

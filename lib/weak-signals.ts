@@ -14,6 +14,9 @@ export {
   parseStubbornSprintSessionId,
   wordRecallStats,
   lookupStatForWordId,
+  deriveLeechDerivation,
+  upsertLeechMute,
+  pruneExpiredLeechMutes,
   buildWordWeakSignalEntries,
   buildWordWeakSignals,
   buildWeakProfiles,
@@ -61,6 +64,9 @@ export {
   type WeakWordProfile,
   type WordRecallStats,
   type WordSignalEvent,
+  type LeechDerivation,
+  type LeechMuteRecord,
+  type LeechTier,
 } from "./weak-signals/types.ts";
 
 export {

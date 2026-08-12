@@ -17,6 +17,10 @@ import {
   combineStoredState,
   splitStoredState,
 } from "../lib/storage.ts";
+import {
+  createBackupDocument,
+  parseBackupDocument,
+} from "../lib/backup.ts";
 import type { QuizAttempt, QuizMode } from "../lib/quiz.ts";
 import {
   buildQuizQuestions,
@@ -56,12 +60,19 @@ import {
   lookupWeakCandidateIds,
   createTreatmentSprintSessionId,
   createStubbornSprintSessionId,
+  deriveLeechDerivation,
   parseSprintSessionId,
   parseStubbornSprintSessionId,
+  pruneExpiredLeechMutes,
   SPRINT_TREATMENT_DIMENSIONS,
+  upsertLeechMute,
   wordRecallStats,
+  type LeechDerivation,
+  type LeechMuteRecord,
+  type LeechTier,
   type WeakSignalInput,
   type WeakThresholds,
+  type WeakWordProfile,
 } from "../lib/weak-signals.ts";
 
 function makeReview(
@@ -972,7 +983,12 @@ test("薄弱阈值参数化：不同阈值产出不同薄弱画像", () => {
   assert.ok(defaultSignals.includes("查过3次"));
   assert.ok(defaultSignals.includes("回忆偏慢1次"));
   // 调高阈值：查过 <5、回忆 <20s 都不再命中
-  const strict: WeakThresholds = { lookupWeak: 5, lookupPriority: 6, slowRecallMs: 20_000 };
+  const strict: WeakThresholds = {
+    lookupWeak: 5,
+    lookupPriority: 6,
+    slowRecallMs: 20_000,
+    leechLapses: DEFAULT_WEAK_THRESHOLDS.leechLapses,
+  };
   const strictSignals = buildWordWeakSignals(1, input, undefined, strict);
   assert.equal(strictSignals.length, 0);
   // 划词候选与画像使用同一可调阈值
@@ -2981,4 +2997,284 @@ test("维度化处置：顽固阶段只由真实 review 推进，刷新、重置
     reviews: [],
   });
   assert.equal(buildStubbornTreatmentRecommendation(legacy)?.mode, "lookup-recall");
+});
+
+// ─── leech 渐进阈值：派生三元组与档位（第 74 轮 P2-11） ───────────────────────
+
+function leechReviews(count: number, startDay = 1, wordId = 10): ReviewEvent[] {
+  return Array.from({ length: count }, (_, index) =>
+    makeReview(
+      wordId,
+      0,
+      `2026-07-${String(startDay + index).padStart(2, "0")}T08:00:00.000Z`,
+    ));
+}
+
+function mutedFor(wordId = 10, tier: LeechTier = 8): LeechMuteRecord[] {
+  return [{ wordId, tier }];
+}
+
+test("leech 派生三元组：空 reviews 时 lapses=0、latestLapseAt=null、currentStreak=null", () => {
+  const derivation = deriveLeechDerivation([], 10, []);
+  assert.deepEqual(derivation, {
+    lapses: 0,
+    latestLapseAt: null,
+    currentStreak: null,
+    muted: false,
+    tier: null,
+    label: null,
+  });
+});
+
+test("leech 派生三元组：无 lapse 时 currentStreak 为 null，lapses 计数正确", () => {
+  const reviews = [
+    makeReview(10, 1, "2026-07-01T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-02T08:00:00.000Z"),
+    makeReview(10, 3, "2026-07-03T08:00:00.000Z"),
+  ];
+  const derivation = deriveLeechDerivation(reviews, 10, []);
+  assert.equal(derivation.lapses, 0);
+  assert.equal(derivation.latestLapseAt, null);
+  assert.equal(derivation.currentStreak, null);
+  assert.equal(derivation.tier, null);
+  assert.equal(derivation.label, null);
+});
+
+test("leech 派生：latestLapseAt 取最近一次 rating===0 的时间，输入乱序结果确定", () => {
+  const reviews = [
+    makeReview(10, 0, "2026-07-02T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-03T08:00:00.000Z"),
+    makeReview(10, 0, "2026-07-05T08:00:00.000Z"),
+    makeReview(10, 1, "2026-07-04T08:00:00.000Z"),
+    makeReview(10, 0, "2026-07-01T08:00:00.000Z"),
+  ];
+  const derivation = deriveLeechDerivation(reviews, 10, []);
+  assert.equal(derivation.lapses, 3);
+  assert.equal(derivation.latestLapseAt, "2026-07-05T08:00:00.000Z");
+});
+
+test("leech 派生：currentStreak 只统计最近一次 lapse 之后 rating>0 的连续次数", () => {
+  const reviews = [
+    makeReview(10, 0, "2026-07-01T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-02T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-03T08:00:00.000Z"),
+    makeReview(10, 0, "2026-07-04T08:00:00.000Z"),
+    makeReview(10, 1, "2026-07-05T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-06T08:00:00.000Z"),
+  ];
+  const derivation = deriveLeechDerivation(reviews, 10, []);
+  assert.equal(derivation.lapses, 2);
+  assert.equal(derivation.latestLapseAt, "2026-07-04T08:00:00.000Z");
+  assert.equal(derivation.currentStreak, 2);
+  // 无成功事件的最近 lapse 后 currentStreak 为 0，不是 null
+  const onlyLapses = deriveLeechDerivation(leechReviews(8), 10, []);
+  assert.equal(onlyLapses.currentStreak, 0);
+});
+
+test("leech 档位触发：8/12/16/20 各档触发点与文案", () => {
+  const tiers: Array<[number, 8 | 12 | 16 | 20]> = [
+    [8, 8],
+    [9, 8],
+    [11, 8],
+    [12, 12],
+    [15, 12],
+    [16, 16],
+    [19, 16],
+    [20, 20],
+  ];
+  for (const [lapseCount, expectedTier] of tiers) {
+    const derivation = deriveLeechDerivation(leechReviews(lapseCount), 10, []);
+    assert.equal(derivation.tier, expectedTier, `lapses=${lapseCount}`);
+    assert.equal(derivation.label, `leech ${expectedTier}`);
+  }
+  const below = deriveLeechDerivation(leechReviews(7), 10, []);
+  assert.equal(below.tier, null);
+  assert.equal(below.label, null);
+});
+
+test("leech 档位：同档位内重复 lapse 不重触发，档位单调推进不因成功清除回退", () => {
+  // 10 次 lapse 仍只点亮 leech 8：时间线每档只有一个触发点
+  const timeline = buildWordSignalTimeline(10, baseInput({ reviews: leechReviews(10) }));
+  const leechEvents = timeline.filter((event) => event.type === "leech");
+  assert.deepEqual(
+    leechEvents.map((event) => event.detail),
+    ["leech 8 触发（累计遗忘 8 次）"],
+  );
+  assert.equal(leechEvents[0]?.at, "2026-07-08T08:00:00.000Z");
+  // 成功清除（连续 3 次 rating>0）后档位不回退，累计 lapses 照常推进
+  const cleared = deriveLeechDerivation(
+    [...leechReviews(8), makeReview(10, 2, "2026-07-09T08:00:00.000Z"),
+      makeReview(10, 2, "2026-07-10T08:00:00.000Z"),
+      makeReview(10, 3, "2026-07-11T08:00:00.000Z")],
+    10,
+    [],
+  );
+  assert.equal(cleared.lapses, 8);
+  assert.equal(cleared.tier, 8);
+  assert.equal(cleared.currentStreak, 3);
+});
+
+test("leech 标签：currentStreak>=3 自动解除且累计 lapses 保留，未跨档再次 lapse 不点亮，跨档重新点亮", () => {
+  const base = leechReviews(8);
+  const signalsAt = (reviews: ReviewEvent[]) =>
+    buildWordWeakSignals(10, baseInput({ reviews }));
+  assert.deepEqual(signalsAt(base), ["leech 8"]);
+  // 连续 3 次 rating>0 → 标签消失
+  const recovered = [
+    ...base,
+    makeReview(10, 2, "2026-07-09T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-10T08:00:00.000Z"),
+    makeReview(10, 3, "2026-07-11T08:00:00.000Z"),
+  ];
+  assert.deepEqual(signalsAt(recovered), []);
+  // 同档位再次 lapse 不重新点亮（同档位只显示一次）
+  const sameTierRelapse = [...recovered, makeReview(10, 0, "2026-07-12T08:00:00.000Z")];
+  assert.equal(deriveLeechDerivation(sameTierRelapse, 10, []).lapses, 9);
+  assert.deepEqual(signalsAt(sameTierRelapse), []);
+  // 跨档后重新点亮并显示新档位文案
+  const crossTier = [
+    ...sameTierRelapse,
+    makeReview(10, 0, "2026-07-13T08:00:00.000Z"),
+    makeReview(10, 0, "2026-07-14T08:00:00.000Z"),
+    makeReview(10, 0, "2026-07-15T08:00:00.000Z"),
+  ];
+  assert.equal(deriveLeechDerivation(crossTier, 10, []).lapses, 12);
+  assert.deepEqual(signalsAt(crossTier), ["leech 12"]);
+});
+
+test("leech 信号并入：置于既有 lapse 之后，无档位/静默/已清除时完全隐藏", () => {
+  const progress = applyRating(undefined, {
+    wordId: 10,
+    word: "word-10",
+    rating: 0,
+    reviewedAt: "2026-07-13T08:00:00.000Z",
+  }).progress;
+  const entries = buildWordWeakSignalEntries(10, baseInput({
+    reviews: [
+      ...leechReviews(12),
+      makeReview(10, 2, "2026-07-14T08:00:00.000Z"),
+    ],
+    wordProgress: { 10: progress },
+  }));
+  const keys = entries.map((entry) => entry.key);
+  const lapseIndex = keys.indexOf("lapse");
+  const leechIndex = keys.indexOf("leech");
+  assert.ok(lapseIndex >= 0, "lapse 条目存在");
+  assert.ok(leechIndex > lapseIndex, "leech 固定置于 lapse 之后");
+  assert.deepEqual(entries[leechIndex], { key: "leech", label: "leech 12" });
+  // 静默中完全隐藏，不保留空白占位
+  const muted = buildWordWeakSignalEntries(10, baseInput({
+    reviews: leechReviews(8),
+    leechMuted: mutedFor(),
+  }));
+  assert.ok(!muted.some((entry) => entry.key === "leech"));
+});
+
+test("leech 静默：upsert 幂等无重复条目，muted 时当前档位不再显示", () => {
+  const once = upsertLeechMute([], 10, 8);
+  assert.deepEqual(once, [{ wordId: 10, tier: 8 }]);
+  const twice = upsertLeechMute(once, 10, 8);
+  assert.deepEqual(twice, [{ wordId: 10, tier: 8 }]);
+  const upgraded = upsertLeechMute(once, 10, 12);
+  assert.deepEqual(upgraded, [{ wordId: 10, tier: 12 }]);
+  const muted = deriveLeechDerivation(leechReviews(10), 10, mutedFor(10, 8));
+  assert.equal(muted.muted, true);
+  assert.equal(muted.tier, 8);
+  assert.ok(
+    !buildWordWeakSignals(10, baseInput({ reviews: leechReviews(10), leechMuted: mutedFor() }))
+      .includes("leech 8"),
+  );
+});
+
+test("leech 静默：跨档自动解除静默并复活，过期条目被 prune 移除", () => {
+  // 静默于档位 8，lapses 跨过 12 后派生 muted=false 并显示新档位文案
+  const reviews = leechReviews(12);
+  const derivation = deriveLeechDerivation(reviews, 10, mutedFor(10, 8));
+  assert.equal(derivation.muted, false);
+  assert.equal(derivation.tier, 12);
+  assert.equal(derivation.label, "leech 12");
+  assert.ok(
+    buildWordWeakSignals(10, baseInput({ reviews, leechMuted: mutedFor(10, 8) }))
+      .includes("leech 12"),
+  );
+  // 持久化维护：过期条目（静默档位低于当前档位）被剔除
+  assert.deepEqual(pruneExpiredLeechMutes(mutedFor(10, 8), reviews), []);
+  // 未跨档时静默保持
+  const stillMuted = deriveLeechDerivation(leechReviews(10), 10, mutedFor(10, 8));
+  assert.equal(stillMuted.muted, true);
+  assert.deepEqual(
+    pruneExpiredLeechMutes(mutedFor(10, 8), leechReviews(10)),
+    mutedFor(10, 8),
+  );
+});
+
+test("leech 纯派生零写入：派生调用前后 reviews/quizAttempts/wordProgress 均不变", () => {
+  const reviews = [
+    ...leechReviews(12),
+    makeReview(10, 2, "2026-07-13T08:00:00.000Z"),
+    makeReview(10, 2, "2026-07-14T08:00:00.000Z"),
+  ];
+  const input = baseInput({ reviews });
+  const beforeReviews = JSON.stringify(reviews);
+  const beforeAttempts = JSON.stringify(input.quizAttempts);
+  const beforeProgress = JSON.stringify(input.wordProgress);
+  const beforeMuted = JSON.stringify(mutedFor(10, 8));
+  deriveLeechDerivation(reviews, 10, mutedFor(10, 8));
+  buildWordWeakSignals(10, baseInput({ reviews, leechMuted: mutedFor(10, 8) }));
+  buildWeakProfiles(baseInput({ reviews, leechMuted: mutedFor(10, 8) }));
+  buildWordSignalTimeline(10, input);
+  assert.equal(JSON.stringify(reviews), beforeReviews);
+  assert.equal(JSON.stringify(input.quizAttempts), beforeAttempts);
+  assert.equal(JSON.stringify(input.wordProgress), beforeProgress);
+  assert.equal(JSON.stringify(mutedFor(10, 8)), beforeMuted);
+});
+test("leech 阈值归一化：leechLapses 默认 8，下限 1、上限 99", () => {
+  const defaults = parseStoredState(JSON.stringify({ schemaVersion: 5 }));
+  assert.equal(defaults.weakThresholds?.leechLapses, 8);
+  const clamped = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    weakThresholds: { leechLapses: 0 },
+  }));
+  assert.equal(clamped.weakThresholds?.leechLapses, 1);
+  const capped = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    weakThresholds: { leechLapses: 100 },
+  }));
+  assert.equal(capped.weakThresholds?.leechLapses, 99);
+});
+test("leech 持久化：归一化去重、分域往返与备份导入/导出保留 leechMuted", () => {
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: 5,
+    leechMuted: [
+      { wordId: 10, tier: 8 },
+      { wordId: 10, tier: 12 },
+      { wordId: 0, tier: 8 },
+      { wordId: 11, tier: 9 },
+    ],
+  }));
+  assert.deepEqual(state.leechMuted, [{ wordId: 10, tier: 12 }]);
+  const restored = combineStoredState(splitStoredState(state));
+  assert.deepEqual(restored.leechMuted, state.leechMuted);
+  const raw = JSON.stringify(createBackupDocument(state));
+  const parsed = parseBackupDocument(raw);
+  assert.deepEqual(parsed.state.leechMuted, state.leechMuted);
+});
+
+test("leech 画像：buildWeakProfiles 带派生字段，muted 时 signals 不含 leech", () => {
+  const profiles = buildWeakProfiles(baseInput({
+    reviews: leechReviews(12),
+    leechMuted: mutedFor(10, 8),
+  }));
+  const profile = profiles[10] as WeakWordProfile & { leech?: LeechDerivation };
+  assert.equal(profile.leech?.tier, 12);
+  assert.equal(profile.leech?.label, "leech 12");
+  assert.equal(profile.leech?.muted, false);
+  assert.ok(profile.signals.includes("leech 12"));
+  const mutedProfiles = buildWeakProfiles(baseInput({
+    reviews: leechReviews(10),
+    leechMuted: mutedFor(10, 8),
+  }));
+  const mutedProfile = mutedProfiles[10] as WeakWordProfile & { leech?: LeechDerivation };
+  assert.equal(mutedProfile.leech?.muted, true);
+  assert.ok(!mutedProfile.signals.includes("leech 8"));
 });

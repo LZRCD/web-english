@@ -1224,6 +1224,7 @@ test("信号联动：薄弱阈值与猜错累计经分域写盘和完整刷新�
       lookupWeak: 7,
       lookupPriority: 8,
       slowRecallMs: 22_000,
+      leechLapses: 8,
     },
     guessMistakes: { 1: 3 },
     senseFrequency: {
@@ -1247,6 +1248,7 @@ test("信号联动：薄弱阈值与猜错累计经分域写盘和完整刷新�
       lookupWeak: 6,
       lookupPriority: 8,
       slowRecallMs: 22_000,
+      leechLapses: 8,
     },
     guessMistakes: { 1: 3 },
     senseFrequency: {

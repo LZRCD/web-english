@@ -1664,3 +1664,14 @@
 - 学习卡优先显示真题原句、真实年份/卷型/section 和精确来源链接，并稳定披露个人学习与版权边界；无例句时完全不渲染。静态浏览不写 review、QuizAttempt、FSRS、wordProgress、weak-signals 或任何学习状态。
 - 当前验证：构建器 8/8、typecheck、lint 0 error / 1 个既有 warning、新真题 E2E 3/3、相关 E2E 43/44、production build + Node 327/327、production smoke 通过。唯一失败是既有 daily-cloze 跨 UTC/本地日期边界用例，与本轮无调用链且修复超出 Quiz/FSRS 授权，已如实记录且未降低断言。
 - dev/production 服务均精确停止，固定端口 3000 空闲，build-info 已恢复。本轮完成后 STOP；P2-11、P2-12 均需用户重新授权和新的 Round 0，不 push。
+
+## Canonical P2-11 leech 渐进阈值标签（第 74 轮）
+
+本轮：2026-08-12。
+
+- 在既有 `lib/weak-signals/` projection 中增加纯派生 leech 渐进阈值：对每个 wordId 从既有 reviews 派生 `lapses / latestLapseAt / currentStreak` 三元组（`rating === 0` 事件，与 lapse 时间线同源），档位序列 8/12/16/20（8 + 4k，类型按 Prompt 示例收敛），档位只由累计 lapses 单调推进，不因成功清除回退。
+- 用户确认静默集合携带静默时档位（`leechMuted?: { wordId, tier }[]`）：当前档位等于静默档位时隐藏标签；跨过下一档位派生自动复活且刷新后仍正确；`upsertLeechMute` 幂等、`pruneExpiredLeechMutes` 幂等维护写入；这是 Canonical 既有裁决要求的「可持久化的确认阈值字段」。
+- leech 并入 `WeakWordProfile.signals`（固定置于 lapse 之后），词卡与词本四 tab 跟随既有 signals 渲染路径，两处提供键盘可访问的「不再提醒」按钮（aria-label 含档位文案）；同档位只显示一次（跨档触发后连续 ≥3 次成功即本档位解除，未跨档的再次 lapse 不点亮）。时间线在档位触发点新增 `leech` 事件，仍为纯派生。
+- 起点 `WeakThresholds.leechLapses`（默认 8，归一化下限 1、上限 99）走既有设置归一化路径，设置页不新增输入 UI。唯一新增持久化是 `leechMuted`（settings 分域可选字段，随备份导入/导出与恢复副本链路）；未升级 STORAGE/DATABASE/备份版本，未新增 store/domain，未修改 backup/learning/quiz/FSRS/daily-cloze/daily-sentence/etymology。
+- 诚实口径：leech 是「累计遗忘次数达到档位」的薄弱信号，不是掌握度/恢复/长期记忆结论；UI 与文档未使用相关措辞。当前验证：红测 0/1（首个真实失败为缺失 `deriveLeechDerivation` 导出）、聚焦 107/107、typecheck、lint 0 error / 1 个既有 warning、新 leech E2E 5/5、signal-flow + learning + responsive 41/41、production build + Node 341/341、production smoke 通过；dev/production 服务均精确停止，端口 3000 空闲，build-info 已恢复。
+- 本轮完成后 STOP；P2-12「每日学习提醒」需用户重新授权并执行新的 Round 0，不 push。

@@ -240,6 +240,7 @@ test("薄弱判定阈值：旧数据无 weakThresholds 时按默认值兼容，�
     lookupWeak: 2,
     lookupPriority: 3,
     slowRecallMs: 15_000,
+    leechLapses: 8,
   });
   const withInvalid = parseStoredState(JSON.stringify({
     schemaVersion: 5,
@@ -249,6 +250,7 @@ test("薄弱判定阈值：旧数据无 weakThresholds 时按默认值兼容，�
     lookupWeak: 20,
     lookupPriority: 1,
     slowRecallMs: 1_000,
+    leechLapses: 8,
   });
   const withValid = parseStoredState(JSON.stringify({
     schemaVersion: 5,
@@ -258,6 +260,7 @@ test("薄弱判定阈值：旧数据无 weakThresholds 时按默认值兼容，�
     lookupWeak: 4,
     lookupPriority: 5,
     slowRecallMs: 20_000,
+    leechLapses: 8,
   });
 });
 

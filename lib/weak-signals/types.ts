@@ -19,6 +19,8 @@ export type WeakSignalInput = {
   reviews: ReviewEvent[];
   stubbornWords: StubbornWordMap;
   wordProgress: WordProgressMap;
+  /** leech 静默集合（用户显式"不再提醒"；缺省为空，仅影响显示） */
+  leechMuted?: LeechMuteRecord[];
 };
 
 /** 词级回忆耗时统计（最近 N 次评分样本） */
@@ -41,6 +43,39 @@ export type WeakWordProfile = {
   lookupCount: number;
   /** 该词最近评分的回忆耗时统计（无合法样本时为 undefined） */
   recall?: WordRecallStats;
+  /** 该词的 leech 派生（有档位时存在；纯派生、不持久化） */
+  leech?: LeechDerivation;
+};
+
+/** leech 渐进档位：8 + 4k（k ≥ 0）；类型按 Prompt 示例收敛为 8/12/16/20。 */
+export type LeechTier = 8 | 12 | 16 | 20;
+
+/** leech 渐进档位序列（单调推进，档位按累计 lapses 只升不降） */
+export const LEECH_TIERS: readonly LeechTier[] = [8, 12, 16, 20];
+
+/**
+ * 静默集合条目：仅存 wordId 与静默时档位（Canonical 确认阈值字段）。
+ * 当前档位等于静默档位时不再显示；跨过下一档位后自动解除静默。
+ */
+export type LeechMuteRecord = {
+  wordId: number;
+  tier: LeechTier;
+};
+
+/** leech 派生三元组 + 档位；纯派生不持久化，muted 来自静默集合。 */
+export type LeechDerivation = {
+  /** rating === 0 事件总数 */
+  lapses: number;
+  /** 最近一次 lapse 时间，无则 null */
+  latestLapseAt: string | null;
+  /** 最近一次 lapse 之后 rating > 0 的连续次数，无 lapse 则 null */
+  currentStreak: number | null;
+  /** 来自 leechMuted 静默集合（当前档位等于静默档位时为 true） */
+  muted: boolean;
+  /** 满足 lapses >= tier 的当前档位，否则 null */
+  tier: LeechTier | null;
+  /** "leech 8" / "leech 12" …，无档位为 null */
+  label: string | null;
 };
 
 /** 本轮已接通的维度化处置建议；其余维度仍回退既有通用冲刺。 */
@@ -132,7 +167,8 @@ export type WeakDimensionTrend = {
     | "quiz-cloze"
     | "slow-recall"
     | "stubborn"
-    | "lapse";
+    | "lapse"
+    | "leech";
   label: string;
   /** 本周出现该信号的去重词数（guess 为累计词数） */
   count: number;
@@ -142,7 +178,6 @@ export type WeakDimensionTrend = {
 
 /** 薄弱信号稳定 key：与 WeakDimensionTrend.key 完全同源，作为领域通信协议 */
 export type WeakSignalKey = WeakDimensionTrend["key"];
-
 /** 结构化薄弱信号条目：稳定 key 与中文展示标签分离 */
 export type WeakSignalEntry = {
   key: WeakSignalKey;
@@ -310,7 +345,7 @@ export type SprintScope = {
 /** 词级信号时间线中的单个事件 */
 export type WordSignalEvent = {
   at: string;
-  type: "review" | "slow-recall" | "lapse" | "quiz" | "lookup" | "stubborn";
+  type: "review" | "slow-recall" | "lapse" | "quiz" | "lookup" | "stubborn" | "leech";
   detail: string;
 };
 

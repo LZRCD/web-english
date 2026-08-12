@@ -92,6 +92,7 @@ type StateSettings = Pick<
   | "hideChineseMeaning"
   | "guessContextFirst"
   | "weakThresholds"
+  | "leechMuted"
   | "studyMode"
   | "studyScope"
   | "shuffleSeed"
@@ -225,6 +226,7 @@ export function splitStoredState(state: StoredState): IndexedStateSnapshot {
       hideChineseMeaning: state.hideChineseMeaning,
       guessContextFirst: state.guessContextFirst,
       weakThresholds: state.weakThresholds,
+      leechMuted: state.leechMuted,
       studyMode: state.studyMode,
       studyScope: state.studyScope,
       shuffleSeed: state.shuffleSeed,

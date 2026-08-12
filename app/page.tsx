@@ -86,9 +86,13 @@ import {
   lookupPriorityWordIds,
   lookupStatForWordId,
   lookupWeakCandidateIds,
+  pruneExpiredLeechMutes,
+  upsertLeechMute,
   createTreatmentSprintSessionId,
   createStubbornSprintSessionId,
   parseStubbornSprintSessionId,
+  type LeechDerivation,
+  type LeechMuteRecord,
   type WeakSignalInput,
   type SprintTreatmentRecommendation,
   type StabilizedDimension,
@@ -240,6 +244,7 @@ export default function Home() {
   const [weakThresholds, setWeakThresholds] = useState<WeakThresholds>(
     DEFAULT_WEAK_THRESHOLDS,
   );
+  const [leechMuted, setLeechMuted] = useState<LeechMuteRecord[]>([]);
   const [senseFrequency, setSenseFrequency] = useState<SenseFrequencyMap>({});
   const [dailyGoal, setDailyGoal] = useState(20);
   const [sessionBatchSize, setSessionBatchSize] = useState<SessionBatchSize>(10);
@@ -486,10 +491,12 @@ export default function Home() {
     reviews,
     stubbornWords,
     wordProgress,
+    leechMuted,
   }), [
     guessMistakes,
     lookupStats,
     lookupWords,
+    leechMuted,
     quizAttempts,
     reviews,
     stubbornWords,
@@ -517,6 +524,29 @@ export default function Home() {
     ) as Record<number, WordRecallStats>,
     [weakProfiles],
   );
+  // leech 派生：有档位的词供词卡/词本展示「不再提醒」交互
+  const leechDerivationsByWordId = useMemo(
+    () => Object.fromEntries(
+      Object.entries(weakProfiles).flatMap(([wordId, profile]) =>
+        profile.leech ? [[Number(wordId), profile.leech]] : []),
+    ) as Record<number, LeechDerivation>,
+    [weakProfiles],
+  );
+  // 跨档自动解除静默：静默档位已低于当前档位的条目幂等移出集合。
+  // effect 内 setState 是有意的幂等维护写入：无过期条目时返回原引用，
+  // React 直接跳过，不产生多余渲染或持久化写入。
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLeechMuted((previous) => {
+      const pruned = pruneExpiredLeechMutes(previous, reviews, weakThresholds);
+      return pruned.length === previous.length ? previous : pruned;
+    });
+  }, [reviews, weakThresholds]);
+  const muteLeechWord = useCallback((wordId: number) => {
+    const tier = leechDerivationsByWordId[wordId]?.tier;
+    if (tier === null || tier === undefined) return;
+    setLeechMuted((previous) => upsertLeechMute(previous, wordId, tier));
+  }, [leechDerivationsByWordId]);
   // 划词薄弱候选：查询达到阈值的词（词本标注/过滤 + 设置页预览）
   const weakLookupCandidateIds = useMemo(
     () => lookupWeakCandidateIds(weakSignalInput, weakThresholds),
@@ -1017,6 +1047,7 @@ export default function Home() {
     hideChineseMeaning,
     guessContextFirst,
     weakThresholds,
+    leechMuted,
     lookupStats,
     guessMistakes,
     senseFrequency,
@@ -1051,6 +1082,7 @@ export default function Home() {
     hideChineseMeaning,
     guessContextFirst,
     weakThresholds,
+    leechMuted,
     lookupStats,
     guessMistakes,
     senseFrequency,
@@ -1495,6 +1527,7 @@ export default function Home() {
     setHideChineseMeaning(state.hideChineseMeaning);
     setGuessContextFirst(state.guessContextFirst);
     setWeakThresholds(state.weakThresholds ?? DEFAULT_WEAK_THRESHOLDS);
+    setLeechMuted(state.leechMuted ?? []);
     setLookupStats(state.lookupStats);
     setGuessMistakes(state.guessMistakes);
     setSenseFrequency(state.senseFrequency);
@@ -2551,6 +2584,16 @@ export default function Home() {
                     ? buildWordWeakSignals(current.id, weakSignalInput, undefined, weakThresholds)
                     : undefined
                 }
+                currentLeech={
+                  current.id === undefined
+                    ? undefined
+                    : leechDerivationsByWordId[current.id]
+                }
+                onMuteLeech={
+                  current.id === undefined
+                    ? undefined
+                    : () => muteLeechWord(current.id as number)
+                }
                 sprintWeakLabel={
                   activeSession?.kind === "sprint"
                     ? "本词因以下信号进入冲刺："
@@ -2653,6 +2696,8 @@ export default function Home() {
             lookupWeakCandidateIds={weakLookupCandidateIds}
             weakSignalsByWordId={weakSignalsByWordId}
             weakRecallByWordId={weakRecallByWordId}
+            leechByWordId={leechDerivationsByWordId}
+            onMuteLeech={muteLeechWord}
             ratingLabels={ratingLabels}
             clock={clock}
             favorites={favorites}
