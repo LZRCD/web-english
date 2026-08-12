@@ -582,8 +582,13 @@ function buildTodayQueueParts(
       && !prioritySet.has(wordId)
       && !reviewedTodaySet.has(wordId)
       && items.indexOf(wordId) === index);
+  // 新词从全书候选随机抽取：按日期种子对候选洗牌后再顺序取（当天固定、次日换一批），
+  // 而非按书序取前 N 个；同词族当天错开逻辑保留。
+  const shuffledCandidates = options?.shuffleSeed !== undefined
+    ? shuffleWordIds(candidates, options.shuffleSeed)
+    : candidates;
   if (dailyNewGoal > 0) {
-    for (const wordId of candidates) {
+    for (const wordId of shuffledCandidates) {
       const familyKey = familyKeys[wordId];
       if (familyKey && usedFamilyKeys.has(familyKey)) continue;
       newIds.push(wordId);
@@ -592,8 +597,13 @@ function buildTodayQueueParts(
     }
   }
   const orderedIds = [...dueIds, ...priorityIds, ...newIds];
+  // 到期词保持置前（复习优先），乱序只作用于补漏与新词；
+  // 种子由调用方传入（今日任务以日期为种子：当天固定一套乱序，跨批次/预览保持一致，次日自动换新）。
   const wordIds = options?.shuffleSeed !== undefined
-    ? shuffleWordIds(orderedIds, options.shuffleSeed)
+    ? [
+        ...dueIds,
+        ...shuffleWordIds([...priorityIds, ...newIds], options.shuffleSeed),
+      ]
     : orderedIds;
   return {
     wordIds,

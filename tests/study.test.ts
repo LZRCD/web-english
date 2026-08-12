@@ -562,7 +562,7 @@ test("今日任务把到期词排在新词前并限制每日新词数", () => {
   assert.deepEqual(sessionProgress(session), { completed: 0, total: 2, percent: 0 });
 });
 
-test("今日任务带日期种子：整队完全混排为确定性排列，成员与计数不变", () => {
+test("今日任务带日期种子：到期词保持置前，补漏与新词混排为确定性排列，成员与计数不变", () => {
   const now = new Date("2026-07-28T00:11:00.000Z");
   const due = applyRating(undefined, {
     wordId: 1,
@@ -584,10 +584,15 @@ test("今日任务带日期种子：整队完全混排为确定性排列，成�
     { ...options, shuffleSeed: undefined },
   );
   const seeded = buildTodayQueue([1, 2, 3, 4, 5], { 1: due }, 2, now, options);
-  // 无种子保持「到期 → 补漏 → 新词」；带种子只是打乱、不增删词
+  // 无种子保持「到期 → 补漏 → 新词」
   assert.deepEqual(ordered, [1, 3, 4, 2, 5]);
+  // 带种子：到期词恒为队首（乱序只作用于补漏与新词），成员与计数不变
+  assert.equal(seeded[0], 1);
   assert.deepEqual([...seeded].sort((first, second) => first - second), [1, 2, 3, 4, 5]);
   assert.equal(new Set(seeded).size, seeded.length);
+  // 补漏与新词尾部确实被洗牌（与未洗牌顺序不同）；种子 20260728 的确定性结果
+  assert.notDeepEqual(seeded, ordered);
+  assert.deepEqual(seeded, [1, 2, 3, 4, 5]);
   // 同种子确定性：重复派生结果一致
   assert.deepEqual(
     seeded,
@@ -622,6 +627,34 @@ test("今日任务乱序：不同日期种子产生不同顺序", () => {
   const secondDay = queueFor(20260729);
   assert.notDeepEqual(firstDay, secondDay);
   assert.deepEqual([...firstDay].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test("今日任务新词从全书候选随机抽取：非书序前 N，同日确定、次日换一批、已学排除", () => {
+  const now = new Date("2026-07-28T00:11:00.000Z");
+  const primary = Array.from({ length: 40 }, (_, index) => index + 1);
+  // 已学 1-3：候选应为 4..40 中的 5 个，且不是书序前 5（4,5,6,7,8）
+  const progress = {
+    1: { wordId: 1, nextDueAt: "2099-01-01" },
+    2: { wordId: 2, nextDueAt: "2099-01-01" },
+    3: { wordId: 3, nextDueAt: "2099-01-01" },
+  };
+  const queueFor = (seed: number) => buildTodayQueue(
+    primary,
+    progress as never,
+    5,
+    now,
+    { shuffleSeed: seed },
+  );
+  const day1 = queueFor(20260728);
+  const sameDay = queueFor(20260728);
+  const day2 = queueFor(20260729);
+  assert.equal(day1.length, 5);
+  assert.equal(new Set(day1).size, 5);
+  assert.ok(day1.every((wordId) => wordId >= 4), "已学词不进入今日新词");
+  assert.notDeepEqual(day1, [4, 5, 6, 7, 8], "新词抽取不是书序前 N 个");
+  assert.ok(day1.some((wordId) => wordId > 8), "抽取覆盖全书候选而非书序头部");
+  assert.deepEqual(day1, sameDay, "同日种子抽取确定");
+  assert.notDeepEqual(day1, day2, "次日种子抽取不同组合");
 });
 
 test("到期积压动态减少新词并允许最低量和手动覆盖", () => {
