@@ -648,6 +648,13 @@ select:focus-visible {
   text-transform: uppercase;
 }
 
+/* 16:10 桌面浏览器非全屏时，减少纵向留白，避免主卡重心下坠 */
+@media (min-width: 821px) and (max-height: 900px) {
+  .card-metadata {
+    margin-top: 10px;
+  }
+}
+
 .daily-sentence-card {
   width: min(760px, calc(100% - 24px));
   flex: 0 0 auto;
