@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 import { dateKey, formatDueTime, buildActivityCalendar, type LookupStats, type LookupWord, type Review } from "../../lib/study";
 import type {
   LearningInsights,
@@ -313,6 +313,14 @@ export default function HistoryView({
     || (activityDays.some((day) => day.date === todayKey)
       ? todayKey
       : activityDays.at(-1)?.date);
+  const activityColumns = Math.ceil(activityDays.length / 7);
+  const activityLegend = (
+    <div className="activity-legend" aria-hidden="true">
+      <span>少</span>
+      {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}
+      <span>多</span>
+    </div>
+  );
   const moveActivityFocus = (
     event: KeyboardEvent<HTMLButtonElement>,
     index: number,
@@ -735,27 +743,39 @@ export default function HistoryView({
         </div>
         <div className="activity-scroll">
           {reviews.length === 0 ? (
-            <div className="activity-empty" role="status">
-              <p>还没有学习记录</p>
-              <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
-            </div>
+            <>
+              <div className="activity-empty" role="status">
+                <p>还没有学习记录</p>
+                <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
+              </div>
+              {activityLegend}
+            </>
           ) : (
           <div className="activity-body">
-          <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日不同单词数`}>
-            {activityDays.map((day, index) => (
-              <button
-                type="button"
-                id={`activity-${day.date}`}
-                key={day.date}
-                className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
-                title={`${day.date} · 学习 ${day.count} 个不同单词`}
-                aria-label={`${day.date}，学习 ${day.count} 个不同单词`}
-                aria-pressed={day.date === selectedActivityDate}
-                tabIndex={day.date === activityTabDate ? 0 : -1}
-                onKeyDown={(event) => moveActivityFocus(event, index)}
-                onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
-              />
-            ))}
+          <div className="activity-heatmap-region">
+            <div className="activity-heatmap-scroll">
+              <div
+                className="activity-grid"
+                aria-label={`${activityRangeLabels[activityRange]}每日不同单词数`}
+                style={{ "--activity-columns": activityColumns } as CSSProperties}
+              >
+                {activityDays.map((day, index) => (
+                  <button
+                    type="button"
+                    id={`activity-${day.date}`}
+                    key={day.date}
+                    className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
+                    title={`${day.date} · 学习 ${day.count} 个不同单词`}
+                    aria-label={`${day.date}，学习 ${day.count} 个不同单词`}
+                    aria-pressed={day.date === selectedActivityDate}
+                    tabIndex={day.date === activityTabDate ? 0 : -1}
+                    onKeyDown={(event) => moveActivityFocus(event, index)}
+                    onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
+                  />
+                ))}
+              </div>
+              {activityLegend}
+            </div>
           </div>
           <div className="activity-summary" aria-label="背诵日历摘要">
             <div>
@@ -776,11 +796,6 @@ export default function HistoryView({
           </div>
           </div>
           )}
-          <div className="activity-legend" aria-hidden="true">
-            <span>少</span>
-            {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}
-            <span>多</span>
-          </div>
         </div>
         {selectedActivityDate && (
           <div className="activity-detail" aria-live="polite">

@@ -878,7 +878,9 @@ async function traceGeometry(page) {
         height: box.height,
       };
     };
-    const scroll = document.querySelector(".activity-scroll");
+    const panel = document.querySelector(".activity-panel");
+    const outer = document.querySelector(".activity-scroll");
+    const heatmap = document.querySelector(".activity-heatmap-scroll");
     const forecastItems = [...document.querySelectorAll(".forecast-summary-item")]
       .map((item) => ({
         rect: rect(item),
@@ -909,8 +911,21 @@ async function traceGeometry(page) {
       weakRows,
       grid: rect(document.querySelector(".activity-grid")),
       summary: rect(document.querySelector(".activity-summary")),
-      scroll: rect(scroll),
-      scrollOverflow: scroll ? scroll.scrollWidth > scroll.clientWidth + 1 : false,
+      scroll: rect(outer),
+      panel: panel && {
+        clientWidth: panel.clientWidth,
+        scrollWidth: panel.scrollWidth,
+      },
+      outer: outer && {
+        clientWidth: outer.clientWidth,
+        scrollWidth: outer.scrollWidth,
+        overflowX: getComputedStyle(outer).overflowX,
+      },
+      heatmap: heatmap && {
+        clientWidth: heatmap.clientWidth,
+        scrollWidth: heatmap.scrollWidth,
+        overflowX: getComputedStyle(heatmap).overflowX,
+      },
     };
   });
 }
@@ -1013,19 +1028,35 @@ test("轨迹页排程摘要、薄弱集中区与背诵日历九个视口不交�
       }
     }
 
-    // 背诵日历：热力图与摘要组成紧凑内容组，互不交叠
+    // 背诵日历：卡片与外层容器永无横向滚动；热力图与摘要互不交叠
     expect(geometry.grid, `${viewport.width}px 热力图`).toBeTruthy();
     expect(geometry.summary, `${viewport.width}px 摘要`).toBeTruthy();
+    expect(geometry.heatmap, `${viewport.width}px 热力图容器`).toBeTruthy();
+    expect(geometry.panel.scrollWidth, `${viewport.width}px 卡片溢出`)
+      .toBeLessThanOrEqual(geometry.panel.clientWidth + 1);
+    expect(geometry.outer.scrollWidth, `${viewport.width}px 外层溢出`)
+      .toBeLessThanOrEqual(geometry.outer.clientWidth + 1);
     expect(rectsOverlap(geometry.grid, geometry.summary), `${viewport.width}px 日历交叠`).toBe(false);
-    if (viewport.width > 820) {
-      const gap = geometry.summary.left - geometry.grid.right;
-      expect(gap, `${viewport.width}px 日历间距`).toBeGreaterThanOrEqual(14);
-      expect(gap, `${viewport.width}px 日历间距`).toBeLessThanOrEqual(122);
+    if (viewport.width >= 1280) {
+      // 桌面：左右排列，内容组居中平衡
+      expect(geometry.summary.left, `${viewport.width}px 摘要居右`)
+        .toBeGreaterThanOrEqual(geometry.grid.right + 15);
+      expect(geometry.heatmap.scrollWidth, `${viewport.width}px 热力图溢出`)
+        .toBeLessThanOrEqual(geometry.heatmap.clientWidth + 1);
       const leftGap = geometry.grid.left - geometry.scroll.left;
       const rightGap = geometry.scroll.right - geometry.summary.right;
       expect(Math.abs(leftGap - rightGap), `${viewport.width}px 日历居中`).toBeLessThanOrEqual(40);
+    } else if (viewport.width >= 768) {
+      // 平板：摘要移到热力图下方，整卡与热力图均不滚动
+      expect(geometry.heatmap.scrollWidth, `${viewport.width}px 热力图溢出`)
+        .toBeLessThanOrEqual(geometry.heatmap.clientWidth + 1);
+      expect(geometry.summary.top, `${viewport.width}px 摘要下移`)
+        .toBeGreaterThanOrEqual(geometry.grid.bottom - 1);
+      expect(geometry.summary.right, `${viewport.width}px 摘要右缘`)
+        .toBeLessThanOrEqual(geometry.documentWidth + 1);
     } else {
-      // 移动端：摘要排到热力图下方且不被裁切
+      // 移动端：摘要下移；仅专用热力图子容器允许横向滚动
+      expect(geometry.heatmap.overflowX, `${viewport.width}px 热力图滚动容器`).toBe("auto");
       expect(geometry.summary.top, `${viewport.width}px 摘要下移`)
         .toBeGreaterThanOrEqual(geometry.grid.bottom - 1);
       expect(geometry.summary.right, `${viewport.width}px 摘要右缘`)
@@ -1036,7 +1067,8 @@ test("轨迹页排程摘要、薄弱集中区与背诵日历九个视口不交�
     }
   }
 
-  // 140 / 182 / 365 天在桌面与移动视口均不产生页面级横向溢出，仅日历内部滚动
+  // 140 / 182 / 365 天：卡片与外层容器在任何视口都不产生横向滚动；
+  // 桌面热力图完整显示，移动端只有专用热力图子容器可以滚动
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     for (const [label, expected] of [["20 周", 140], ["半年", 182], ["一年", 365]]) {
@@ -1052,6 +1084,17 @@ test("轨迹页排程摘要、薄弱集中区与背诵日历九个视口不交�
         .toBeLessThanOrEqual(widths.documentWidth + 2);
       expect(widths.bodyScroll, `${label}@${viewport.width} body`)
         .toBeLessThanOrEqual(widths.innerWidth + 2);
+      const calendar = await traceGeometry(page);
+      expect(calendar.panel.scrollWidth, `${label}@${viewport.width} 卡片溢出`)
+        .toBeLessThanOrEqual(calendar.panel.clientWidth + 1);
+      expect(calendar.outer.scrollWidth, `${label}@${viewport.width} 外层溢出`)
+        .toBeLessThanOrEqual(calendar.outer.clientWidth + 1);
+      if (viewport.width >= 768) {
+        expect(calendar.heatmap.scrollWidth, `${label}@${viewport.width} 热力图溢出`)
+          .toBeLessThanOrEqual(calendar.heatmap.clientWidth + 1);
+      } else {
+        expect(calendar.heatmap.overflowX, `${label}@${viewport.width} 热力图滚动容器`).toBe("auto");
+      }
     }
   }
 
@@ -1071,4 +1114,104 @@ test("轨迹页排程摘要、薄弱集中区与背诵日历九个视口不交�
   expect(overlay.left).toBeGreaterThanOrEqual(-1);
   expect(overlay.right).toBeLessThanOrEqual(documentWidth + 1);
   await expectNoHorizontalOverflow(page);
+});
+
+/* ---------- 背诵日历一年范围：横向滚动彻底验收 ---------- */
+
+function scrollProofReviews() {
+  return [1, 2, 3, 4, 5, 6].map((wordId, index) => ({
+    id: `scroll-${wordId}`,
+    wordId,
+    word: `scroll-${wordId}`,
+    rating: 2,
+    kind: index === 0 ? "new" : "review",
+    intervalMs: 86_400_000,
+    dueAt: geometryDaysAgo(-1, 9),
+    reviewedAt: geometryDaysAgo(index + 1, 8),
+    section: "必考词",
+    unit: 1,
+  }));
+}
+
+test("背诵日历一年范围在桌面与平板视口无任何横向滚动", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  await installStateSeed(context, createState({
+    reviews: scrollProofReviews(),
+    wordProgress: {},
+  }));
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "本周学习报告" })).toBeVisible();
+  await page.locator(".activity-range").getByRole("button", { name: "一年" }).click();
+  await expect(page.locator(".activity-cell")).toHaveCount(365);
+
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1536, height: 864 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 1280, height: 800 },
+    { width: 1024, height: 768 },
+    { width: 768, height: 1024 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    const geometry = await traceGeometry(page);
+
+    // 整张卡片与日历外层容器不得产生横向滚动
+    expect(geometry.heatmap, `${viewport.width}px 热力图容器`).toBeTruthy();
+    expect(geometry.panel.scrollWidth, `${viewport.width}px 卡片溢出`)
+      .toBeLessThanOrEqual(geometry.panel.clientWidth + 1);
+    expect(geometry.outer.scrollWidth, `${viewport.width}px 外层溢出`)
+      .toBeLessThanOrEqual(geometry.outer.clientWidth + 1);
+    expect(geometry.outer.overflowX, `${viewport.width}px 外层滚动样式`)
+      .not.toBe("auto");
+    expect(geometry.heatmap.scrollWidth, `${viewport.width}px 热力图溢出`)
+      .toBeLessThanOrEqual(geometry.heatmap.clientWidth + 1);
+    expect(geometry.documentScroll, `${viewport.width}px document`)
+      .toBeLessThanOrEqual(geometry.documentWidth + 2);
+    expect(geometry.bodyScroll, `${viewport.width}px body`)
+      .toBeLessThanOrEqual(geometry.innerWidth + 2);
+
+    // 365 个日格完整保留，最后一列未被裁切
+    expect(await page.locator(".activity-cell").count()).toBe(365);
+    const lastCellRight = await page.locator(".activity-cell").last()
+      .evaluate((element) => element.getBoundingClientRect().right);
+    const heatRight = geometry.heatmap ? geometry.heatmap.clientWidth : 0;
+    const heatLeft = await page.locator(".activity-heatmap-scroll")
+      .evaluate((element) => element.getBoundingClientRect().left);
+    expect(lastCellRight).toBeLessThanOrEqual(heatLeft + heatRight + 1);
+
+    // 热力图与摘要不交叠；摘要完整位于布局容器内
+    expect(rectsOverlap(geometry.grid, geometry.summary), `${viewport.width}px 日历交叠`).toBe(false);
+    expect(geometry.summary.right, `${viewport.width}px 摘要右缘`)
+      .toBeLessThanOrEqual(geometry.scroll.right + 1);
+    expect(geometry.summary.left, `${viewport.width}px 摘要左缘`)
+      .toBeGreaterThanOrEqual(geometry.scroll.left - 1);
+
+    if (viewport.width >= 1280) {
+      // 桌面：左右排列
+      expect(geometry.summary.left, `${viewport.width}px 摘要居右`)
+        .toBeGreaterThanOrEqual(geometry.grid.right + 15);
+    } else {
+      // 平板：摘要移到热力图下方
+      expect(geometry.summary.top, `${viewport.width}px 摘要下移`)
+        .toBeGreaterThanOrEqual(geometry.grid.bottom - 1);
+    }
+  }
+
+  // 移动端：摘要下移；只有专用热力图子容器滚动；卡片与外层不滚动
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = await traceGeometry(page);
+  expect(mobile.panel.scrollWidth).toBeLessThanOrEqual(mobile.panel.clientWidth + 1);
+  expect(mobile.outer.scrollWidth).toBeLessThanOrEqual(mobile.outer.clientWidth + 1);
+  expect(mobile.heatmap.overflowX).toBe("auto");
+  expect(mobile.heatmap.scrollWidth).toBeGreaterThan(mobile.heatmap.clientWidth + 1);
+  expect(mobile.summary.top).toBeGreaterThanOrEqual(mobile.grid.bottom - 1);
+  expect(mobile.documentScroll).toBeLessThanOrEqual(mobile.documentWidth + 2);
+  expect(mobile.bodyScroll).toBeLessThanOrEqual(mobile.innerWidth + 2);
 });

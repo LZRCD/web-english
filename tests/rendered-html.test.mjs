@@ -379,7 +379,18 @@ test("轨迹页排程摘要、日历语义与详细指标标题去重结构守�
 
   // 布局与可访问样式守卫
   assert.match(styles, /\.forecast-summary \{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.activity-body \{[\s\S]*?grid-template-columns: max-content max-content/);
+  assert.match(styles, /\.activity-body \{[\s\S]*?grid-template-columns: minmax\(0, max-content\) max-content/);
+  assert.match(styles, /\.activity-heatmap-region \{/);
+  assert.match(styles, /\.activity-heatmap-scroll \{/);
+  assert.match(styles, /\.activity-grid \{[\s\S]*?grid-template-columns: repeat\(var\(--activity-columns\), minmax\(0, 12px\)\)/);
+  assert.match(styles, /@media \(max-width: 1279px\) \{[\s\S]*?grid-template-columns: minmax\(0, max-content\)/);
+  assert.match(styles, /@media \(max-width: 767px\) \{[\s\S]*?\.activity-heatmap-scroll \{[\s\S]*?overflow-x: auto/);
+  assert.match(styles, /\.activity-scroll \{[\s\S]*?padding: 24px 26px 20px;[\s\S]*?\}/);
+  assert.doesNotMatch(styles, /\.activity-scroll \{\s*[^}]*overflow-x: auto/);
+  assert.match(historyView, /className="activity-heatmap-region"/);
+  assert.match(historyView, /className="activity-heatmap-scroll"/);
+  assert.match(historyView, /--activity-columns/);
+  assert.match(historyView, /const activityColumns = Math\.ceil\(activityDays\.length \/ 7\)/);
   assert.match(styles, /\.activity-cell:focus-visible \{/);
   assert.match(styles, /\.weak-concentration-row \{[\s\S]*?grid-template-columns: 96px minmax\(0, 1fr\) 190px 96px/);
   assert.match(styles, /\.activity-detail-head > button \{[\s\S]*?width: 40px/);
