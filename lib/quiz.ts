@@ -350,7 +350,7 @@ export function shouldApplyQuizToSchedule(
   return !attempts.some(
     (attempt) =>
       attempt.wordId === wordId
-      && attempt.answeredAt.slice(0, 10) === today,
+      && localDateKey(new Date(attempt.answeredAt)) === today,
   );
 }
 function wordId(word: Word): word is Word & { id: number } {

@@ -19,6 +19,7 @@ import {
   type DailyClozeInput,
 } from "../lib/daily-cloze.ts";
 import { clozeSentence } from "../lib/word-utils.ts";
+import { localDateKey } from "../lib/date-utils.ts";
 
 const WORDS: Word[] = [
   { id: 1, word: "radiate", meaning: "vt. 散发;发出光线", section: "必考词", unit: 1 },
@@ -275,6 +276,37 @@ test("测验每日首次作答才写入 FSRS，重复作答不再改写排程", 
 
   // 同日任意旧模式已作答时，短文填词不得再次改写排程。
   assert.equal(shouldApplyQuizToSchedule([attempt], 1, now), false);
+})
+
+test("测验每日首次作答按本地自然日判定，凌晨/深夜不因 UTC 日期前缀跨日", () => {
+  // ISO 字符串前缀是 UTC 日期：本地凌晨（东半球）或深夜（西半球）时，
+  // 它与本地自然日相差一天。任一主机时区下，下面两组场景至少有一组
+  // 落在“前缀跨日”窗口内，必须仍按本地同日判定为已作答。
+  const attemptAt = (month: number, day: number, hour: number, minute: number) => ({
+    id: `quiz:local:1:${month}-${day}-${hour}`,
+    wordId: 1,
+    mode: "listening-spelling" as const,
+    correct: true,
+    recallMs: 1200,
+    answeredAt: new Date(2026, month - 1, day, hour, minute, 0).toISOString(),
+    appliedToSchedule: true,
+  });
+
+  // 场景一：本地凌晨（00:10 作答，00:30 判定）——东半球 UTC 前缀为前一天
+  const earlyMorning = new Date(2026, 7, 3, 0, 30, 0);
+  const earlyAttempt = attemptAt(8, 3, 0, 10);
+  assert.equal(shouldApplyQuizToSchedule([earlyAttempt], 1, earlyMorning), false);
+  assert.equal(localDateKey(new Date(earlyAttempt.answeredAt)), localDateKey(earlyMorning));
+
+  // 场景二：本地深夜（23:10 作答，23:50 判定）——西半球 UTC 前缀为后一天
+  const lateEvening = new Date(2026, 7, 3, 23, 50, 0);
+  const lateAttempt = attemptAt(8, 3, 23, 10);
+  assert.equal(shouldApplyQuizToSchedule([lateAttempt], 1, lateEvening), false);
+  assert.equal(localDateKey(new Date(lateAttempt.answeredAt)), localDateKey(lateEvening));
+
+  // 场景三：本地昨日深夜作答不阻止本地今日首次写入
+  const yesterdayAttempt = attemptAt(8, 2, 23, 50);
+  assert.equal(shouldApplyQuizToSchedule([yesterdayAttempt], 1, earlyMorning), true);
 })
 
 test("clozeSentence 兼容大小写与正则字符，并且不会误挖单词子串", () => {
