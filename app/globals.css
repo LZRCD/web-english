@@ -5798,13 +5798,17 @@ kbd {
     padding-inline: 7px;
   }
 
+  .learning-context .order-switch {
+    height: 48px;
+  }
+
   .topbar {
     gap: 6px;
     padding-inline: 12px;
   }
 
   .learning-context .order-switch button {
-    min-width: 28px;
+    min-width: 40px;
     padding-inline: 4px;
   }
 
@@ -7742,6 +7746,12 @@ kbd {
 
 .learn-view.detail-mode .orbit-stage {
   width: min(960px, calc(100% - 48px));
+}
+
+@media (max-width: 480px) {
+  .learn-view.detail-mode > .learning-context {
+    max-width: calc(100% - 64px);
+  }
 }
 
 .learn-view.detail-mode .orbit-stage::before,

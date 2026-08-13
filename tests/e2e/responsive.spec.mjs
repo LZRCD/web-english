@@ -77,6 +77,71 @@ async function expectInViewport(control) {
   })).toBe(true);
 }
 
+async function expectOrderSwitchTouchTargets(page, sameRow) {
+  const context = page.getByRole("group", { name: "学习范围" });
+  const studyPicker = context.locator(".study-picker");
+  const buttons = ["顺序", "乱序", "全书"].map((name) =>
+    context.getByRole("button", { name, exact: true }));
+  const geometry = await context.evaluate((element) => {
+    const contextRect = element.getBoundingClientRect();
+    const pickerRect = element.querySelector(".study-picker")?.getBoundingClientRect();
+    const buttonRects = [...element.querySelectorAll(".order-switch button")]
+      .map((button) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        };
+      });
+    return {
+      context: {
+        left: contextRect.left,
+        top: contextRect.top,
+        right: contextRect.right,
+        bottom: contextRect.bottom,
+      },
+      picker: pickerRect && {
+        top: pickerRect.top,
+        bottom: pickerRect.bottom,
+      },
+      buttons: buttonRects,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+  });
+
+  expect(geometry.buttons).toHaveLength(3);
+  for (const [index, rect] of geometry.buttons.entries()) {
+    expect(rect.width, `${buttons[index]} 宽度`).toBeGreaterThanOrEqual(39);
+    expect(rect.height, `${buttons[index]} 高度`).toBeGreaterThanOrEqual(39);
+    expect(rect.left).toBeGreaterThanOrEqual(geometry.context.left - 1);
+    expect(rect.top).toBeGreaterThanOrEqual(geometry.context.top - 1);
+    expect(rect.right).toBeLessThanOrEqual(geometry.context.right + 1);
+    expect(rect.bottom).toBeLessThanOrEqual(geometry.context.bottom + 1);
+    expect(rect.left).toBeGreaterThanOrEqual(-1);
+    expect(rect.top).toBeGreaterThanOrEqual(-1);
+    expect(rect.right).toBeLessThanOrEqual(geometry.viewport.width + 1);
+    expect(rect.bottom).toBeLessThanOrEqual(geometry.viewport.height + 1);
+  }
+  for (let index = 1; index < geometry.buttons.length; index += 1) {
+    expect(geometry.buttons[index].left)
+      .toBeGreaterThanOrEqual(geometry.buttons[index - 1].right - 1);
+  }
+  if (sameRow) {
+    await expect(studyPicker).toBeVisible();
+    const pickerCenter = (geometry.picker.top + geometry.picker.bottom) / 2;
+    const switchCenter = (
+      geometry.buttons[0].top + geometry.buttons[0].bottom
+    ) / 2;
+    expect(Math.abs(pickerCenter - switchCenter)).toBeLessThanOrEqual(1);
+  }
+  await expectNoHorizontalOverflow(page);
+  return { context, buttons };
+}
+
 test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ context, page }) => {
   await installStateSeed(context, createState({
     activeSession: {
@@ -244,6 +309,40 @@ test("学习顶栏显示会话标题与进度", async ({ context, page }) => {
   await expect(page.getByText("2027 红宝书伴学", { exact: true })).toBeVisible();
 });
 
+test("390px 与 320px 下学习顺序控件可触达且不会重叠", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  const viewports = [
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    const orderSwitch = await expectOrderSwitchTouchTargets(
+      page,
+      viewport.width === 390,
+    );
+
+    if (viewport.width === 390) {
+      const [ordered, shuffled, all] = orderSwitch.buttons;
+      await shuffled.click();
+      await expect(shuffled).toHaveAttribute("aria-pressed", "true");
+      await expect(ordered).toHaveAttribute("aria-pressed", "false");
+
+      await ordered.click();
+      await expect(ordered).toHaveAttribute("aria-pressed", "true");
+      await expect(shuffled).toHaveAttribute("aria-pressed", "false");
+
+      await all.click();
+      await expect(all).toHaveAttribute("aria-pressed", "true");
+      await expect(ordered).toHaveAttribute("aria-pressed", "false");
+      await expect(page.locator(".learn-topbar .topbar-title"))
+        .toHaveText(/全书 \d+ 学习项 · 乱序/);
+    }
+  }
+});
+
 test("详情态学习工具栏与 960px 内容轴左缘对齐且不扩成宽卡", async ({ context, page }) => {
   await installStateSeed(context, createState());
   const viewports = [
@@ -284,6 +383,23 @@ test("详情态学习工具栏与 960px 内容轴左缘对齐且不扩成宽卡"
     expect(detail.documentScrollWidth)
       .toBeLessThanOrEqual(detail.documentClientWidth + 2);
     expect(detail.bodyScrollWidth).toBeLessThanOrEqual(detail.bodyClientWidth + 2);
+
+    if (viewport.width === 390) {
+      const detailLayout = await page.evaluate(() => {
+        const contextElement = document.querySelector(".learning-context");
+        const meaning = document.querySelector('[aria-label="释义与例句"]');
+        if (!contextElement || !meaning) throw new Error("详情态布局节点不完整");
+        const contextRect = contextElement.getBoundingClientRect();
+        const meaningRect = meaning.getBoundingClientRect();
+        return {
+          contextHeight: contextRect.height,
+          meaningTop: meaningRect.top,
+          viewportHeight: window.innerHeight,
+        };
+      });
+      expect(detailLayout.contextHeight).toBeLessThanOrEqual(110);
+      expect(detailLayout.meaningTop).toBeLessThan(detailLayout.viewportHeight);
+    }
 
     await page.reload();
   }
