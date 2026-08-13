@@ -59,6 +59,24 @@ async function learningGeometry(page) {
   });
 }
 
+async function openRailView(rail, name, verify) {
+  const control = rail.getByRole("button", { name });
+  await expect(control).toBeVisible();
+  await control.click();
+  await expect(control).toHaveAttribute("aria-current", "page");
+  await verify();
+}
+
+async function expectInViewport(control) {
+  await expect.poll(() => control.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left >= 0
+      && rect.top >= 0
+      && rect.right <= window.innerWidth
+      && rect.bottom <= window.innerHeight;
+  })).toBe(true);
+}
+
 test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ context, page }) => {
   await installStateSeed(context, createState({
     activeSession: {
@@ -82,7 +100,7 @@ test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ co
   await expectNoHorizontalOverflow(page);
 });
 
-test("200% 与 400% 缩放下学习页保持可操作", async ({ context, page }) => {
+test("200% 与 400% 等效布局视口下核心导航与 AI 教练可操作", async ({ context, page }) => {
   await installStateSeed(context, createState({
     activeSession: {
       id: "zoom-session",
@@ -93,20 +111,89 @@ test("200% 与 400% 缩放下学习页保持可操作", async ({ context, page }
       createdAt: "2026-07-29T07:00:00.000Z",
     },
   }));
-  await page.setViewportSize({ width: 1280, height: 900 });
+  const zoomViewports = [
+    { zoom: 2, width: 720, height: 450 },
+    { zoom: 4, width: 360, height: 225 },
+  ];
 
-  for (const zoom of ["2", "4"]) {
+  for (const viewport of zoomViewports) {
+    await page.setViewportSize(viewport);
     await openApp(page);
-    await page.evaluate((level) => {
-      document.documentElement.style.zoom = level;
-    }, zoom);
     await page.getByRole("button", { name: "显示单词释义" }).click();
     await expect(
       page.getByRole("button", { name: /认识/ }),
     ).toBeVisible();
-    await page.evaluate(() => {
-      document.documentElement.style.zoom = "1";
-    });
+
+    if (viewport.zoom === 4) {
+      const rail = page.getByRole("complementary", { name: "主导航" });
+      await openRailView(rail, /词书$/, async () => {
+        await expect(page.getByRole("heading", { name: "按红宝书顺序开始" }))
+          .toBeVisible();
+      });
+      await openRailView(rail, /词本$/, async () => {
+        await expect(page.getByRole("tablist", { name: "词本分类" })).toBeVisible();
+      });
+      await openRailView(rail, /测验$/, async () => {
+        await expect(page.getByRole("heading", { name: "主动写出来，才算真正会" }))
+          .toBeVisible();
+      });
+      await openRailView(rail, /轨迹$/, async () => {
+        await expect(page.getByRole("heading", { name: "每一次回忆都算数" }))
+          .toBeVisible();
+      });
+      await openRailView(rail, /设置$/, async () => {
+        await expect(page.getByRole("heading", { name: "把节奏调成你的样子" }))
+          .toBeVisible();
+      });
+      await openRailView(rail, /学习$/, async () => {
+        await expect(page.locator(".learn-view")).toBeVisible();
+      });
+
+      const aiControl = rail.getByRole("button", { name: "打开 AI 记忆教练" });
+      await expect(aiControl).toBeVisible();
+      await aiControl.click();
+      const coach = page.getByRole("complementary", { name: "AI 记忆教练" });
+      const closeCoach = coach.getByRole("button", { name: "关闭 AI 教练" });
+      const input = coach.getByRole("textbox", { name: "向 AI 教练提问" });
+
+      await expect(coach).toHaveClass(/open/);
+      await expectInViewport(coach);
+      await expectInViewport(closeCoach);
+      await expectInViewport(input);
+      await expect(input).toBeFocused();
+
+      const coachMetrics = await coach.evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+      expect(coachMetrics.scrollHeight).toBeGreaterThan(coachMetrics.clientHeight);
+
+      await input.evaluate((element) => {
+        element.scrollIntoView({ block: "center", inline: "nearest" });
+      });
+      await expect.poll(() => coach.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      await expectInViewport(input);
+      await input.focus();
+      await input.fill("帮我生成一个记忆钩子");
+      await expect(input).toBeFocused();
+      await expect(input).toHaveValue("帮我生成一个记忆钩子");
+
+      await coach.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await expect.poll(() => coach.evaluate((element) => element.scrollTop)).toBe(0);
+      await expectInViewport(closeCoach);
+
+      await coach.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect.poll(() => coach.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      await expectInViewport(closeCoach);
+      await closeCoach.click();
+      await expect(coach).not.toBeVisible();
+    }
   }
 });
 
