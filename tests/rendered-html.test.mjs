@@ -390,7 +390,7 @@ test("轨迹页排程摘要、日历语义与详细指标标题去重结构守�
   assert.match(styles, /\.activity-grid \{[\s\S]*?grid-template-columns: repeat\(var\(--activity-columns\), minmax\(0, 12px\)\)/);
   assert.match(styles, /\.activity-grid \{[\s\S]*?justify-content: center/);
   assert.match(styles, /@media \(max-width: 767px\) \{[\s\S]*?\.activity-heatmap-scroll \{[\s\S]*?overflow-x: auto/);
-  assert.match(styles, /\.activity-scroll \{[\s\S]*?padding: 24px 26px 20px;[\s\S]*?\}/);
+  assert.match(styles, /\.activity-scroll \{[\s\S]*?padding: 14px 20px 10px;[\s\S]*?\}/);
   assert.doesNotMatch(styles, /\.activity-scroll \{\s*[^}]*overflow-x: auto/);
   // 不再保留“固定 190px 右栏”或 1279px 断点切换摘要位置的旧契约
   assert.doesNotMatch(styles, /\.activity-summary\s*\{[^}]*width:\s*190px/);

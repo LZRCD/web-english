@@ -244,6 +244,23 @@ export default function HistoryView({
   const forecastMax = Math.max(1, ...reviewForecast.map((day) => day.count));
   const currentReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-1);
   const previousReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-2);
+  // 本周核心结论：保持率 / 困难率大数 + 分子分母 + 较上周变化（仅展示，不推断因果）
+  const signedPoints = (delta: number) =>
+    `${delta > 0 ? "+" : ""}${delta} 个百分点`;
+  const retentionDeltaText = currentReviewMetricWeek && previousReviewMetricWeek
+    && currentReviewMetricWeek.retention.rate !== null
+    && previousReviewMetricWeek.retention.rate !== null
+    ? `较上周 ${signedPoints(Math.round(currentReviewMetricWeek.retention.rate - previousReviewMetricWeek.retention.rate))}`
+    : currentReviewMetricWeek?.retention.rate !== null
+      ? "上周无可比样本"
+      : null;
+  const difficultyDeltaText = currentReviewMetricWeek && previousReviewMetricWeek
+    && currentReviewMetricWeek.difficulty.rate !== null
+    && previousReviewMetricWeek.difficulty.rate !== null
+    ? `较上周 ${signedPoints(Math.round(currentReviewMetricWeek.difficulty.rate - previousReviewMetricWeek.difficulty.rate))}`
+    : currentReviewMetricWeek?.difficulty.rate !== null
+      ? "上周无可比样本"
+      : null;
   const forecastWeekCount = reviewForecast.slice(0, 7)
     .reduce((sum, day) => sum + day.count, 0);
   const forecastTotal = reviewForecast.reduce((sum, day) => sum + day.count, 0);
@@ -264,6 +281,51 @@ export default function HistoryView({
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count)
     .slice(0, 4);
+  // 本周诊断：仅由现有 props 确定性投影的编辑摘要，不推断因果、不调用任何外部能力
+  const diagnosis = (() => {
+    const topWeak = weeklyReport.weakTrend
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count)[0] ?? null;
+    const topSection = weakConcentration.length > 0
+      ? [...weakConcentration].sort((a, b) => b.total - a.total)[0]
+      : null;
+    const sprint = weeklyReport.sprintEffectiveness;
+    const sentences: string[] = [];
+    if (topWeak) {
+      sentences.push(`${topWeak.label}是本周计数最高的薄弱信号，涉及 ${topWeak.count} 个不同单词。`);
+      if (topWeak.change !== null) {
+        sentences.push(topWeak.change > 0
+          ? `较上周增加 ${topWeak.change} 个。`
+          : topWeak.change < 0
+            ? `较上周减少 ${-topWeak.change} 个。`
+            : "较上周持平。");
+      }
+    } else {
+      sentences.push("本周暂无可分析的薄弱信号。");
+    }
+    if (sprint) {
+      sentences.push(`本周有 ${sprint.sprintCount} 次冲刺，覆盖 ${sprint.coveredWordCount} 个不同单词，当场达标 ${sprint.resolvedCount} 词；当场达标不代表长期掌握。`);
+    } else {
+      sentences.push("本周暂无可分析的冲刺样本。");
+    }
+    return {
+      summary: sentences.join(""),
+      primary: topWeak ? topWeak.label : "暂无可分析数据",
+      wordCount: topWeak ? `${topWeak.count} 个词` : "—",
+      trend: topWeak
+        ? topWeak.change === null
+          ? "累计口径"
+          : topWeak.change > 0
+            ? `较上周 +${topWeak.change}`
+            : topWeak.change < 0
+              ? `较上周 ${topWeak.change}`
+              : "较上周持平"
+        : "—",
+      advice: topSection && topSection.total > 0
+        ? `优先处理贡献最高的「${topSection.section}」分册（${topSection.total} 个薄弱词）。`
+        : "暂无可建议项。",
+    };
+  })();
   // 学习趋势：近 7 天每日评分事件数（展示层派生，不改变统计口径）
   const last7Days = (() => {
     const days: { key: string; label: string; count: number }[] = [];
@@ -354,11 +416,14 @@ export default function HistoryView({
           <p className="trace-hero-note">记录不是为了证明学过，而是为了知道什么真正留下来了。</p>
         </div>
         <div className="trace-hero-stats">
-          <div className="trace-hero-total">
+          <div className="trace-hero-stat">
             <strong>{reviews.length}</strong>
             <span>次记忆记录</span>
           </div>
-          <div className="streak"><strong>{stats.streak}</strong><span>连续学习天</span></div>
+          <div className="trace-hero-stat">
+            <strong>{stats.streak}</strong>
+            <span>连续学习天</span>
+          </div>
         </div>
       </div>
 
@@ -370,7 +435,7 @@ export default function HistoryView({
         <div className="stat-cell"><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
         <div className="stat-cell"><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
         <div className="stat-cell stat-due"><span>当前已到期</span><strong>{stats.dueCount}</strong><small>截至当前时刻</small></div>
-        <div className="stat-cell stat-retention"><span>平均可提取率（估算）</span><strong>{retrievabilitySampleCount === 0 ? "暂无样本" : `${stats.retrievability}%`}</strong><small>根据当前已学习词的 FSRS 状态与时间估算，不代表长期掌握。</small></div>
+        <div className="stat-cell stat-retention"><span>平均可提取率（估算）</span><strong className={retrievabilitySampleCount === 0 ? "no-sample" : ""}>{retrievabilitySampleCount === 0 ? "暂无样本" : `${stats.retrievability}%`}</strong><small>根据当前已学习词的 FSRS 状态与时间估算，不代表长期掌握。</small></div>
       </div>
       <div className="trace-primary-action">
         <p>{actionCopy.summary}</p>
@@ -386,22 +451,42 @@ export default function HistoryView({
           </div>
           <small>{weeklyReport.weekStart.replaceAll("-", ".")} — {weeklyReport.weekEnd.replaceAll("-", ".")}</small>
         </div>
-        <div className="weekly-conclusion">
-          <p>{currentReviewMetricWeek?.retention.rate === null || !currentReviewMetricWeek
-            ? "本周暂无真实复习样本。"
-            : `本周真实复习保持率为 ${formatReviewMetric(currentReviewMetricWeek.retention)}。`}</p>
-          {currentReviewMetricWeek?.difficulty.rate !== null && currentReviewMetricWeek && (
-            <p>本周困难率为 {formatReviewMetric(currentReviewMetricWeek.difficulty)}。</p>
-          )}
-          {currentReviewMetricWeek && previousReviewMetricWeek
-            && currentReviewMetricWeek.retention.rate !== null
-            && previousReviewMetricWeek.retention.rate !== null && (
-              <small>复习保持率较上周 {Math.round(currentReviewMetricWeek.retention.rate - previousReviewMetricWeek.retention.rate)} 个百分点</small>
-          )}
-          {currentReviewMetricWeek && previousReviewMetricWeek
-            && currentReviewMetricWeek.difficulty.rate !== null
-            && previousReviewMetricWeek.difficulty.rate !== null && (
-              <small>困难率较上周 {Math.round(currentReviewMetricWeek.difficulty.rate - previousReviewMetricWeek.difficulty.rate)} 个百分点</small>
+        <div className="weekly-conclusion" aria-label="本周核心结论">
+          {currentReviewMetricWeek ? (
+            <>
+              <div
+                className={`weekly-conclusion-item retention${currentReviewMetricWeek.retention.rate === null ? " no-sample" : ""}`}
+                aria-label={currentReviewMetricWeek.retention.rate === null
+                  ? "本周真实复习保持率：暂无样本"
+                  : `本周真实复习保持率 ${Math.round(currentReviewMetricWeek.retention.rate)}%，${currentReviewMetricWeek.retention.numerator} / ${currentReviewMetricWeek.retention.denominator}${retentionDeltaText ? `，${retentionDeltaText}` : ""}`}
+              >
+                <span>真实复习保持率</span>
+                <strong>{currentReviewMetricWeek.retention.rate === null
+                  ? "暂无样本"
+                  : `${Math.round(currentReviewMetricWeek.retention.rate)}%`}</strong>
+                <small>{currentReviewMetricWeek.retention.rate === null
+                  ? "本周暂无真实复习样本"
+                  : `${currentReviewMetricWeek.retention.numerator} / ${currentReviewMetricWeek.retention.denominator}`}</small>
+                <small className="weekly-conclusion-delta">{retentionDeltaText}</small>
+              </div>
+              <div
+                className={`weekly-conclusion-item difficulty${currentReviewMetricWeek.difficulty.rate === null ? " no-sample" : ""}`}
+                aria-label={currentReviewMetricWeek.difficulty.rate === null
+                  ? "本周困难率：暂无样本"
+                  : `本周困难率 ${Math.round(currentReviewMetricWeek.difficulty.rate)}%，${currentReviewMetricWeek.difficulty.numerator} / ${currentReviewMetricWeek.difficulty.denominator}${difficultyDeltaText ? `，${difficultyDeltaText}` : ""}`}
+              >
+                <span>本周困难率</span>
+                <strong>{currentReviewMetricWeek.difficulty.rate === null
+                  ? "暂无样本"
+                  : `${Math.round(currentReviewMetricWeek.difficulty.rate)}%`}</strong>
+                <small>{currentReviewMetricWeek.difficulty.rate === null
+                  ? "本周暂无困难评分样本"
+                  : `${currentReviewMetricWeek.difficulty.numerator} / ${currentReviewMetricWeek.difficulty.denominator}`}</small>
+                <small className="weekly-conclusion-delta">{difficultyDeltaText}</small>
+              </div>
+            </>
+          ) : (
+            <p className="weekly-conclusion-empty">本周暂无真实复习样本。</p>
           )}
         </div>
         <div className="weekly-report-grid">
@@ -433,7 +518,7 @@ export default function HistoryView({
             <small>
               日均 {weeklyReport.nextWeekDailyAverage}
               {weeklyReport.nextWeekPeak
-                ? ` · 峰值 ${weeklyReport.nextWeekPeak.date.slice(5)} ${weeklyReport.nextWeekPeak.count} 词`
+                ? ` · 峰值 ${weeklyReport.nextWeekPeak.date.slice(5).replaceAll("-", ".")} ${weeklyReport.nextWeekPeak.count} 词`
                 : ""}
             </small>
           </div>
@@ -484,8 +569,8 @@ export default function HistoryView({
                     aria-label={`${week.weekStart} 至 ${week.weekEnd}${current ? "，本周" : ""}；保持 ${week.retention.numerator}/${week.retention.denominator}；困难 ${week.difficulty.numerator}/${week.difficulty.denominator}`}
                   >
                     <div className="review-metric-week-label">
-                      <strong>{current ? "本周" : week.weekStart.slice(5)}</strong>
-                      <small>{week.weekStart.slice(5)} — {week.weekEnd.slice(5)}</small>
+                      <strong>{current ? "本周" : week.weekStart.slice(5).replaceAll("-", ".")}</strong>
+                      <small>{week.weekStart.slice(5).replaceAll("-", ".")} — {week.weekEnd.slice(5).replaceAll("-", ".")}</small>
                     </div>
                     <div className="review-metric-value retention">
                       <span>复习保持率 {formatReviewMetric(week.retention)}</span>
@@ -550,7 +635,7 @@ export default function HistoryView({
               <div className="forecast-summary-item">
                 <span>下一个复习高峰</span>
                 <strong className="forecast-peak">
-                  {nextForecastPeak ? `${nextForecastPeak.date} · ${nextForecastPeak.count} 词` : "未来暂无排程峰值"}
+                  {nextForecastPeak ? `${nextForecastPeak.date.replaceAll("-", ".")} · ${nextForecastPeak.count} 词` : "未来暂无排程峰值"}
                 </strong>
               </div>
             </div>
@@ -566,22 +651,27 @@ export default function HistoryView({
                   const accessibleLabel = index === 0
                     ? `${day.date}，含逾期与今天到期，共 ${day.count} 词`
                     : `${day.date}，到期复习 ${day.count} 词`;
+                  // 默认只标注关键日期：今天、每周节点、月份跨界与下一个高峰；精确值仍在 aria-label / title
+                  const keyDate = index === 0
+                    || index % 7 === 0
+                    || day.date.endsWith("-01")
+                    || nextForecastPeak?.date === day.date;
                   return (
                     <div
-                      className="forecast-day"
+                      className={`forecast-day${keyDate ? " key" : ""}`}
                       key={day.date}
                       data-date={day.date}
                       title={accessibleLabel}
                       aria-label={accessibleLabel}
                       role="group"
                     >
-                      <small>{index === 0 ? "今天" : index % 5 === 0 ? day.date.slice(5) : ""}</small>
+                      <small>{index === 0 ? "今天" : keyDate ? day.date.slice(5).replaceAll("-", ".") : ""}</small>
                       <div
                         className={`forecast-bar level-${level}`}
-                        style={{ height: `${Math.max(4, (day.count / forecastMax) * 48)}px` }}
+                        style={{ height: `${Math.max(4, (day.count / forecastMax) * 36)}px` }}
                         aria-hidden="true"
                       />
-                      <span>{day.count}</span>
+                      <span>{keyDate && day.count > 0 ? day.count : ""}</span>
                     </div>
                   );
                 })}
@@ -594,7 +684,7 @@ export default function HistoryView({
           <div className="weak-concentration" aria-label="薄弱集中区">
             <div className="weak-trend-head">
               <strong>薄弱集中区</strong>
-              <small>贡献拆解与分册内薄弱率 · 悬停查看单元明细</small>
+              <small>贡献拆解与分册内薄弱率 · 悬停或聚焦查看单元明细</small>
             </div>
             {weakConcentration.map((section) => {
               const sectionTotal = [...(sectionUnitTotals.get(section.section)?.values() ?? [])]
@@ -933,6 +1023,19 @@ export default function HistoryView({
       <details className="trace-details" aria-label="详细学习分析">
         <summary>详细学习分析<span>查询行为 · 薄弱维度 · 冲刺与 cohort</span></summary>
         <div className="trace-details-body">
+        <section className="weekly-diagnosis" aria-labelledby="weekly-diagnosis-title">
+          <div className="weekly-diagnosis-head">
+            <p className="eyebrow">WEEKLY DIAGNOSIS</p>
+            <h3 id="weekly-diagnosis-title">本周诊断</h3>
+          </div>
+          <p className="weekly-diagnosis-note">{diagnosis.summary}</p>
+          <dl className="weekly-diagnosis-facts">
+            <div><dt>主要问题</dt><dd>{diagnosis.primary}</dd></div>
+            <div><dt>涉及词数</dt><dd>{diagnosis.wordCount}</dd></div>
+            <div><dt>趋势</dt><dd>{diagnosis.trend}</dd></div>
+            <div><dt>建议</dt><dd>{diagnosis.advice}</dd></div>
+          </dl>
+        </section>
         {lookupWords.length > 0 && (
           <section className="lookup-trace" aria-labelledby="lookup-trace-title">
             <div className="panel-title">
@@ -1015,7 +1118,7 @@ export default function HistoryView({
                             style={{ height: `${Math.max(4, (value / max) * 26)}px` }}
                           />
                           <small>
-                            {weekIndex === weakTrendSeries.length - 1 ? "本周" : week.weekStart.slice(5)}
+                            {weekIndex === weakTrendSeries.length - 1 ? "本周" : week.weekStart.slice(5).replaceAll("-", ".")}
                           </small>
                           <strong>{value}</strong>
                         </div>
@@ -1119,10 +1222,13 @@ export default function HistoryView({
               <strong>冲刺观察 4 周</strong>
               <small>每周冲刺次数 · 当场达标词数 · 同词配对回忆变化</small>
             </div>
-            <div className="sprint-effectiveness-series">
+            {sprintEffectivenessSeries.every((week) => week.effectiveness === null) ? (
+              <p className="trace-empty-note">最近 4 周暂无冲刺记录。</p>
+            ) : (
+              <div className="sprint-effectiveness-series">
               {sprintEffectivenessSeries.map((week) => (
                 <div className="sprint-effectiveness-week" key={week.weekStart}>
-                  <span>{week.weekStart === weeklyReport.weekStart ? "本周" : week.weekStart.slice(5)}</span>
+                  <span>{week.weekStart === weeklyReport.weekStart ? "本周" : week.weekStart.slice(5).replaceAll("-", ".")}</span>
                   {week.effectiveness ? (
                     <>
                       <strong>{week.effectiveness.sprintCount} 次</strong>
@@ -1146,7 +1252,8 @@ export default function HistoryView({
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
         {sprintRelapseSeries.length > 0 && (
@@ -1155,10 +1262,13 @@ export default function HistoryView({
               <strong>冲刺后当前仍薄弱率 4 周</strong>
               <small>按最近一次达标处置周分组 · 未区分从未恢复与恢复后再次薄弱</small>
             </div>
-            <div className="sprint-effectiveness-series">
+            {sprintRelapseSeries.every((week) => week.relapse === null) ? (
+              <p className="trace-empty-note">最近 4 周暂无可计算的冲刺后薄弱率样本。</p>
+            ) : (
+              <div className="sprint-effectiveness-series">
               {sprintRelapseSeries.map((week) => (
                 <div className="sprint-effectiveness-week" key={week.weekStart}>
-                  <span>{week.weekStart.slice(5)}</span>
+                  <span>{week.weekStart.slice(5).replaceAll("-", ".")}</span>
                   {week.relapse ? (
                     <>
                       <strong>{week.relapse.relapseRate}%</strong>
@@ -1174,7 +1284,8 @@ export default function HistoryView({
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
         {sprintRelapse && (
@@ -1213,10 +1324,13 @@ export default function HistoryView({
               <strong>冲刺后首次正常复习保持 4 周</strong>
               <small>观察成功冲刺后、下一次冲刺前的首条非冲刺评分；未观察不计为失败</small>
             </div>
-            <div className="sprint-effectiveness-series">
+            {sprintRetentionSeries.every((week) => week.retention === null) ? (
+              <p className="trace-empty-note">最近 4 周暂无成功冲刺 cohort。</p>
+            ) : (
+              <div className="sprint-effectiveness-series">
               {sprintRetentionSeries.map((week) => (
                 <div className="sprint-effectiveness-week" key={week.weekStart}>
-                  <span>{week.weekStart.slice(5)}</span>
+                  <span>{week.weekStart.slice(5).replaceAll("-", ".")}</span>
                   {week.retention ? (
                     <>
                       <strong>
@@ -1247,7 +1361,8 @@ export default function HistoryView({
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
         <details className="dimension-observation" aria-label="分维度观察报告（最近 4 个完整周）">
@@ -1357,7 +1472,7 @@ export default function HistoryView({
               return (
                 <div className="sprint-history-row" key={record.sessionId}>
                   <strong>
-                    {started.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}
+                    {String(started.getMonth() + 1).padStart(2, "0")}.{String(started.getDate()).padStart(2, "0")}
                     <small>{started.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
                   </strong>
                   <span>{record.wordCount} 词</span>

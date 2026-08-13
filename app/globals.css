@@ -2738,42 +2738,6 @@ select:focus-visible {
   gap: 30px;
 }
 
-.trace-hero-total {
-  display: grid;
-  justify-items: end;
-  gap: 3px;
-}
-
-.trace-hero-total strong {
-  font: 400 40px/1 Georgia, serif;
-  color: var(--accent-strong);
-}
-
-.trace-hero-total span {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-.streak {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.streak strong {
-  color: var(--accent-strong);
-  font: 400 40px/1 Georgia, serif;
-}
-
-.streak span {
-  width: 45px;
-  color: #868c85;
-  font-size: 10px;
-  line-height: 1.4;
-}
-
 /* ---- 轨迹页分组标签：现在 → 本周 → 未来 → 薄弱项 → 历史 ---- */
 .trace-section {
   display: flex;
@@ -3087,7 +3051,7 @@ select:focus-visible {
 }
 
 .activity-scroll {
-  padding: 24px 26px 20px;
+  padding: 14px 20px 10px;
 }
 
 /* 背诵日历主体：热力图 → 图例 → 统计摘要共用同一条纵向中心轴，
@@ -8264,4 +8228,1151 @@ kbd {
   text-decoration: underline;
   text-decoration-color: #55c996;
   text-underline-offset: 6px;
+}
+
+/* =====================================================================
+   第 78 轮：轨迹页「记忆档案」UI 精修
+   减少卡片套娃 → 结论优先阅读层级 → 压缩空白与空数据噪音。
+   全部规则追加于文件末尾，仅作用于轨迹页；不改任何统计口径。
+   ===================================================================== */
+
+/* ---- 局部阅读宽度：只收紧轨迹页，不动全局 --content-max-width ---- */
+.content-view.history-view {
+  max-width: 1180px;
+  padding-top: 44px;
+  padding-bottom: 64px;
+}
+
+.history-view {
+  gap: 12px;
+}
+
+.trace-hero {
+  margin-bottom: 24px;
+}
+
+/* ---- Hero：两个指标组织为同构数据组 ---- */
+.trace-hero-stats {
+  align-items: flex-start;
+  gap: 36px;
+}
+
+.trace-hero-stat {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.trace-hero-stat strong {
+  color: var(--accent-strong);
+  font: 500 40px/1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.trace-hero-stat span {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ---- Level 1 Section：统一边框 / 圆角 / 背景，减少层次差异 ---- */
+.current-status,
+.forecast-panel,
+.weekly-report,
+.metrics-details,
+.history-panel,
+.activity-panel,
+.trace-details {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.current-status,
+.forecast-panel,
+.weekly-report,
+.metrics-details {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.current-status,
+.forecast-panel,
+.metrics-details {
+  padding: 18px 20px;
+}
+
+.weekly-report {
+  padding: 18px 20px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.weak-concentration {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.weak-concentration.empty-state {
+  border: 1px dashed var(--border-normal);
+  border-radius: var(--radius-md);
+  background: transparent;
+  padding: 18px 20px;
+}
+
+/* ---- 标题层级：轨迹页 Section 标题统一 16px ---- */
+.history-view .panel-title h2 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.current-status .panel-title {
+  border-bottom: 0;
+  padding: 0 0 10px;
+}
+
+.weekly-report .panel-title {
+  padding: 0 0 12px;
+}
+
+.forecast-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.forecast-title p {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+}
+
+.forecast-title small {
+  font-size: 11px;
+}
+
+/* ---- 当前状态：指标组用间距分组，不再各自成卡 ---- */
+.current-status .stat-grid {
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.current-status .stat-grid > div {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 2px 2px 6px;
+  gap: 5px;
+}
+
+.current-status .stat-grid span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.current-status .stat-grid strong {
+  font: 400 32px/1.1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.current-status .stat-grid small {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.current-status .stat-due strong {
+  color: var(--warning);
+}
+
+.current-status .stat-retention strong {
+  color: var(--accent);
+}
+
+.current-status .stat-grid strong.no-sample {
+  color: var(--text-secondary);
+  font-size: 26px;
+}
+
+/* ---- CTA：紧凑浅绿行动条，按钮不膨胀 ---- */
+.trace-primary-action {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--green-50);
+}
+
+.trace-primary-action p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.trace-primary-action button {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0 22px;
+  font-size: 12.5px;
+}
+
+/* ---- 本周结论：保持率 / 困难率成为第一视觉核心 ---- */
+.weekly-conclusion {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 16px;
+}
+
+.weekly-conclusion-item {
+  display: grid;
+  gap: 3px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+}
+
+.weekly-conclusion-item.retention {
+  background: var(--green-50);
+}
+
+.weekly-conclusion-item.difficulty {
+  background: var(--warning-soft);
+}
+
+.weekly-conclusion-item > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.weekly-conclusion-item > strong {
+  font: 400 36px/1.05 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.weekly-conclusion-item.retention > strong {
+  color: var(--accent-strong);
+}
+
+.weekly-conclusion-item.difficulty > strong {
+  color: var(--warning);
+}
+
+.weekly-conclusion-item.no-sample > strong {
+  color: var(--text-secondary);
+  font-size: 26px;
+}
+
+.weekly-conclusion-item > small {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.weekly-conclusion-item .weekly-conclusion-delta {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.weekly-conclusion-item.retention .weekly-conclusion-delta {
+  color: var(--accent-strong);
+}
+
+.weekly-conclusion-item.difficulty .weekly-conclusion-delta {
+  color: var(--warning);
+}
+
+.weekly-conclusion-empty {
+  margin: 12px 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ---- 周报辅助指标：低一级的竖线分组 strip ---- */
+.weekly-report-grid {
+  margin-top: 0;
+  gap: 0;
+}
+
+.weekly-report-grid > div {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 18px;
+  gap: 3px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.weekly-report-grid > div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.weekly-report-grid span {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.weekly-report-grid strong {
+  font: 400 26px/1.1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-report-grid small {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.weekly-report-grid small.positive { color: var(--accent-strong); }
+.weekly-report-grid small.negative { color: var(--warning); }
+
+/* ---- 考研备考就绪度：由卡片改为顶部发丝线的轻量模块 ---- */
+.weekly-report .exam-progress {
+  margin: 20px 0 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.weekly-report .exam-progress .panel-title {
+  padding: 0 0 10px;
+  border-bottom: 0;
+}
+
+.weekly-report .exam-progress-grid {
+  margin-top: 8px;
+  gap: 0;
+}
+
+.weekly-report .exam-progress-grid > div {
+  min-height: 0;
+  padding: 4px 16px 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 3px;
+}
+
+.weekly-report .exam-progress-grid > div + div {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 16px;
+}
+
+.weekly-report .exam-progress-grid span,
+.weekly-report .exam-progress-grid small {
+  font-size: 11px;
+}
+
+.weekly-report .exam-progress-grid strong {
+  font: 400 26px/1.1 Georgia, serif;
+}
+
+/* ---- 复习保持率 / 困难率趋势：去内边框，当前周用顶部绿线 ---- */
+.review-metric-trend {
+  margin-top: 14px;
+  padding: 12px 0 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.review-metric-trend-head h3 {
+  font-size: 13.5px;
+}
+
+.review-metric-trend-head p,
+.review-metric-trend-head small {
+  font-size: 11px;
+}
+
+.review-metric-summary {
+  margin-top: 12px;
+  gap: 12px;
+}
+
+.review-metric-summary > div {
+  background: transparent;
+  border-radius: 0;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.review-metric-summary span {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.review-metric-summary strong {
+  font-size: 15px;
+}
+
+.review-metric-weeks {
+  margin-top: 12px;
+  gap: 10px;
+}
+
+.review-metric-week {
+  border: 0;
+  border-top: 2px solid var(--mist);
+  border-radius: 0;
+  padding: 8px 6px 6px;
+  background: transparent;
+}
+
+.review-metric-week.current {
+  border-top-color: var(--green-500);
+  background: transparent;
+  box-shadow: none;
+}
+
+.review-metric-week-label strong {
+  font-size: 11px;
+}
+
+.review-metric-week-label small {
+  font-size: 10px;
+}
+
+.review-metric-value span {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ---- 本周值得注意：编辑感横条，暖橙数字 ---- */
+.weak-dim-highlight {
+  margin-top: 12px;
+  padding: 8px 2px 10px;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.weak-dim-highlight-row {
+  gap: 8px 28px;
+  margin-top: 8px;
+}
+
+.weak-dim-highlight-row span {
+  font-size: 12px;
+}
+
+.weak-dim-highlight-row b {
+  font: 400 20px/1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 考研节奏建议：保持浅绿行动条，略收紧 ---- */
+.weekly-pace-advice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+}
+
+.weekly-pace-advice > span {
+  width: 26px;
+  height: 26px;
+}
+
+.weekly-pace-advice p {
+  font-size: 11.5px;
+}
+
+.weekly-pace-advice strong {
+  font-size: 12px;
+}
+
+/* ---- 未来排程：摘要指标改竖线分组，30 天图降噪 ---- */
+.forecast-summary {
+  gap: 0;
+  margin: 14px 0 6px;
+}
+
+.forecast-summary-item {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 4px 16px 4px 0;
+}
+
+.forecast-summary-item + .forecast-summary-item {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 16px;
+}
+
+.forecast-summary-item span {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.forecast-summary-item strong {
+  font: 400 26px/1.15 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast-summary-item .forecast-peak {
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.forecast-bars {
+  height: 56px;
+  gap: 3px;
+}
+
+.forecast-day {
+  gap: 3px;
+}
+
+.forecast-day > small {
+  font-size: 10px;
+}
+
+.forecast-day > span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.forecast-bar {
+  max-width: 16px;
+  border-radius: 3px 3px 0 0;
+}
+
+/* ---- 薄弱集中区：编辑感列表，文字行动保留 40px 触控区 ---- */
+.weak-concentration .weak-trend-head {
+  margin-bottom: 6px;
+}
+
+.weak-trend-head strong {
+  font-size: 12.5px;
+}
+
+.weak-trend-head small {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.weak-concentration-row {
+  column-gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.weak-concentration-row:last-child {
+  border-bottom: 0;
+}
+
+.weak-concentration-label {
+  font-size: 13px;
+}
+
+.weak-concentration-track {
+  height: 6px;
+  background: var(--mist);
+}
+
+.weak-concentration-fill {
+  background: var(--warning-muted);
+}
+
+.weak-concentration-count {
+  font: 400 24px/1.05 Georgia, serif;
+}
+
+.weak-concentration-count small {
+  font-size: 11px;
+}
+
+.concentration-sprint {
+  border: 0;
+  background: transparent;
+  padding: 6px 6px;
+  border-radius: 8px;
+  min-width: 40px;
+  min-height: 40px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.concentration-sprint:hover {
+  background: rgba(47, 127, 96, 0.08);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.concentration-sprint:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.concentration-sprint:disabled {
+  background: transparent;
+  color: #aab4ac;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.concentration-unit:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 1px;
+}
+
+.concentration-unit {
+  font-size: 10.5px;
+}
+
+/* 单元明细浮层：键盘聚焦行内任一单元按钮时同样展开（不再只依赖鼠标悬停） */
+.weak-concentration-row:focus-within .weak-concentration-units {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---- 背诵日历：只压缩 padding / gap / 空白，热力图与统计契约不动 ---- */
+.activity-panel {
+  margin-bottom: 16px;
+  border-radius: var(--radius-lg);
+}
+
+.activity-panel .panel-title {
+  padding: 14px 18px 12px;
+}
+
+.activity-heading small {
+  font-size: 10.5px;
+}
+
+.activity-panel-tools > span {
+  font-size: 11px;
+}
+
+.activity-controls button {
+  font-size: 11px;
+}
+
+.activity-nav button {
+  font-size: 12px;
+}
+
+.activity-body {
+  gap: 10px;
+  padding-block: 0;
+}
+
+.activity-heatmap-region {
+  gap: 10px;
+}
+
+.activity-summary {
+  padding-block: 0;
+  gap: clamp(6px, 1vw, 16px);
+  max-width: 560px;
+}
+
+.activity-stat {
+  padding: 4px 2px;
+  gap: 2px;
+}
+
+.activity-stat-value strong {
+  font-size: clamp(22px, 2.2vw, 26px);
+}
+
+.activity-stat-value small {
+  font-size: 11px;
+}
+
+.activity-stat-label {
+  font-size: 11px;
+}
+
+.activity-legend {
+  font-size: 11px;
+}
+
+.activity-detail {
+  padding: 14px 18px 16px;
+}
+
+.activity-detail-head span {
+  font-size: 11px;
+}
+
+.activity-word small {
+  font-size: 10px;
+}
+
+/* ---- 最近学习：轻量排版，不加新入口 ---- */
+.history-panel {
+  border-radius: var(--radius-lg);
+}
+
+.history-panel .panel-title {
+  padding: 16px 20px;
+}
+
+.history-panel .panel-title span {
+  font-size: 11px;
+}
+
+.history-row {
+  min-height: 56px;
+  padding: 0 20px;
+}
+
+.history-row > span:last-child {
+  font-size: 11px;
+}
+
+/* ---- 近 7 日详细指标：去掉整层卡片，改用间距 + 发丝线 ---- */
+.metrics-details {
+  padding: 16px 18px 18px;
+}
+
+.metrics-details > summary {
+  font-size: 15px;
+}
+
+.metrics-details .insights-panel {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.insights-panel .panel-title {
+  padding: 0 0 12px;
+  border-bottom: 0;
+}
+
+.insights-grid {
+  margin-top: 0;
+  gap: 18px;
+}
+
+.insight-card {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 5px;
+}
+
+.insight-card span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.insight-card strong {
+  font: 400 30px/1.05 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-card small {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.insights-trend {
+  margin-top: 18px;
+  padding: 14px 0 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.insights-trend-head small {
+  font-size: 11px;
+}
+
+.insights-trend-bars {
+  height: 60px;
+  margin-top: 12px;
+  gap: 6px;
+}
+
+.insights-trend-col small {
+  font-size: 10px;
+}
+
+.insights-trend-col b {
+  font-size: 10px;
+}
+
+.insights-meta {
+  margin-top: 14px;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+
+/* ---- 详细学习分析：默认折叠，展开先读诊断 ---- */
+.trace-details {
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
+.trace-details > summary {
+  min-height: 48px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+.trace-details > summary span {
+  font-size: 11px;
+}
+
+.trace-details > summary::after {
+  font-size: 11px;
+}
+
+.trace-details-body {
+  padding: 16px 18px 20px;
+  gap: 18px;
+}
+
+/* 本周诊断：编辑感浅绿 note，全部内容由现有 props 确定性派生 */
+.weekly-diagnosis {
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: var(--green-50);
+}
+
+.weekly-diagnosis-head h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.weekly-diagnosis-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+
+.weekly-diagnosis-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin: 12px 0 0;
+}
+
+.weekly-diagnosis-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.weekly-diagnosis-facts dt {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.weekly-diagnosis-facts dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- 分析区模块：由卡片改为透明 + 顶部发丝线 ---- */
+.lookup-trace {
+  margin: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.lookup-trace .panel-title {
+  padding: 0 0 10px;
+  border-bottom: 0;
+}
+
+.lookup-trace .exam-progress-grid {
+  margin-top: 8px;
+  gap: 0;
+}
+
+.lookup-trace .exam-progress-grid > div {
+  min-height: 0;
+  padding: 4px 16px 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 3px;
+}
+
+.lookup-trace .exam-progress-grid > div + div {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 16px;
+}
+
+.lookup-trace .exam-progress-grid span {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.lookup-trace .exam-progress-grid strong {
+  font: 400 28px/1.1 Georgia, serif;
+}
+
+.lookup-trace .exam-progress-grid small {
+  font-size: 11px;
+}
+
+.lookup-dist-head strong {
+  font-size: 12.5px;
+}
+
+.lookup-dist-head small {
+  font-size: 11px;
+}
+
+.lookup-dist-row {
+  grid-template-columns: 88px 1fr 34px;
+}
+
+.lookup-dist-row > span {
+  font-size: 12px;
+}
+
+.lookup-dist-row > strong {
+  font-size: 12px;
+}
+
+.lookup-dist-bar {
+  height: 6px;
+}
+
+.lookup-trace-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.weak-trend,
+.weak-trend-series,
+.dimension-observation {
+  margin-top: 16px;
+  padding: 12px 0 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.weak-trend-grid {
+  gap: 14px;
+}
+
+.weak-trend-item {
+  background: transparent;
+  border-radius: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.weak-trend-item > span {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.weak-trend-item > strong {
+  font: 400 22px/1.1 Georgia, serif;
+}
+
+.weak-trend-item > small {
+  font-size: 11px;
+}
+
+.sprint-effectiveness-series {
+  gap: 10px;
+}
+
+.sprint-effectiveness-week {
+  background: transparent;
+  border-radius: 0;
+  padding: 8px 4px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sprint-effectiveness-week > span {
+  font-size: 10.5px;
+}
+
+.sprint-effectiveness-week > strong {
+  font: 400 16px/1.2 Georgia, serif;
+}
+
+.sprint-effectiveness-week > small {
+  font-size: 11px;
+}
+
+/* 真正的全空样本合并为一行说明；真实 0 与部分覆盖周照常展示 */
+.trace-empty-note {
+  margin: 10px 0 2px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.sprint-relapse-row {
+  font-size: 12px;
+  gap: 10px 20px;
+}
+
+.weak-trend-series-grid {
+  gap: 12px 18px;
+}
+
+.weak-trend-series-row > span {
+  font-size: 11.5px;
+}
+
+.weak-trend-series-col small {
+  font-size: 10px;
+}
+
+.weak-trend-series-col strong {
+  font-size: 11px;
+}
+
+.dimension-observation summary {
+  font-size: 12.5px;
+}
+
+.dimension-observation > p {
+  font-size: 11px;
+}
+
+.dimension-observation-grid {
+  gap: 12px;
+}
+
+.dimension-observation-grid article {
+  background: transparent;
+  border-radius: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 5px;
+}
+
+.dimension-observation-grid strong {
+  font-size: 12px;
+}
+
+.dimension-observation-grid small {
+  font-size: 11px;
+}
+
+.sprint-history .panel-title {
+  padding: 0 0 10px;
+  border-bottom: 0;
+}
+
+.sprint-history-list {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.sprint-history-row {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.sprint-history-row > span {
+  font-size: 11.5px;
+}
+
+/* ---- 响应式收敛：四列 → 2×2 → 1–2 列，不靠缩小字体强保四列 ---- */
+@media (max-width: 1100px) {
+  .history-view .current-status .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 980px) {
+  .forecast-summary {
+    gap: 12px 0;
+  }
+
+  .forecast-summary-item + .forecast-summary-item {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .weekly-report-grid {
+    gap: 14px 0;
+  }
+
+  .weekly-report-grid > div {
+    border-left: 0;
+    padding: 2px 8px 2px 0;
+  }
+
+  .trace-hero-stats {
+    gap: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .current-status,
+  .forecast-panel,
+  .metrics-details {
+    padding: 16px 14px;
+  }
+
+  .weekly-report {
+    padding: 18px 16px;
+  }
+
+  .weak-concentration {
+    padding: 2px;
+  }
+
+  .weekly-conclusion {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .weekly-report .exam-progress-grid,
+  .lookup-trace .exam-progress-grid,
+  .insights-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .weekly-report .exam-progress-grid > div + div,
+  .lookup-trace .exam-progress-grid > div + div {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .weekly-diagnosis-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-row {
+    padding-inline: 16px;
+  }
 }
