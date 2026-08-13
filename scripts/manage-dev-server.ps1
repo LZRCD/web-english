@@ -13,11 +13,15 @@ $statePath = Join-Path $runtimeRoot "dev-server.json"
 $websiteUrl = "http://127.0.0.1:3000"
 
 function Get-PortListener {
-  return Get-NetTCPConnection `
-    -LocalPort 3000 `
-    -State Listen `
-    -ErrorAction SilentlyContinue |
-    Select-Object -First 1
+  try {
+    return Get-NetTCPConnection `
+      -State Listen `
+      -ErrorAction Stop |
+      Where-Object { $_.LocalPort -eq 3000 } |
+      Select-Object -First 1
+  } catch {
+    throw "Unable to inspect port 3000; refusing to assume it is free: $($_.Exception.Message)"
+  }
 }
 
 function Test-Health {
