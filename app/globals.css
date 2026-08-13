@@ -3090,21 +3090,27 @@ select:focus-visible {
   padding: 24px 26px 20px;
 }
 
-/* 桌面主布局：热力图列可收缩 + 固定宽度摘要，内容组居中；
-   外层容器不再承担横向滚动 */
+/* 背诵日历主体：热力图 → 图例 → 统计摘要共用同一条纵向中心轴，
+   单列网格不再依赖 1279px 断点把摘要从右侧切到下方 */
 .activity-body {
   display: grid;
-  grid-template-columns: minmax(0, max-content) max-content;
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
   align-items: start;
-  gap: clamp(16px, 2.5vw, 48px);
+  gap: clamp(12px, 1.6vw, 24px);
   width: 100%;
   min-width: 0;
+  padding-block: clamp(2px, 0.5vw, 8px);
 }
 
+/* 热力图区域：滚动容器占满整行，图例位于其外并按同一中心轴居中 */
 .activity-heatmap-region {
-  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: clamp(10px, 1.4vw, 18px);
   width: 100%;
+  min-width: 0;
 }
 
 .activity-heatmap-scroll {
@@ -3112,37 +3118,54 @@ select:focus-visible {
   min-width: 0;
 }
 
+/* 统计摘要：三列等宽，整体居中，宽度随可用空间响应而非固定像素 */
 .activity-summary {
   display: grid;
-  width: 190px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(6px, 1.2vw, 20px);
+  width: 100%;
+  max-width: clamp(320px, 44vw, 600px);
+  padding-block: clamp(2px, 0.6vw, 10px);
 }
 
-.activity-summary > div {
+/* 每个统计项：数值层与标签层固定上下结构，三项共用同一规则 */
+.activity-stat {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: clamp(6px, 0.8vw, 12px) 2px;
+}
+
+/* 数字与“天”同处一个基线容器，标签独立位于数值层下方 */
+.activity-stat-value {
+  display: flex;
   align-items: baseline;
-  gap: 2px 10px;
-  padding: 12px 2px;
-  border-bottom: 1px solid rgba(25, 45, 35, 0.06);
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.activity-summary > div:last-child {
-  border-bottom: 0;
-}
-
-.activity-summary span {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.activity-summary strong {
-  font: 400 26px/1 Georgia, serif;
+.activity-stat-value strong {
+  font: 400 clamp(22px, 2.4vw, 28px)/1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 
-.activity-summary small {
+.activity-stat-value small {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.activity-stat-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .activity-grid {
@@ -3153,8 +3176,10 @@ select:focus-visible {
   grid-template-rows: repeat(7, 12px);
   grid-auto-flow: column;
   /* 列数由 HistoryView 按当前范围注入：单元格上限 12px，
-     空间不足时按可用宽度均分收缩，桌面端不产生滚动 */
+     空间不足时按可用宽度均分收缩，桌面端不产生滚动；
+     实际格子组窄于容器时整体居中，与图例、统计共用中心轴 */
   grid-template-columns: repeat(var(--activity-columns), minmax(0, 12px));
+  justify-content: center;
   gap: 4px;
 }
 
@@ -3215,29 +3240,16 @@ select:focus-visible {
   width: max-content;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 14px auto 0;
+  justify-content: center;
+  gap: clamp(4px, 0.3vw, 5px);
+  margin: 0 auto;
   color: #959c94;
-  font-size: 9px;
+  font-size: clamp(9px, 0.75vw, 11px);
 }
 
-/* 平板与窄屏：摘要移到热力图下方；热力图在可用宽度内自适应收缩 */
-@media (max-width: 1279px) {
-  .activity-body {
-    grid-template-columns: minmax(0, max-content);
-    justify-items: center;
-    gap: 18px;
-  }
-  .activity-summary {
-    width: auto;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .activity-summary > div {
-    border-bottom: 0;
-  }
-  .activity-grid {
-    gap: 3px;
-  }
+/* 空状态图例仍独立显示，并保留与空态文案的纵向间距 */
+.activity-empty + .activity-legend {
+  margin-top: 14px;
 }
 
 /* 移动端：只有专用热力图子容器允许横向滚动；
@@ -3249,6 +3261,7 @@ select:focus-visible {
   }
   .activity-grid {
     width: max-content;
+    gap: 3px;
     grid-template-columns: repeat(var(--activity-columns), 12px);
   }
 }

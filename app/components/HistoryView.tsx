@@ -774,24 +774,30 @@ export default function HistoryView({
                   />
                 ))}
               </div>
-              {activityLegend}
             </div>
+            {activityLegend}
           </div>
           <div className="activity-summary" aria-label="背诵日历摘要">
-            <div>
-              <span>连续学习</span>
-              <strong>{calendarSummary.streak}</strong>
-              <small>天</small>
+            <div className="activity-stat">
+              <div className="activity-stat-value">
+                <strong>{calendarSummary.streak}</strong>
+                <small>天</small>
+              </div>
+              <span className="activity-stat-label">连续学习</span>
             </div>
-            <div>
-              <span>最长连续</span>
-              <strong>{calendarSummary.longest}</strong>
-              <small>天</small>
+            <div className="activity-stat">
+              <div className="activity-stat-value">
+                <strong>{calendarSummary.longest}</strong>
+                <small>天</small>
+              </div>
+              <span className="activity-stat-label">最长连续</span>
             </div>
-            <div>
-              <span>活跃日</span>
-              <strong>{calendarSummary.activeDays}</strong>
-              <small>天</small>
+            <div className="activity-stat">
+              <div className="activity-stat-value">
+                <strong>{calendarSummary.activeDays}</strong>
+                <small>天</small>
+              </div>
+              <span className="activity-stat-label">活跃日</span>
             </div>
           </div>
           </div>

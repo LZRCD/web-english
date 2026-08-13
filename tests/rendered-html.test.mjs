@@ -377,20 +377,46 @@ test("轨迹页排程摘要、日历语义与详细指标标题去重结构守�
   assert.match(historyView, /学习 \$\{day\.count\} 个不同单词/);
   assert.match(historyView, /个不同单词 · \$\{selectedWeakCount\} 个薄弱/);
 
-  // 布局与可访问样式守卫
+  // 布局与可访问样式守卫：背诵日历为热力图 → 图例 → 统计摘要的纵向单列主结构
   assert.match(styles, /\.forecast-summary \{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.activity-body \{[\s\S]*?grid-template-columns: minmax\(0, max-content\) max-content/);
+  assert.match(styles, /\.activity-body \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(styles, /\.activity-heatmap-region \{/);
   assert.match(styles, /\.activity-heatmap-scroll \{/);
+  assert.match(styles, /\.activity-legend \{/);
+  assert.match(styles, /\.activity-summary \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.activity-stat \{[\s\S]*?grid-template-rows: auto auto/);
+  assert.match(styles, /\.activity-stat-value \{[\s\S]*?align-items: baseline/);
+  assert.match(styles, /\.activity-stat-label \{/);
   assert.match(styles, /\.activity-grid \{[\s\S]*?grid-template-columns: repeat\(var\(--activity-columns\), minmax\(0, 12px\)\)/);
-  assert.match(styles, /@media \(max-width: 1279px\) \{[\s\S]*?grid-template-columns: minmax\(0, max-content\)/);
+  assert.match(styles, /\.activity-grid \{[\s\S]*?justify-content: center/);
   assert.match(styles, /@media \(max-width: 767px\) \{[\s\S]*?\.activity-heatmap-scroll \{[\s\S]*?overflow-x: auto/);
   assert.match(styles, /\.activity-scroll \{[\s\S]*?padding: 24px 26px 20px;[\s\S]*?\}/);
   assert.doesNotMatch(styles, /\.activity-scroll \{\s*[^}]*overflow-x: auto/);
+  // 不再保留“固定 190px 右栏”或 1279px 断点切换摘要位置的旧契约
+  assert.doesNotMatch(styles, /\.activity-summary\s*\{[^}]*width:\s*190px/);
+  assert.doesNotMatch(styles, /\.activity-body\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*max-content\)\s+max-content/);
+  assert.doesNotMatch(styles, /@media \(max-width: 1279px\)/);
+  assert.doesNotMatch(styles, /\.activity-(?:heatmap-region|summary|body|legend)\s*\{[^}]*overflow-x:\s*auto/);
   assert.match(historyView, /className="activity-heatmap-region"/);
   assert.match(historyView, /className="activity-heatmap-scroll"/);
   assert.match(historyView, /--activity-columns/);
   assert.match(historyView, /const activityColumns = Math\.ceil\(activityDays\.length \/ 7\)/);
+  // 图例位于滚动容器之外：滚动容器（含格子网格）闭合之后紧跟图例
+  const heatmapScrollBlock = historyView.match(
+    /<div className="activity-heatmap-scroll">[\s\S]*?<\/div>[\s\S]*?<\/div>/,
+  )?.[0] ?? "";
+  assert.match(heatmapScrollBlock, /activity-grid/);
+  assert.doesNotMatch(heatmapScrollBlock, /\{activityLegend\}/);
+  assert.match(historyView, /<div className="activity-heatmap-scroll">[\s\S]*?<\/div>[\s\S]*?<\/div>\s*\{activityLegend\}/);
+  // 空状态与非空状态各保留一份图例，空状态图例仍正常显示
+  assert.equal((historyView.match(/\{activityLegend\}/g) ?? []).length, 2);
+  // 三项统计共用同一套稳定子结构：数值层（数字 + “天”）与独立标签层
+  assert.equal((historyView.match(/className="activity-stat"/g) ?? []).length, 3);
+  assert.equal((historyView.match(/className="activity-stat-value"/g) ?? []).length, 3);
+  assert.equal((historyView.match(/className="activity-stat-label"/g) ?? []).length, 3);
+  assert.match(historyView, /className="activity-stat-value">\s*<strong>\{calendarSummary\.streak\}<\/strong>\s*<small>天<\/small>\s*<\/div>\s*<span className="activity-stat-label">连续学习<\/span>/);
+  assert.match(historyView, /className="activity-stat-value">\s*<strong>\{calendarSummary\.longest\}<\/strong>\s*<small>天<\/small>\s*<\/div>\s*<span className="activity-stat-label">最长连续<\/span>/);
+  assert.match(historyView, /className="activity-stat-value">\s*<strong>\{calendarSummary\.activeDays\}<\/strong>\s*<small>天<\/small>\s*<\/div>\s*<span className="activity-stat-label">活跃日<\/span>/);
   assert.match(styles, /\.activity-cell:focus-visible \{/);
   assert.match(styles, /\.weak-concentration-row \{[\s\S]*?grid-template-columns: 96px minmax\(0, 1fr\) 190px 96px/);
   assert.match(styles, /\.activity-detail-head > button \{[\s\S]*?width: 40px/);
