@@ -191,7 +191,11 @@ test("评分写入后可以撤销，并把持久化进度恢复到评分前", as
   await expect(
     page.getByRole("status").filter({ hasText: "已撤销" }),
   ).toBeVisible();
-  await expect(wordHeading).toHaveText(originalWord ?? "");
+  await expect(
+    page
+      .getByRole("button", { name: "播放发音", exact: true })
+      .locator("h1"),
+  ).toHaveText(originalWord ?? "");
   await expect(page.getByRole("button", { name: /认识/ })).toBeVisible();
   await expect.poll(() => readStoreCount(page, "reviews")).toBe(0);
   await expect.poll(() => readStoreCount(page, "word-progress")).toBe(0);
@@ -279,7 +283,9 @@ test("刷新页面后仍可撤销最近评分", async ({ context, page }) => {
     page.getByRole("status").filter({ hasText: "已撤销" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "显示单词释义" }).locator("h1"),
+    page
+      .getByRole("button", { name: "播放发音", exact: true })
+      .locator("h1"),
   ).toHaveText(originalWord ?? "");
   await expect.poll(() => readStoreCount(page, "reviews")).toBe(0);
   await expect.poll(async () => {
@@ -546,7 +552,11 @@ test("触屏划词可打开弹窗，Escape 关闭后恢复原焦点", async ({ c
   await openApp(page);
   const wordFace = page.getByRole("button", { name: "显示单词释义" });
   await wordFace.click();
-  await wordFace.focus();
+  const detailWord = page.getByRole("button", {
+    name: "播放发音",
+    exact: true,
+  });
+  await detailWord.focus();
   const sentence = page.getByText("Stars radiate energy into space.", {
     exact: true,
   });
@@ -557,7 +567,7 @@ test("触屏划词可打开弹窗，Escape 关闭后恢复原焦点", async ({ c
   await expect(popup.getByRole("button", { name: "关闭划词查询" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(popup).toHaveCount(0);
-  await expect(wordFace).toBeFocused();
+  await expect(detailWord).toBeFocused();
 });
 
 test("浏览器阻止录音播放时分类为 autoplay-blocked 并回退 TTS", async ({ context, page }) => {

@@ -66,9 +66,9 @@ test("200% 与 400% 缩放下学习页保持可操作", async ({ context, page }
     },
   }));
   await page.setViewportSize({ width: 1280, height: 900 });
-  await openApp(page);
 
   for (const zoom of ["2", "4"]) {
+    await openApp(page);
     await page.evaluate((level) => {
       document.documentElement.style.zoom = level;
     }, zoom);
