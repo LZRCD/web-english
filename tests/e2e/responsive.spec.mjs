@@ -405,6 +405,31 @@ test("学习顶栏显示会话标题与进度", async ({ context, page }) => {
   await expect(page.getByText("2027 红宝书伴学", { exact: true })).toBeVisible();
 });
 
+test("桌面自由学习主卡紧跟任务预览", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await openApp(page);
+
+  const geometry = await page.evaluate(() => {
+    const task = document.querySelector(".today-task-strip")?.getBoundingClientRect();
+    const metadata = document.querySelector(".card-metadata")?.getBoundingClientRect();
+    const card = document.querySelector(".word-card")?.getBoundingClientRect();
+    if (!task || !metadata || !card) throw new Error("自由学习布局节点不完整");
+    return {
+      taskBottom: task.bottom,
+      metadataTop: metadata.top,
+      cardTop: card.top,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  const taskGap = geometry.metadataTop - geometry.taskBottom;
+  expect(taskGap).toBeGreaterThanOrEqual(28);
+  expect(taskGap).toBeLessThanOrEqual(56);
+  expect(geometry.cardTop).toBeLessThan(geometry.viewportHeight * 0.34);
+  await expectNoHorizontalOverflow(page);
+});
+
 test("390px 与 320px 下学习顺序控件可触达且不会重叠", async ({ context, page }) => {
   await installStateSeed(context, createState());
   const viewports = [

@@ -639,8 +639,8 @@ select:focus-visible {
 .card-metadata {
   flex: 0 0 auto;
   width: min(800px, calc(100% - 48px));
-  /* 顶部留白随视口高度走（100-120px 参考），矮窗时让位给卡片完整性 */
-  margin-top: clamp(10px, min(9vh, calc(100dvh - 690px)), 148px);
+  /* 主卡靠近任务预览；随桌面高度保留少量呼吸空间 */
+  margin-top: clamp(10px, 3.5vh, 56px);
   text-align: left;
   color: #8b938c;
   font: 600 11px/1 "Courier New", monospace;
