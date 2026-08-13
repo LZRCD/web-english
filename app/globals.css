@@ -3961,6 +3961,102 @@ kbd {
   background: rgba(255, 255, 255, 0.97);
 }
 
+/* 轨迹页驾驶舱：首屏行动优先，历史与诊断渐进披露 */
+.history-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.history-view > * { margin-block: 0 !important; }
+.trace-hero { min-height: auto; padding-block: 8px; }
+.trace-hero-note { margin-top: 4px; }
+.current-status { order: 1; }
+.weekly-report { order: 2; }
+.forecast-panel { order: 3; }
+.weak-concentration { order: 4; }
+.history-view > .trace-section { display: none; }
+.activity-panel { order: 5; }
+.history-panel { order: 6; }
+.metrics-details { order: 7; }
+.trace-details { order: 8; }
+
+.current-status,
+.forecast-panel,
+.weak-concentration,
+.metrics-details {
+  border: 1px solid rgba(54, 84, 67, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.66);
+  padding: 18px;
+}
+
+.trace-primary-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(51, 126, 87, 0.1);
+}
+
+.trace-primary-action p { margin: 0; font-weight: 650; }
+.trace-primary-action button,
+.concentration-sprint,
+.concentration-unit {
+  min-height: 40px;
+}
+.trace-primary-action button {
+  border: 0;
+  border-radius: 12px;
+  background: var(--green, #347f58);
+  color: #fff;
+  padding: 0 20px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.weekly-conclusion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 8px 0 16px;
+}
+.weekly-conclusion p { margin: 0; font-weight: 700; }
+.weekly-conclusion small { color: var(--muted); }
+
+.forecast-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin: 14px 0;
+  color: var(--muted);
+}
+.forecast-summary strong { color: var(--ink); font-size: 1.2rem; }
+
+.metrics-details > summary,
+.trace-details > summary {
+  min-height: 44px;
+  cursor: pointer;
+}
+.metrics-details > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 750;
+}
+.metrics-details > summary span { color: var(--muted); font-size: .82rem; font-weight: 500; }
+.metrics-details .insights-panel { margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .history-view { gap: 14px; }
+  .current-status, .forecast-panel, .weak-concentration, .metrics-details { padding: 14px; }
+  .trace-primary-action { align-items: stretch; flex-direction: column; }
+  .trace-primary-action button { min-height: 44px; }
+}
+
 .coach-head > div {
   gap: 11px;
 }

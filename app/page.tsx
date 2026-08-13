@@ -1591,6 +1591,11 @@ export default function Home() {
     beginLearning();
   }
 
+  function startLearningFromHistory() {
+    if (!startTodaySession()) beginLearning();
+    setActiveView("learn");
+  }
+
   function openVocabTest(source: "welcome" | "wordbook") {
     if (!vocabTestReady) {
       showToast("本地红宝书载入后即可测试", 1800);
@@ -2781,6 +2786,7 @@ export default function Home() {
             effectiveNewGoal={effectiveNewGoal}
             dailyGoal={dailyGoal}
             reviews={reviews}
+            retrievabilitySampleCount={Object.keys(wordProgress).length}
             lookupStats={lookupStats}
             lookupWords={lookupWords}
             clock={clock}
@@ -2812,7 +2818,7 @@ export default function Home() {
             sprintDimensionTrend={sprintDimensionTrend ?? []}
             sectionUnitTotals={sectionUnitTotals}
             onScopedSprint={startScopedSprint}
-            onStartTodaySession={startTodaySession}
+            onStartLearning={startLearningFromHistory}
             onActivityRangeChange={(range) => {
               setActivityRange(range);
               setActivityOffset(0);

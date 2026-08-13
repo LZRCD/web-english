@@ -135,9 +135,9 @@ test("专项测验答错写入 FSRS 薄弱词并更新每周报告", async ({ co
   await expect.poll(() => readStoreCount(page, "mistakes")).toBe(1);
 
   await navigation.getByRole("button", { name: /轨迹$/ }).click();
-  await expect(page.getByRole("heading", { name: "每周学习报告" }))
+  await expect(page.getByRole("heading", { name: "本周学习报告" }))
     .toBeVisible();
-  await expect(page.getByText("下周预计复习", { exact: true })).toBeVisible();
+  await expect(page.getByText("下周排程", { exact: true })).toBeVisible();
   await expect(page.getByText(/设置考研日期后可获得每日新词调整建议/))
     .toBeVisible();
 

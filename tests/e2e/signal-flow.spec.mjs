@@ -623,9 +623,9 @@ test("信号联动：近七天当场达标与 True Retention 保持各自口径"
   const scenarios = [
     {
       reviews: [insightReview("previous-only", 8, 3, 1)],
-      value: "—",
+      value: "暂无样本",
       comparison: "当前窗无样本",
-      retention: "—",
+      retention: "暂无样本",
     },
     {
       reviews: [
@@ -669,6 +669,8 @@ test("信号联动：近七天当场达标与 True Retention 保持各自口径"
       const retentionCard = scenarioPage.locator(".insight-card").filter({
         hasText: "真实复习保持率",
       });
+      const metrics = scenarioPage.locator('details[aria-label="近 7 日详细指标"]');
+      await metrics.locator(":scope > summary").click();
       await expect(scenarioPage.getByText("近 7 天截至目前", { exact: true })).toBeVisible();
       await expect(card.getByText("rating≥2 / 全部评分事件；不代表长期记住", { exact: true })).toBeVisible();
       await expect(card.getByText(scenario.value, { exact: true })).toBeVisible();
@@ -1713,18 +1715,13 @@ test("信号联动：分维度观察固定并列 known、unknown、generic 与�
   await expect(report.locator('[data-dimension="generic-sprint"]')).toContainText("通用冲刺");
   await expect(report.locator('[data-dimension="unknown"]')).toContainText("未知历史");
   await expect(report.locator('[data-dimension="stubborn"]')).toContainText("词义主动回忆 1");
-  await expect(report.locator('[data-dimension="slow-recall"]')).toContainText("无样本");
-  await expect(report.locator('[data-dimension="slow-recall"]')).toContainText("无随访样本");
-  await expect(report.locator("article")).toHaveCount(9);
+  await expect(report.locator('[data-dimension="slow-recall"]')).toHaveCount(0);
+  await expect(report).toContainText("其余 5 个维度暂无活动样本");
+  await expect(report.locator("article")).toHaveCount(4);
   expect(await report.locator("article").evaluateAll((items) =>
     items.map((item) => item.getAttribute("data-dimension")))).toEqual([
-    "listening-spelling",
-    "chinese-to-english",
     "meaning-choice",
-    "lookup-recall",
     "stubborn",
-    "slow-recall",
-    "lapse",
     "generic-sprint",
     "unknown",
   ]);

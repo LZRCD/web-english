@@ -110,7 +110,7 @@ async function openHistory(page) {
     .getByRole("complementary", { name: "主导航" })
     .getByRole("button", { name: /轨迹/ })
     .click();
-  await expect(page.getByRole("heading", { name: "每周学习报告" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "本周学习报告" })).toBeVisible();
 }
 
 test("复习趋势：4 周保持率与困难率共用周报口径并保留空样本", async ({ context, page }) => {
@@ -125,8 +125,8 @@ test("复习趋势：4 周保持率与困难率共用周报口径并保留空样
   await expect(trend).toBeVisible();
   await expect(weeks).toHaveCount(4);
   await expect(weeks.nth(1).locator(".review-metric-value")).toHaveText([
-    /复习保持率 — \(0\/0\)/,
-    /困难率 — \(0\/0\)/,
+    /复习保持率 暂无样本/,
+    /困难率 暂无样本/,
   ]);
   await expect(weeks.nth(3)).toContainText("本周");
   await expect(weeks.nth(3)).toContainText("复习保持率 50% (1/2)");
@@ -149,7 +149,7 @@ test("复习压力：30 天当前排程快照保留首日与第 30/31 天边界"
   }));
   await openHistory(page);
 
-  const forecast = page.getByRole("region", { name: "未来 30 天到期复习（当前排程快照）" });
+  const forecast = page.getByRole("region", { name: "未来排程" });
   const days = forecast.locator(".forecast-day");
   const today = dateKey(localDueAt(0));
   const day30 = dateKey(localDueAt(29));
@@ -158,8 +158,8 @@ test("复习压力：30 天当前排程快照保留首日与第 30/31 天边界"
   await expect(forecast).toBeVisible();
   await expect(forecast).toContainText("继续学习和评分后排程会变化");
   await expect(forecast).toContainText("不是未来承诺");
-  await expect(forecast).toContainText("逾期与今天到期均计入第 1 天");
-  await expect(forecast).toContainText("共 4 词");
+  await expect(forecast).toContainText("逾期与今天内到期均计入第一个自然日桶");
+  await expect(forecast).toContainText("未来 30 天 4 词");
   await expect(days).toHaveCount(30);
   await expect(forecast.locator(`[data-date="${today}"]`)).toHaveAttribute(
     "aria-label",
@@ -172,7 +172,7 @@ test("复习压力：30 天当前排程快照保留首日与第 30/31 天边界"
   await expect(forecast.locator(`[data-date="${day31}"]`)).toHaveCount(0);
 });
 
-test("复习图表：320px、缩放与键盘滚动保持可访问且不撑破页面", async ({ context, page }) => {
+test("复习图表：320px 与小高度等效视口下可访问且不撑破页面", async ({ context, page }) => {
   await installStateSeed(context, createState({
     reviews: [],
     wordProgress: forecastProgress(),
@@ -197,11 +197,8 @@ test("复习图表：320px、缩放与键盘滚动保持可访问且不撑破页
   await expect(trend.getByText("复习保持率", { exact: false }).first()).toBeVisible();
   await expect(trend.getByText("困难率", { exact: false }).first()).toBeVisible();
 
-  await page.setViewportSize({ width: 1280, height: 900 });
-  for (const zoom of ["2", "4"]) {
-    await page.evaluate((level) => {
-      document.documentElement.style.zoom = level;
-    }, zoom);
+  for (const viewport of [{ width: 720, height: 450 }, { width: 360, height: 225 }]) {
+    await page.setViewportSize(viewport);
     const trendTitle = page.getByRole("heading", { name: "复习保持率/困难率趋势" });
     const disclosure = page.getByText("按当前 nextDueAt 计算", { exact: false });
     const summary = page.locator(".review-metric-summary");

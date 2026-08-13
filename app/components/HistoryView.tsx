@@ -34,13 +34,13 @@ function formatSuccessRateDelta(delta: number | null, hasCurrent: boolean) {
 }
 
 function formatTrueRetention(bucket: TrueRetentionBucket) {
-  if (bucket.rate === null) return "—";
+  if (bucket.rate === null) return "暂无样本";
   return `${Math.round(bucket.rate)}% (${bucket.retainedCount}/${bucket.reviewCount})`;
 }
 
 function formatReviewMetric(bucket: ReviewMetricBucket) {
   const ratio = `${bucket.numerator}/${bucket.denominator}`;
-  return bucket.rate === null ? `— (${ratio})` : `${Math.round(bucket.rate)}% (${ratio})`;
+  return bucket.rate === null ? "暂无样本" : `${Math.round(bucket.rate)}% (${ratio})`;
 }
 
 type HistoryViewProps = {
@@ -56,6 +56,7 @@ type HistoryViewProps = {
   effectiveNewGoal: number;
   dailyGoal: number;
   reviews: Review[];
+  retrievabilitySampleCount: number;
   lookupStats: LookupStats;
   lookupWords: LookupWord[];
   clock: number;
@@ -103,7 +104,7 @@ type HistoryViewProps = {
   onScopedSprint?: (section: string, unit?: string) => void;
   /** 当前仍薄弱词一键再冲刺 */
   onSprintRelapse?: () => void;
-  onStartTodaySession: () => void;
+  onStartLearning: () => void;
   onActivityRangeChange: (range: ActivityRange) => void;
   onActivityNavigate: (direction: number) => void;
   onActivityToday: () => void;
@@ -115,6 +116,7 @@ export default function HistoryView({
   effectiveNewGoal,
   dailyGoal,
   reviews,
+  retrievabilitySampleCount,
   lookupStats,
   lookupWords,
   clock,
@@ -146,7 +148,7 @@ export default function HistoryView({
   onExportSprint,
   onScopedSprint,
   onSprintRelapse,
-  onStartTodaySession,
+  onStartLearning,
   onActivityRangeChange,
   onActivityNavigate,
   onActivityToday,
@@ -238,9 +240,25 @@ export default function HistoryView({
   })();
   const selectedWeakCount = selectedDayReviews.filter((review) => review.rating <= 1).length;
   const selectedDayNewCount = selectedDayEvents.filter((review) => review.kind === "new").length;
-  const recentReviews = [...reviews].reverse().slice(0, 8);
+  const recentReviews = [...reviews].reverse().slice(0, 5);
   const forecastMax = Math.max(1, ...reviewForecast.map((day) => day.count));
   const currentReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-1);
+  const previousReviewMetricWeek = weeklyReport.reviewMetricTrend.at(-2);
+  const forecastWeekCount = reviewForecast.slice(0, 7)
+    .reduce((sum, day) => sum + day.count, 0);
+  const forecastTotal = reviewForecast.reduce((sum, day) => sum + day.count, 0);
+  const nextForecastPeak = reviewForecast.slice(1).reduce<ReviewForecastDay | null>(
+    (peak, day) => day.count > 0 && (!peak || day.count > peak.count) ? day : peak,
+    null,
+  );
+  const assignedWeakTotal = weakConcentration.reduce((sum, section) => sum + section.total, 0);
+  const activeDimensionRows = dimensionObservationReport.rows.filter((row) => row.sessionCount > 0);
+  const inactiveDimensionCount = dimensionObservationReport.rows.length - activeDimensionRows.length;
+  const actionCopy = stats.dueCount > 0
+    ? { summary: `当前有 ${stats.dueCount} 个已到期词，优先完成今日复习。`, label: "开始今日任务" }
+    : stats.completionCount > 0
+      ? { summary: `当前暂无已到期词，今天已完成 ${stats.completionCount} 次学习评分。`, label: "继续学习" }
+      : { summary: "当前暂无已到期词，可以从新词或薄弱项开始。", label: "开始学习" };
   // 本周最值得注意的薄弱维度：只保留发生过且值得关注的项目，0 值不占核心视觉空间
   const topWeakDimensions = weeklyReport.weakTrend
     .filter((row) => row.count > 0)
@@ -336,32 +354,56 @@ export default function HistoryView({
         </div>
       </div>
 
-      <p className="trace-section">今天</p>
+      <section className="current-status" aria-labelledby="current-status-title">
+      <div className="panel-title">
+        <div><p className="eyebrow">NOW</p><h2 id="current-status-title">当前状态</h2></div>
+      </div>
       <div className="stat-grid">
         <div className="stat-cell"><span>今日新学</span><strong>{stats.newCount}</strong><small>当前目标 {effectiveNewGoal} / 上限 {dailyGoal}</small></div>
         <div className="stat-cell"><span>今日复习</span><strong>{stats.reviewCount}</strong><small>评分事件</small></div>
-        <button type="button" className="stat-cell stat-due" onClick={onStartTodaySession}>
-          <span>已到期</span><strong>{stats.dueCount}</strong><small>开始今日任务 →</small>
-        </button>
-        <div className="stat-cell stat-retention"><span>平均记忆牢固度</span><strong>{stats.retrievability}%</strong><small>综合近期评分与复习间隔</small></div>
+        <div className="stat-cell stat-due"><span>当前已到期</span><strong>{stats.dueCount}</strong><small>截至当前时刻</small></div>
+        <div className="stat-cell stat-retention"><span>平均可提取率（估算）</span><strong>{retrievabilitySampleCount === 0 ? "暂无样本" : `${stats.retrievability}%`}</strong><small>根据当前已学习词的 FSRS 状态与时间估算，不代表长期掌握。</small></div>
       </div>
-      <p className="trace-section">本周</p>
+      <div className="trace-primary-action">
+        <p>{actionCopy.summary}</p>
+        <button type="button" onClick={onStartLearning}>{actionCopy.label}</button>
+      </div>
+      </section>
 
       <section className="weekly-report" aria-labelledby="weekly-report-title">
         <div className="panel-title">
           <div>
             <p className="eyebrow">WEEKLY REPORT</p>
-            <h2 id="weekly-report-title">每周学习报告</h2>
+            <h2 id="weekly-report-title">本周学习报告</h2>
           </div>
           <small>{weeklyReport.weekStart.replaceAll("-", ".")} — {weeklyReport.weekEnd.replaceAll("-", ".")}</small>
         </div>
+        <div className="weekly-conclusion">
+          <p>{currentReviewMetricWeek?.retention.rate === null || !currentReviewMetricWeek
+            ? "本周暂无真实复习样本。"
+            : `本周真实复习保持率为 ${formatReviewMetric(currentReviewMetricWeek.retention)}。`}</p>
+          {currentReviewMetricWeek?.difficulty.rate !== null && currentReviewMetricWeek && (
+            <p>本周困难率为 {formatReviewMetric(currentReviewMetricWeek.difficulty)}。</p>
+          )}
+          {currentReviewMetricWeek && previousReviewMetricWeek
+            && currentReviewMetricWeek.retention.rate !== null
+            && previousReviewMetricWeek.retention.rate !== null && (
+              <small>复习保持率较上周 {Math.round(currentReviewMetricWeek.retention.rate - previousReviewMetricWeek.retention.rate)} 个百分点</small>
+          )}
+          {currentReviewMetricWeek && previousReviewMetricWeek
+            && currentReviewMetricWeek.difficulty.rate !== null
+            && previousReviewMetricWeek.difficulty.rate !== null && (
+              <small>困难率较上周 {Math.round(currentReviewMetricWeek.difficulty.rate - previousReviewMetricWeek.difficulty.rate)} 个百分点</small>
+          )}
+        </div>
         <div className="weekly-report-grid">
           <div>
-            <span>当前已掌握</span>
+            <span>达到稳定性门槛</span>
             <strong>{weeklyReport.masteredCount}</strong>
             <small className={weeklyReport.masteredChange >= 0 ? "positive" : "negative"}>
               本周 {weeklyReport.masteredChange >= 0 ? "+" : ""}{weeklyReport.masteredChange}
             </small>
+            <small>当前排程状态满足既有稳定性门槛，不代表长期掌握。</small>
           </div>
           <div>
             <span>本周遗忘</span>
@@ -378,7 +420,7 @@ export default function HistoryView({
             </small>
           </div>
           <div>
-            <span>下周预计复习</span>
+            <span>下周排程</span>
             <strong>{weeklyReport.nextWeekReviewCount}</strong>
             <small>
               日均 {weeklyReport.nextWeekDailyAverage}
@@ -388,6 +430,16 @@ export default function HistoryView({
             </small>
           </div>
         </div>
+        {examProgress && (
+          <div className="exam-progress" aria-labelledby="exam-progress-title">
+            <div className="panel-title"><div><p className="eyebrow">EXAM READINESS</p><h3 id="exam-progress-title">考研备考就绪度</h3></div><small>次级估算证据</small></div>
+            <div className="exam-progress-grid">
+              <div><span>已覆盖</span><strong>{examProgress.covered}</strong><small>至少学习一次</small></div>
+              <div><span>达到稳定性门槛</span><strong>{examProgress.mastered}</strong><small>不代表长期掌握</small></div>
+              <div><span>考试日就绪</span><strong>{examProgress.examReady}</strong><small>按当前状态估算</small></div>
+            </div>
+          </div>
+        )}
         {currentReviewMetricWeek && (
           <div
             className="review-metric-trend"
@@ -461,9 +513,11 @@ export default function HistoryView({
         </div>
       </section>
 
+      <details className="metrics-details" aria-label="近 7 日详细指标">
+        <summary>近 7 日详细指标<span>评分、保持与学习量</span></summary>
       <section className="insights-panel" aria-labelledby="insights-title">
         <div className="panel-title">
-          <h2 id="insights-title">学习趋势</h2>
+          <h2 id="insights-title">近 7 日详细指标</h2>
           <small>近 7 天截至目前</small>
         </div>
         <div className="insights-grid">
@@ -471,7 +525,7 @@ export default function HistoryView({
             <span>当场达标占比</span>
             <strong>
               {insights.successRate === null
-                ? "—"
+                ? "暂无样本"
                 : `${Math.round(insights.successRate)}%`}
             </strong>
             <small>rating≥2 / 全部评分事件；不代表长期记住</small>
@@ -499,7 +553,7 @@ export default function HistoryView({
             <strong>
               {insights.averageRecallMs !== null
                 ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
-                : "—"}
+                 : "暂无样本"}
             </strong>
             <small>反应耗时</small>
           </div>
@@ -533,24 +587,7 @@ export default function HistoryView({
           <span>完成次数 <strong>{stats.completionCount}</strong> · {stats.coveredCount} 个不同单词</span>
         </div>
       </section>
-
-      <p className="trace-section">未来</p>
-      {examProgress && (
-        <section className="exam-progress" aria-labelledby="exam-progress-title">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">EXAM READINESS</p>
-              <h2 id="exam-progress-title">考研备考就绪度</h2>
-            </div>
-            <small>考试日 {examProgress.examDate.replaceAll("-", ".")} · 可提取率 ≥ {examProgress.thresholdPercent}%</small>
-          </div>
-          <div className="exam-progress-grid">
-            <div><span>已覆盖</span><strong>{examProgress.covered}</strong><small>至少学习一次</small></div>
-            <div><span>已掌握</span><strong>{examProgress.mastered}</strong><small>达到稳定性门槛</small></div>
-            <div><span>考试日就绪</span><strong>{examProgress.examReady}</strong><small>预测考试当天仍可提取</small></div>
-          </div>
-        </section>
-      )}
+      </details>
 
         {reviewForecast.length > 0 && (
           <div
@@ -560,10 +597,16 @@ export default function HistoryView({
           >
             <div className="forecast-title">
               <div>
-                <h3 id="review-forecast-title">未来 30 天到期复习（当前排程快照）</h3>
-                <p>按当前 nextDueAt 计算；继续学习和评分后排程会变化，因此不是未来承诺。逾期与今天到期均计入第 1 天。</p>
+                <h2 id="review-forecast-title">未来排程</h2>
+                <p>按当前 nextDueAt 计算；继续学习和评分后排程会变化，因此不是未来承诺。逾期与今天内到期均计入第一个自然日桶。</p>
               </div>
-              <small>共 {reviewForecast.reduce((sum, day) => sum + day.count, 0)} 词</small>
+              <small>未来 30 天 {forecastTotal} 词</small>
+            </div>
+            <div className="forecast-summary" aria-label="未来排程摘要">
+              <span>当前已到期 <strong>{stats.dueCount}</strong></span>
+              <span>今天及逾期排程桶 <strong>{reviewForecast[0]?.count ?? 0}</strong></span>
+              <span>未来 7 个本地日桶合计 <strong>{forecastWeekCount}</strong></span>
+              <span>{nextForecastPeak ? `下一个未来峰值 ${nextForecastPeak.date} · ${nextForecastPeak.count} 词` : "未来暂无排程峰值"}</span>
             </div>
             <div
               className="forecast-scroll"
@@ -601,18 +644,20 @@ export default function HistoryView({
           </div>
         )}
 
-      <p className="trace-section">薄弱项</p>
-        {weakConcentration.length > 0 && (
+        {weakConcentration.length > 0 ? (
           <div className="weak-concentration" aria-label="薄弱集中区">
             <div className="weak-trend-head">
               <strong>薄弱集中区</strong>
-              <small>按词本分册统计薄弱词分布 · 悬停查看单元明细</small>
+              <small>贡献拆解与分册内薄弱率 · 悬停查看单元明细</small>
             </div>
             {weakConcentration.map((section) => {
               const sectionTotal = [...(sectionUnitTotals.get(section.section)?.values() ?? [])]
                 .reduce((sum, count) => sum + count, 0);
               const sectionPct = sectionTotal > 0
                 ? Math.round((section.total / sectionTotal) * 100)
+                : 0;
+              const contributionPct = assignedWeakTotal > 0
+                ? Math.round((section.total / assignedWeakTotal) * 100)
                 : 0;
               return (
                 <div className="weak-concentration-row" key={section.section}>
@@ -625,7 +670,7 @@ export default function HistoryView({
                   </div>
                   <strong className="weak-concentration-count">
                     {section.total}
-                    {sectionTotal > 0 && <small>{sectionPct}%</small>}
+                    <small>贡献占比 {contributionPct}% · 分册内薄弱率 {sectionPct}%</small>
                   </strong>
                   <small
                     className="weak-concentration-units"
@@ -681,7 +726,7 @@ export default function HistoryView({
               );
             })}
           </div>
-        )}
+        ) : <div className="weak-concentration empty-state" role="status"><strong>薄弱集中区</strong><p>暂无已归入词书的薄弱数据。</p></div>}
 
       <details className="trace-details" aria-label="详细学习分析">
         <summary>详细学习分析<span>查询行为 · 薄弱维度 · 冲刺与 cohort</span></summary>
@@ -1011,7 +1056,7 @@ export default function HistoryView({
           </p>
           <p>覆盖词与当场达标词是各维活动口径，同词可跨维重复，不可跨维合计；session 数可以合计。</p>
           <div className="dimension-observation-grid">
-            {dimensionObservationReport.rows.map((row) => (
+            {activeDimensionRows.map((row) => (
               <article key={row.dimension} data-dimension={row.dimension}>
                 <strong>{({
                   "listening-spelling": "听音拼写",
@@ -1027,12 +1072,12 @@ export default function HistoryView({
                 <small>活动：session {row.sessionCount} · 覆盖 {row.coveredWordCount} 词 · 当场达标 {row.resolvedCount} 词</small>
                 <small>
                   当前仍薄弱：{row.stillWeakRate === null
-                    ? "无样本"
+                      ? "暂无 cohort"
                     : `${row.stillWeakCount}/${row.cohortWordCount}（${row.stillWeakRate}%）`}
                 </small>
                 <small>
                   随访覆盖：{row.coverageRate === null
-                    ? "无样本"
+                      ? "暂无 cohort"
                     : `${row.followedUpCount}/${row.cohortWordCount}（${row.coverageRate}%）`}
                   {row.cohortWordCount > 0
                     ? ` · 未观察 ${row.unobservedCount} · 截断 ${row.truncatedCount}`
@@ -1060,7 +1105,13 @@ export default function HistoryView({
                 )}
               </article>
             ))}
+            {activeDimensionRows.length === 0 && (
+              <div className="empty-state" role="status">最近 4 个完整周暂无分维度活动样本。</div>
+            )}
           </div>
+          {activeDimensionRows.length > 0 && inactiveDimensionCount > 0 && (
+            <p>其余 {inactiveDimensionCount} 个维度暂无活动样本</p>
+          )}
           <p>“当前仍薄弱”不能区分从未恢复与恢复后再次薄弱，当前弱点也未必由该处置维度产生。</p>
         </details>
         {sprintDimensionTrend.length > 0 && (

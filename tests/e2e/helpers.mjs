@@ -213,11 +213,11 @@ export async function openApp(page, options) {
  * 轨迹页高级数据默认渐进披露（折叠），断言内部模块前先展开；幂等。
  */
 export async function openTraceAnalysis(page) {
-  const details = page.locator(".trace-details");
+  const details = page.locator('details[aria-label="详细学习分析"]');
   if (await details.count()) {
-    await details.evaluate((el) => {
-      if (!el.open) el.open = true;
-    });
+    if (!(await details.evaluate((el) => el.open))) {
+      await details.locator(":scope > summary").click();
+    }
   }
 }
 
