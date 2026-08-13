@@ -7709,6 +7709,14 @@ kbd {
   scrollbar-gutter: stable;
 }
 
+/* 详情态工具栏保持紧凑外观，只把左缘移到 960px 详情内容轴上 */
+.learn-view.detail-mode > .learning-context {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: calc(100% - 48px);
+  margin-inline-start: max(24px, calc((100% - 960px) / 2));
+}
+
 .learn-view.detail-mode .card-metadata {
   width: min(960px, calc(100% - 48px));
   margin-top: 2px;

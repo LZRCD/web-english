@@ -31,6 +31,34 @@ async function expectNoHorizontalOverflow(page) {
   ).toBeLessThanOrEqual(overflow.documentWidth + 2);
 }
 
+async function learningGeometry(page) {
+  return page.evaluate(() => {
+    const learnView = document.querySelector(".learn-view");
+    const learningContext = document.querySelector(".learning-context");
+    const studyMainStack = document.querySelector(".study-main-stack");
+    const orbitStage = document.querySelector(".orbit-stage");
+    if (!learnView || !learningContext || !studyMainStack || !orbitStage) {
+      throw new Error("学习页布局节点不完整");
+    }
+
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, width: box.width };
+    };
+    return {
+      detailMode: learnView.classList.contains("detail-mode"),
+      learnView: rect(learnView),
+      learningContext: rect(learningContext),
+      studyMainStack: rect(studyMainStack),
+      orbitStage: rect(orbitStage),
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      bodyClientWidth: document.body.clientWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+    };
+  });
+}
+
 test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ context, page }) => {
   await installStateSeed(context, createState({
     activeSession: {
@@ -127,4 +155,49 @@ test("学习顶栏显示会话标题与进度", async ({ context, page }) => {
 
   await expect(page.getByText("专项复习 · 1/2", { exact: true })).toBeVisible();
   await expect(page.getByText("2027 红宝书伴学", { exact: true })).toBeVisible();
+});
+
+test("详情态学习工具栏与 960px 内容轴左缘对齐且不扩成宽卡", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  const viewports = [
+    { width: 1366, height: 900 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 820, height: 900 },
+    { width: 390, height: 844 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+
+    const stateA = await learningGeometry(page);
+    expect(stateA.detailMode).toBe(false);
+    expect(Math.abs(stateA.learningContext.left - stateA.studyMainStack.left))
+      .toBeLessThanOrEqual(1);
+    if (viewport.width <= 820) {
+      expect(Math.abs(stateA.learningContext.width - stateA.studyMainStack.width))
+        .toBeLessThanOrEqual(1);
+    } else {
+      expect(stateA.learningContext.width).toBeLessThan(stateA.studyMainStack.width);
+    }
+    expect(stateA.documentScrollWidth)
+      .toBeLessThanOrEqual(stateA.documentClientWidth + 2);
+    expect(stateA.bodyScrollWidth).toBeLessThanOrEqual(stateA.bodyClientWidth + 2);
+
+    await page.getByRole("button", { name: "显示单词释义" }).click();
+    const detail = await learningGeometry(page);
+    expect(detail.detailMode).toBe(true);
+    expect(Math.abs(detail.learningContext.left - detail.orbitStage.left))
+      .toBeLessThanOrEqual(1);
+    expect(detail.learningContext.width).toBeLessThan(detail.orbitStage.width - 8);
+    expect(Math.abs(
+      detail.orbitStage.width - Math.min(960, detail.studyMainStack.width - 48),
+    )).toBeLessThanOrEqual(1);
+    expect(detail.documentScrollWidth)
+      .toBeLessThanOrEqual(detail.documentClientWidth + 2);
+    expect(detail.bodyScrollWidth).toBeLessThanOrEqual(detail.bodyClientWidth + 2);
+
+    await page.reload();
+  }
 });
