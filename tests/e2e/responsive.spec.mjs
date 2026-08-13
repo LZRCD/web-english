@@ -595,40 +595,467 @@ test("学习顶栏显示会话标题与进度", async ({ context, page }) => {
   await expect(page.getByText("2027 红宝书伴学", { exact: true })).toBeVisible();
 });
 
-test("桌面与 16:10 非全屏下自由学习主卡紧跟任务预览", async ({ context, page }) => {
+/** 学习页几何快照：剩余学习区 + 学习舞台 + 词卡核心节点。 */
+async function studyGeometry(page) {
+  return page.evaluate(() => {
+    const box = (element) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+        paddingLeft: parseFloat(style.paddingLeft) || 0,
+        paddingRight: parseFloat(style.paddingRight) || 0,
+        paddingTop: parseFloat(style.paddingTop) || 0,
+        paddingBottom: parseFloat(style.paddingBottom) || 0,
+        clientWidth: element.clientWidth,
+        clientHeight: element.clientHeight,
+        scrollWidth: element.scrollWidth,
+        scrollHeight: element.scrollHeight,
+        scrollTop: element.scrollTop,
+        overflowY: style.overflowY,
+      };
+    };
+    const learnView = document.querySelector(".learn-view");
+    const workspace = document.querySelector(".workspace");
+    const stack = document.querySelector(".study-main-stack");
+    const stage = document.querySelector(".study-card-stage");
+    const orbit = document.querySelector(".orbit-stage");
+    const card = document.querySelector(".word-card");
+    const wordFace = document.querySelector(".word-face");
+    const wordHeading = document.querySelector(".word-heading");
+    const word = document.querySelector(".word-face h1");
+    const taskStrip = document.querySelector(".today-task-strip");
+    if (!learnView || !workspace || !stack || !stage || !orbit) {
+      throw new Error("学习页布局节点不完整");
+    }
+    const stackBox = box(stack);
+    return {
+      detailMode: learnView.classList.contains("detail-mode"),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      learnView: box(learnView),
+      workspace: box(workspace),
+      stack: stackBox,
+      stage: box(stage),
+      orbit: box(orbit),
+      card: box(card),
+      wordFace: box(wordFace),
+      wordHeading: box(wordHeading),
+      word: box(word),
+      taskStrip: box(taskStrip),
+      sourceLabel: document.querySelector(".word-source span")?.textContent ?? null,
+      // 内容盒中心：扣除 padding 与滚动条槽位（scrollbar-gutter: stable）
+      stackContentCenterX: stackBox.left
+        + stackBox.paddingLeft
+        + (stackBox.clientWidth - stackBox.paddingLeft - stackBox.paddingRight) / 2,
+      stackContentCenterY: stackBox.top
+        + stackBox.paddingTop
+        + (stackBox.clientHeight - stackBox.paddingTop - stackBox.paddingBottom) / 2,
+      document: {
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientHeight: document.documentElement.clientHeight,
+        scrollHeight: document.documentElement.scrollHeight,
+      },
+    };
+  });
+}
+
+/** 学习舞台居中契约：水平严格居中；放得下时垂直居中，放不下时顶部可达并可滚动。 */
+function assertStudyStageCentering(geometry, label) {
+  expect(
+    Math.abs(geometry.orbit.centerX - geometry.stackContentCenterX),
+    `${label} orbit 水平中心偏差`,
+  ).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(geometry.stage.width - geometry.stack.clientWidth),
+    `${label} 舞台宽度`,
+  ).toBeLessThanOrEqual(2);
+
+  const stackContentHeight = geometry.stack.clientHeight
+    - geometry.stack.paddingTop - geometry.stack.paddingBottom;
+  if (geometry.stage.height <= stackContentHeight + 1) {
+    expect(geometry.card, `${label} 词卡存在`).not.toBeNull();
+    expect(
+      Math.abs(geometry.card.centerY - geometry.stackContentCenterY),
+      `${label} 词卡垂直中心偏差`,
+    ).toBeLessThanOrEqual(24);
+  } else {
+    expect(geometry.stage.top, `${label} 顶部可达`)
+      .toBeGreaterThanOrEqual(geometry.stack.top - 1);
+    expect(geometry.stack.scrollHeight, `${label} 栈内可滚动`)
+      .toBeGreaterThan(geometry.stack.clientHeight);
+    // 内部滚动时不叠加 learn-view 第二根滚动条
+    expect(geometry.learnView.scrollHeight, `${label} 无嵌套双滚动`)
+      .toBeLessThanOrEqual(geometry.learnView.clientHeight + 2);
+  }
+  expect(geometry.document.scrollWidth, `${label} 页面横向溢出`)
+    .toBeLessThanOrEqual(geometry.document.clientWidth + 2);
+  if (geometry.viewport.width > 820) {
+    expect(geometry.document.scrollHeight, `${label} 页面纵向滚动`)
+      .toBeLessThanOrEqual(geometry.document.clientHeight + 2);
+  }
+}
+
+/** 「今日到期」来源所需的到期进度记录（nextDueAt 已过）。 */
+function dueTodayProgress(wordId) {
+  const nextDueAt = geometryDaysAgo(1, 9);
+  return {
+    wordId,
+    status: "reviewing",
+    firstLearnedAt: geometryDaysAgo(7, 8),
+    lastReviewedAt: geometryDaysAgo(7, 8),
+    nextDueAt,
+    lastRating: 1,
+    reviewCount: 1,
+    successCount: 0,
+    lapseCount: 0,
+    consecutiveSuccesses: 0,
+    intervalMs: 86_400_000,
+    fsrsCard: {
+      due: nextDueAt,
+      stability: 1,
+      difficulty: 6,
+      elapsedDays: 1,
+      scheduledDays: 1,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 2,
+      lastReview: geometryDaysAgo(7, 8),
+    },
+  };
+}
+
+const STUDY_VIEWPORTS = [
+  { width: 1920, height: 1080 },
+  { width: 1536, height: 864 },
+  { width: 1366, height: 768 },
+  { width: 1024, height: 768 },
+  { width: 820, height: 900 },
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+];
+
+test("自由学习下主卡在七个目标视口随剩余学习区居中", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  await installStateSeed(context, createState());
+
+  for (const viewport of STUDY_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+
+    const label = `${viewport.width}×${viewport.height} 自由学习`;
+    const geometry = await studyGeometry(page);
+    expect(geometry.taskStrip, `${label} 任务预览`).not.toBeNull();
+    assertStudyStageCentering(geometry, label);
+    await expectNoHorizontalOverflow(page);
+
+    await page.reload();
+  }
+});
+
+test("进入学习会话后任务预览消失且主卡仍在剩余区内居中", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  await installStateSeed(context, createState({
+    activeSession: {
+      id: "today-geometry-session",
+      kind: "today",
+      title: "今日任务",
+      wordIds: [1, 2],
+      index: 0,
+      // today 会话仅在 createdAt 为今天时才会被恢复（否则被清理为自由学习）
+      createdAt: new Date().toISOString(),
+    },
+  }));
+
+  for (const viewport of STUDY_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+
+    const label = `${viewport.width}×${viewport.height} 会话中`;
+    const geometry = await studyGeometry(page);
+    expect(geometry.taskStrip, `${label} 任务预览`).toBeNull();
+    assertStudyStageCentering(geometry, label);
+    await expectNoHorizontalOverflow(page);
+
+    await page.reload();
+  }
+});
+
+test("开始今日任务后任务预览移除，舞台自动在扩大后的剩余区内重新居中", async ({ context, page }) => {
+  await installStateSeed(context, createState());
+  await page.setViewportSize({ width: 1600, height: 880 });
+  await openApp(page);
+
+  const free = await studyGeometry(page);
+  expect(free.taskStrip).not.toBeNull();
+  assertStudyStageCentering(free, "自由学习");
+
+  await page.locator(".today-task-strip").click();
+  await expect(page.locator(".today-task-strip")).toHaveCount(0);
+  const session = await studyGeometry(page);
+  expect(session.taskStrip).toBeNull();
+  assertStudyStageCentering(session, "进入会话");
+
+  // 剩余区随任务预览移除而增高，舞台在两个状态下都保持居中：
+  // 词卡相对 stack 顶部的偏移应按（任务栏高度 + 间距）的一半下移
+  const freeCardOffset = free.card.top - free.stack.top;
+  const sessionCardOffset = session.card.top - session.stack.top;
+  expect(session.stack.height)
+    .toBeGreaterThanOrEqual(free.stack.height + free.taskStrip.height + 8);
+  expect(sessionCardOffset)
+    .toBeGreaterThanOrEqual(freeCardOffset + free.taskStrip.height / 2 + 4);
+});
+
+test("四种来源说明下词卡核心词面保持稳定", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const viewport = { width: 1280, height: 900 };
+  const scenarios = [
+    { label: "当前词书额外练习", state: createState() },
+    {
+      label: "今日新词",
+      state: createState({
+        activeSession: {
+          id: "source-today-new",
+          kind: "today",
+          title: "今日任务",
+          wordIds: [1],
+          index: 0,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    },
+    {
+      label: "今日到期",
+      state: createState({
+        activeSession: {
+          id: "source-today-due",
+          kind: "today",
+          title: "今日任务",
+          wordIds: [1],
+          index: 0,
+          createdAt: new Date().toISOString(),
+        },
+        wordProgress: { 1: dueTodayProgress(1) },
+      }),
+    },
+    {
+      label: "搜索专项",
+      state: createState({
+        activeSession: {
+          id: "source-search",
+          kind: "search",
+          title: "搜索专项",
+          wordIds: [1],
+          index: 0,
+          createdAt: "2026-07-29T07:00:00.000Z",
+        },
+      }),
+    },
+  ];
+
+  const offsets = (geometry) => ({
+    cardWidth: geometry.card.width,
+    cardHeight: geometry.card.height,
+    wordFaceLeft: geometry.wordFace.left - geometry.card.left,
+    wordFaceTop: geometry.wordFace.top - geometry.card.top,
+    wordFaceWidth: geometry.wordFace.width,
+    wordFaceHeight: geometry.wordFace.height,
+    wordX: geometry.word.centerX - geometry.card.left,
+    wordY: geometry.word.centerY - geometry.card.top,
+  });
+
+  const snapshots = [];
+  for (const scenario of scenarios) {
+    const context = await browser.newContext({ viewport });
+    try {
+      const page = await context.newPage();
+      await installStateSeed(context, scenario.state);
+      await openApp(page);
+      await expect(page.locator(".word-source span")).toHaveText(scenario.label);
+      const geometry = await studyGeometry(page);
+      expect(geometry.card, scenario.label).not.toBeNull();
+      snapshots.push({ label: scenario.label, geometry });
+    } finally {
+      await context.close();
+    }
+  }
+
+  const reference = offsets(snapshots[0].geometry);
+  for (const { label, geometry } of snapshots.slice(1)) {
+    const candidate = offsets(geometry);
+    for (const key of Object.keys(reference)) {
+      expect(
+        Math.abs(candidate[key] - reference[key]),
+        `${label} 词卡内部几何 ${key}`,
+      ).toBeLessThanOrEqual(2);
+    }
+    expect(
+      Math.abs(geometry.card.left - snapshots[0].geometry.card.left),
+      `${label} 词卡 left`,
+    ).toBeLessThanOrEqual(2);
+  }
+  // 会话态（无任务预览）之间词卡顶部也一致
+  for (let index = 1; index < snapshots.length - 1; index += 1) {
+    expect(
+      Math.abs(snapshots[index + 1].geometry.card.top - snapshots[index].geometry.card.top),
+      `${snapshots[index].label}/${snapshots[index + 1].label} 词卡 top`,
+    ).toBeLessThanOrEqual(2);
+  }
+});
+
+test("同一会话切换长短词时词卡矩形保持稳定", async ({ context, page }) => {
+  await page.route("**/data/redbook.json*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      metadata: {
+        title: "2027考研英语红宝书",
+        total: 2,
+        sectionCounts: { 必考词: 2, 基础词: 0, 超纲词: 0 },
+      },
+      words: [
+        { id: 1, word: "go", phonetic: "/ɡoʊ/", meaning: "v. 去；进行", section: "必考词", unit: 1 },
+        { id: 2, word: "counterproductive", phonetic: "/ˌkaʊntərprəˈdʌktɪv/", meaning: "adj. 适得其反的", section: "必考词", unit: 1 },
+      ],
+    }),
+  }));
+  await installStateSeed(context, createState({
+    activeSession: {
+      id: "word-length-session",
+      kind: "search",
+      title: "长短词会话",
+      wordIds: [1, 2],
+      index: 0,
+      createdAt: "2026-07-29T07:00:00.000Z",
+    },
+  }));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openApp(page);
+
+  await expect(page.getByRole("heading", { name: "go" })).toBeVisible();
+  const shortWord = await studyGeometry(page);
+
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+  await page.getByRole("button", { name: /认识/ }).click();
+  await expect(page.getByRole("heading", { name: "counterproductive" })).toBeVisible();
+  const longWord = await studyGeometry(page);
+
+  for (const key of ["left", "top", "width", "height"]) {
+    expect(Math.abs(longWord.card[key] - shortWord.card[key]), `长短词切换 词卡 ${key}`)
+      .toBeLessThanOrEqual(2);
+  }
+  await expectNoHorizontalOverflow(page);
+});
+
+test("Study Detail 保持顶部流式长页面且舞台不参与居中", async ({ context, page }) => {
   await installStateSeed(context, createState());
   const viewports = [
-    { width: 1920, height: 1080, minGap: 28, maxGap: 56, maxCardTop: 367 },
-    { width: 1600, height: 880, minGap: 24, maxGap: 34, maxCardTop: 300 },
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
   ];
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await openApp(page);
+    await page.getByRole("button", { name: "显示单词释义" }).click();
 
-    const geometry = await page.evaluate(() => {
-      const task = document.querySelector(".today-task-strip")?.getBoundingClientRect();
-      const metadata = document.querySelector(".card-metadata")?.getBoundingClientRect();
+    const detail = await studyGeometry(page);
+    expect(detail.detailMode).toBe(true);
+    expect(detail.card, "详情态不再渲染词卡").toBeNull();
+    // 顶部对齐：舞台贴近 study-main-stack 顶部，不垂直居中
+    expect(detail.stage.top, `${viewport.width}px 详情态顶部对齐`)
+      .toBeLessThanOrEqual(detail.stack.top + 3);
+    // learn-view 是唯一纵向滚动源
+    expect(await page.locator(".learn-view").evaluate(
+      (element) => getComputedStyle(element).overflowY,
+    )).toBe("auto");
+    // Sticky 评分栏
+    expect(await page.locator(".rating-bar").evaluate(
+      (element) => getComputedStyle(element).position,
+    )).toBe("sticky");
+    await expectNoHorizontalOverflow(page);
+
+    await page.reload();
+  }
+});
+
+test("极矮屏学习区完整可滚动且撤销按钮不遮挡词卡与操作", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  await installStateSeed(context, createState());
+  const shortViewports = [
+    { width: 1024, height: 500 },
+    { width: 390, height: 500 },
+  ];
+
+  for (const viewport of shortViewports) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+
+    const label = `${viewport.width}×${viewport.height}`;
+    const top = await studyGeometry(page);
+    expect(top.stack.scrollHeight, `${label} 栈内可滚动`)
+      .toBeGreaterThan(top.stack.clientHeight);
+    expect(top.stage.top, `${label} 顶部可达`)
+      .toBeGreaterThanOrEqual(top.stack.top - 1);
+    expect(top.card.top, `${label} 词卡顶部可达`)
+      .toBeGreaterThanOrEqual(top.stack.top - 1);
+    expect(top.learnView.scrollHeight, `${label} 无嵌套双滚动`)
+      .toBeLessThanOrEqual(top.learnView.clientHeight + 2);
+
+    // 滚到底部：词卡底部完整可达（词卡高于可视区时顶部越出上方是正常滚动行为）
+    await page.locator(".study-main-stack").evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const bottom = await studyGeometry(page);
+    expect(bottom.stack.scrollTop, `${label} 实际发生滚动`).toBeGreaterThan(0);
+    expect(bottom.card.bottom, `${label} 词卡底部可达`)
+      .toBeLessThanOrEqual(bottom.stack.bottom + 1);
+    await expectNoHorizontalOverflow(page);
+
+    // 回到顶部：词卡顶部重新可达
+    await page.locator(".study-main-stack").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const restored = await studyGeometry(page);
+    expect(restored.card.top, `${label} 回到顶部后词卡顶部可达`)
+      .toBeGreaterThanOrEqual(restored.stack.top - 1);
+
+    await page.reload();
+  }
+
+  // 撤销按钮：评分后出现，不遮挡词卡与评分栏
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    await page.getByRole("button", { name: "显示单词释义" }).click();
+    await page.getByRole("button", { name: /认识/ }).click();
+    await expect(page.locator(".undo-forever")).toBeVisible({ timeout: 10_000 });
+    const overlap = await page.evaluate(() => {
+      const undo = document.querySelector(".undo-forever")?.getBoundingClientRect();
       const card = document.querySelector(".word-card")?.getBoundingClientRect();
-      const hint = document.querySelector(".word-face span")?.getBoundingClientRect();
-      if (!task || !metadata || !card || !hint) {
-        throw new Error("自由学习布局节点不完整");
-      }
+      const rating = document.querySelector(".rating-bar")?.getBoundingClientRect();
+      if (!undo || !card) throw new Error("撤销按钮或词卡不存在");
+      const intersects = (first, second) => first.left < second.right - 1
+        && second.left < first.right - 1
+        && first.top < second.bottom - 1
+        && second.top < first.bottom - 1;
       return {
-        taskBottom: task.bottom,
-        metadataTop: metadata.top,
-        cardTop: card.top,
-        hintBottom: hint.bottom,
-        viewportHeight: window.innerHeight,
+        card: intersects(undo, card),
+        rating: rating && rating.width > 0 ? intersects(undo, rating) : false,
       };
     });
-
-    const taskGap = geometry.metadataTop - geometry.taskBottom;
-    expect(taskGap).toBeGreaterThanOrEqual(viewport.minGap);
-    expect(taskGap).toBeLessThanOrEqual(viewport.maxGap);
-    expect(geometry.cardTop).toBeLessThanOrEqual(viewport.maxCardTop);
-    expect(geometry.hintBottom).toBeLessThan(geometry.viewportHeight);
-    await expectNoHorizontalOverflow(page);
+    expect(overlap.card, `${viewport.width}px 撤销按钮遮挡词卡`).toBe(false);
+    expect(overlap.rating, `${viewport.width}px 撤销按钮遮挡评分栏`).toBe(false);
+    await page.reload();
   }
 });
 

@@ -2584,6 +2584,7 @@ export default function Home() {
             {!sessionComplete && (
               <>
             <div className="study-main-stack">
+            <div className="study-card-stage">
             <p className="card-metadata" role="note">{cardMetadata}</p>
             <div className={detailMode ? "orbit-stage detail-mode" : "orbit-stage"} style={{ "--progress": `${Math.max(progress, 4)}%` } as React.CSSProperties}>
               <div className="card-viewport">
@@ -2683,6 +2684,7 @@ export default function Home() {
               {bottomLabel && (
                 <div className="orbit-label orbit-label-bottom">{bottomLabel}</div>
               )}
+            </div>
             </div>
 
             <RatingBar
