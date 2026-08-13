@@ -142,6 +142,59 @@ async function expectOrderSwitchTouchTargets(page, sameRow) {
   return { context, buttons };
 }
 
+async function expectWordbookTabTouchTargets(page) {
+  const tablist = page.getByRole("tablist", { name: "词本分类" });
+  const tabs = ["我的词本", "错词记录", "顽固词", "划词集"].map((name) =>
+    tablist.getByRole("tab", { name: new RegExp(name) }));
+  const geometry = await tablist.evaluate((element) => {
+    const listRect = element.getBoundingClientRect();
+    const tabRects = [...element.querySelectorAll('[role="tab"]')].map((tab) => {
+      const rect = tab.getBoundingClientRect();
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
+    return {
+      list: {
+        left: listRect.left,
+        top: listRect.top,
+        right: listRect.right,
+        bottom: listRect.bottom,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      },
+      tabs: tabRects,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+  });
+
+  expect(geometry.tabs).toHaveLength(4);
+  expect(geometry.list.scrollWidth).toBeLessThanOrEqual(geometry.list.clientWidth);
+  for (const rect of geometry.tabs) {
+    expect(rect.width).toBeGreaterThanOrEqual(39);
+    expect(rect.height).toBeGreaterThanOrEqual(39);
+    expect(rect.left).toBeGreaterThanOrEqual(geometry.list.left - 1);
+    expect(rect.top).toBeGreaterThanOrEqual(geometry.list.top - 1);
+    expect(rect.right).toBeLessThanOrEqual(geometry.list.right + 1);
+    expect(rect.bottom).toBeLessThanOrEqual(geometry.list.bottom + 1);
+    expect(rect.left).toBeGreaterThanOrEqual(-1);
+    expect(rect.top).toBeGreaterThanOrEqual(-1);
+    expect(rect.right).toBeLessThanOrEqual(geometry.viewport.width + 1);
+    expect(rect.bottom).toBeLessThanOrEqual(geometry.viewport.height + 1);
+  }
+  for (let index = 1; index < geometry.tabs.length; index += 1) {
+    expect(geometry.tabs[index].left)
+      .toBeGreaterThanOrEqual(geometry.tabs[index - 1].right - 1);
+  }
+  await expectNoHorizontalOverflow(page);
+  return { tablist, tabs };
+}
+
 test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ context, page }) => {
   await installStateSeed(context, createState({
     activeSession: {
@@ -289,6 +342,49 @@ test("词本四个分类 Tab 均可切换并显示对应操作", async ({ contex
   await expect(page.getByRole("button", { name: "学习划词集" })).toBeVisible();
   await tablist.getByRole("tab", { name: /我的词本/ }).click();
   await expect(page.getByRole("button", { name: "复习全部收藏" })).toBeVisible();
+});
+
+test("390px 与 320px 下词本四分类 Tab 可触达且完整容纳", async ({ context, page }) => {
+  await installStateSeed(context, createState({
+    favorites: [
+      { wordId: 1, addedAt: "2026-07-29T07:00:00.000Z" },
+    ],
+    lookupWords: [
+      { wordId: 2, query: "objective", meaning: "目标", addedAt: "2026-07-29T07:00:00.000Z" },
+    ],
+  }));
+  const viewports = [
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    await openWordbook(page);
+    const { tabs } = await expectWordbookTabTouchTargets(page);
+    const [favorites, mistakes, stubborn, lookups] = tabs;
+
+    await mistakes.click();
+    await expect(mistakes).toHaveAttribute("aria-selected", "true");
+    await expect(favorites).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByRole("button", { name: "强化当前错词" })).toBeVisible();
+
+    await stubborn.click();
+    await expect(stubborn).toHaveAttribute("aria-selected", "true");
+    await expect(mistakes).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByRole("button", { name: "开始顽固词专项" })).toBeVisible();
+
+    await lookups.click();
+    await expect(lookups).toHaveAttribute("aria-selected", "true");
+    await expect(stubborn).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByRole("button", { name: "学习划词集" })).toBeVisible();
+
+    await favorites.click();
+    await expect(favorites).toHaveAttribute("aria-selected", "true");
+    await expect(lookups).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByRole("button", { name: "复习全部收藏" })).toBeVisible();
+  }
 });
 
 test("学习顶栏显示会话标题与进度", async ({ context, page }) => {

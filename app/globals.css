@@ -5882,6 +5882,20 @@ kbd {
     display: grid;
   }
 
+  .wordbook-tabs {
+    width: 100%;
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .wordbook-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 4px;
+    white-space: nowrap;
+  }
+
   .wordbook-batch-actions {
     flex-wrap: wrap;
   }
