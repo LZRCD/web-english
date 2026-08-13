@@ -324,3 +324,31 @@ test("详情态保留释义隐藏门控与焦点语义", async () => {
     /\{\(!hideSenses \|\| sensesExpanded\) && \(\s*<>\s*\{guessFeedback\?\.kind === "correct"[\s\S]*?<div className="meaning-main">[\s\S]*?className="meaning-collapse"[\s\S]*?收起释义[\s\S]*?<\/\>\s*\)\}\s*\{kaoyanExamples\.length/,
   );
 });
+
+test("轨迹页源码顺序与渐进披露边界不依赖 CSS order", async () => {
+  const [historyView, styles] = await Promise.all([
+    readFile(new URL("../app/components/HistoryView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const markers = [
+    'aria-labelledby="current-status-title"',
+    'aria-labelledby="weekly-report-title"',
+    'aria-labelledby="review-forecast-title"',
+    'aria-label="薄弱集中区"',
+    'aria-labelledby="activity-title"',
+    'id="recent-history-title"',
+    'aria-label="近 7 日详细指标"',
+    'aria-label="详细学习分析"',
+  ];
+  const positions = markers.map((marker) => historyView.indexOf(marker));
+
+  assert.ok(positions.every((position) => position >= 0));
+  assert.deepEqual(positions, [...positions].sort((first, second) => first - second));
+  assert.match(historyView, /const recentReviews = \[\.\.\.reviews\]\.reverse\(\)\.slice\(0, 5\)/);
+  assert.match(historyView, /<details className="metrics-details" aria-label="近 7 日详细指标">/);
+  assert.match(historyView, /<details className="trace-details" aria-label="详细学习分析">/);
+  assert.doesNotMatch(
+    styles,
+    /(?:\.current-status|\.weekly-report|\.forecast-panel|\.weak-concentration|\.activity-panel|\.history-panel|\.metrics-details|\.trace-details)\s*\{\s*order:/,
+  );
+});

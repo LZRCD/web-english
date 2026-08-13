@@ -3026,6 +3026,8 @@ select:focus-visible {
 }
 
 .activity-controls button {
+  min-width: 40px;
+  min-height: 40px;
   border: 0;
   border-radius: 999px;
   padding: 6px 9px;
@@ -3042,7 +3044,7 @@ select:focus-visible {
 }
 
 .activity-nav button {
-  min-width: 26px;
+  min-width: 40px;
   padding-inline: 6px;
   font-size: 12px;
 }
@@ -3971,15 +3973,7 @@ kbd {
 .history-view > * { margin-block: 0 !important; }
 .trace-hero { min-height: auto; padding-block: 8px; }
 .trace-hero-note { margin-top: 4px; }
-.current-status { order: 1; }
-.weekly-report { order: 2; }
-.forecast-panel { order: 3; }
-.weak-concentration { order: 4; }
 .history-view > .trace-section { display: none; }
-.activity-panel { order: 5; }
-.history-panel { order: 6; }
-.metrics-details { order: 7; }
-.trace-details { order: 8; }
 
 .current-status,
 .forecast-panel,
@@ -4053,6 +4047,22 @@ kbd {
 @media (max-width: 640px) {
   .history-view { gap: 14px; }
   .current-status, .forecast-panel, .weak-concentration, .metrics-details { padding: 14px; }
+  .history-view .current-status .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .history-view .current-status .stat-grid > div {
+    min-width: 0;
+    padding: 11px 12px;
+    gap: 4px;
+  }
+  .history-view .current-status .stat-grid span,
+  .history-view .current-status .stat-grid small {
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+  .history-view .current-status .stat-grid strong { font-size: 28px; }
   .trace-primary-action { align-items: stretch; flex-direction: column; }
   .trace-primary-action button { min-height: 44px; }
 }

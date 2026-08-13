@@ -513,82 +513,6 @@ export default function HistoryView({
         </div>
       </section>
 
-      <details className="metrics-details" aria-label="近 7 日详细指标">
-        <summary>近 7 日详细指标<span>评分、保持与学习量</span></summary>
-      <section className="insights-panel" aria-labelledby="insights-title">
-        <div className="panel-title">
-          <h2 id="insights-title">近 7 日详细指标</h2>
-          <small>近 7 天截至目前</small>
-        </div>
-        <div className="insights-grid">
-          <div className="insight-card">
-            <span>当场达标占比</span>
-            <strong>
-              {insights.successRate === null
-                ? "暂无样本"
-                : `${Math.round(insights.successRate)}%`}
-            </strong>
-            <small>rating≥2 / 全部评分事件；不代表长期记住</small>
-            <small>
-              {formatSuccessRateDelta(
-                insights.successRateDelta,
-                insights.successRate !== null,
-              )}
-            </small>
-          </div>
-          <div className="insight-card">
-            <span>真实复习保持率</span>
-            <strong>{formatTrueRetention(insights.trueRetention.overall)}</strong>
-            <small>仅复习：忘记失败，其余评分成功</small>
-            <small>
-              年轻 &lt;21天 {formatTrueRetention(insights.trueRetention.young)}
-              {" · "}成熟 ≥21天 {formatTrueRetention(insights.trueRetention.mature)}
-              {insights.trueRetention.unclassifiedCount > 0
-                ? ` · 未分桶 ${insights.trueRetention.unclassifiedCount}`
-                : ""}
-            </small>
-          </div>
-          <div className="insight-card">
-            <span>平均回忆</span>
-            <strong>
-              {insights.averageRecallMs !== null
-                ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
-                 : "暂无样本"}
-            </strong>
-            <small>反应耗时</small>
-          </div>
-          <div className="insight-card">
-            <span>学习天数</span>
-            <strong>{insights.activeDays}</strong>
-            <small>/ 7 天</small>
-          </div>
-        </div>
-        <div className="insights-trend" aria-label="最近 7 天每日学习量">
-          <div className="insights-trend-head">
-            <strong>学习量</strong>
-            <small>每日评分事件数</small>
-          </div>
-          {last7Days.every((day) => day.count === 0) ? (
-            <p className="insights-trend-empty">最近 7 天还没有学习记录</p>
-          ) : (
-            <div className="insights-trend-bars">
-              {last7Days.map((day) => (
-                <div className="insights-trend-col" key={day.key} title={`${day.key} · ${day.count} 次评分`}>
-                  <i className={day.count > 0 ? "active" : ""} style={{ height: `${Math.max(3, (day.count / last7Max) * 40)}px` }} aria-hidden="true" />
-                  <small>{day.label}</small>
-                  <b>{day.count}</b>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="insights-meta">
-          <span>不同单词 <strong>{insights.uniqueWordCount}</strong> · {insights.reviewCount} 次评分</span>
-          <span>完成次数 <strong>{stats.completionCount}</strong> · {stats.coveredCount} 个不同单词</span>
-        </div>
-      </section>
-      </details>
-
         {reviewForecast.length > 0 && (
           <div
             className="forecast-panel"
@@ -728,6 +652,247 @@ export default function HistoryView({
           </div>
         ) : <div className="weak-concentration empty-state" role="status"><strong>薄弱集中区</strong><p>暂无已归入词书的薄弱数据。</p></div>}
 
+      <p className="trace-section">历史</p>
+
+      <section className="activity-panel" aria-labelledby="activity-title">
+        <div className="panel-title">
+          <div className="activity-heading">
+            <h2 id="activity-title">背诵日历</h2>
+            <small>{activityDateRange}</small>
+          </div>
+          <div className="activity-panel-tools">
+            <span>{activityDays.filter((day) => day.count > 0).length} 个学习日</span>
+            <div className="activity-controls" aria-label="背诵日历范围">
+              <div className="activity-range">
+                {(Object.keys(activityRangeLabels).map(Number) as ActivityRange[]).map((range) => (
+                  <button
+                    type="button"
+                    className={activityRange === range ? "active" : ""}
+                    key={range}
+                    aria-pressed={activityRange === range}
+                    onClick={() => {
+                      onActivityRangeChange(range);
+                      onSelectDate("");
+                    }}
+                  >
+                    {activityRangeLabels[range]}
+                  </button>
+                ))}
+              </div>
+              <div className="activity-nav">
+                <button
+                  type="button"
+                  aria-label="查看更早日期"
+                  title="查看更早日期"
+                  onClick={() => {
+                    onActivityNavigate(1);
+                    onSelectDate("");
+                  }}
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  aria-label="查看更近日期"
+                  title="查看更近日期"
+                  disabled={activityOffset === 0}
+                  onClick={() => {
+                    onActivityNavigate(-1);
+                    onSelectDate("");
+                  }}
+                >
+                  →
+                </button>
+              </div>
+              {activityOffset > 0 && (
+                <button
+                  type="button"
+                  className="activity-today"
+                  onClick={() => {
+                    onActivityToday();
+                    onSelectDate("");
+                  }}
+                >
+                  回到今天
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="activity-scroll">
+          {reviews.length === 0 ? (
+            <div className="activity-empty" role="status">
+              <p>还没有学习记录</p>
+              <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
+            </div>
+          ) : (
+          <div className="activity-body">
+          <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
+            {activityDays.map((day, index) => (
+              <button
+                type="button"
+                id={`activity-${day.date}`}
+                key={day.date}
+                className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
+                title={`${day.date} · ${day.count} 词`}
+                aria-label={`${day.date}，背诵 ${day.count} 个单词`}
+                aria-pressed={day.date === selectedActivityDate}
+                tabIndex={day.date === activityTabDate ? 0 : -1}
+                onKeyDown={(event) => moveActivityFocus(event, index)}
+                onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
+              />
+            ))}
+          </div>
+          <div className="activity-summary" aria-label="背诵日历摘要">
+            <div>
+              <span>连续学习</span>
+              <strong>{calendarSummary.streak}</strong>
+              <small>天</small>
+            </div>
+            <div>
+              <span>最长连续</span>
+              <strong>{calendarSummary.longest}</strong>
+              <small>天</small>
+            </div>
+            <div>
+              <span>活跃日</span>
+              <strong>{calendarSummary.activeDays}</strong>
+              <small>天</small>
+            </div>
+          </div>
+          </div>
+          )}
+          <div className="activity-legend" aria-hidden="true">
+            <span>少</span>
+            {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}
+            <span>多</span>
+          </div>
+        </div>
+        {selectedActivityDate && (
+          <div className="activity-detail" aria-live="polite">
+            <div className="activity-detail-head">
+              <div>
+                <strong>{selectedActivityDate.replaceAll("-", ".")}</strong>
+                <span>
+                  {selectedDayReviews.length
+                    ? `${selectedDayNewCount} 新学 · ${selectedDayEvents.length - selectedDayNewCount} 复习 · ${selectedDayReviews.length} 个不同单词 · ${selectedWeakCount} 个薄弱`
+                    : "当天没有学习记录"}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭日期详情"
+                onClick={() => onSelectDate("")}
+              >
+                ×
+              </button>
+            </div>
+            {selectedDayReviews.length > 0 && (
+              <div className="activity-word-list">
+                {selectedDayReviews.map((review) => (
+                  <span
+                    className={`activity-word rating-${review.rating}`}
+                    key={`${review.wordId ?? review.word}-${review.reviewedAt}`}
+                  >
+                    <strong>{review.word}</strong>
+                    <small>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</small>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+      <div className="history-panel">
+        <div className="panel-title"><h2 id="recent-history-title">最近学习</h2><span>{reviews.length} 次记忆记录</span></div>
+        {recentReviews.length ? recentReviews.map((review) => (
+          <div
+            className="history-row"
+            data-review-id={review.id}
+            key={`${review.word}-${review.reviewedAt}`}
+          >
+            <strong>{review.word}</strong>
+            <span className={`rating-dot rating-${review.rating}`}>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</span>
+            <span>{formatDueTime(review.dueAt, now)}</span>
+          </div>
+        )) : <div className="empty-state">完成第一个单词后，记忆轨迹会出现在这里。</div>}
+      </div>
+
+      <details className="metrics-details" aria-label="近 7 日详细指标">
+        <summary>近 7 日详细指标<span>评分、保持与学习量</span></summary>
+      <section className="insights-panel" aria-labelledby="insights-title">
+        <div className="panel-title">
+          <h2 id="insights-title">近 7 日详细指标</h2>
+          <small>近 7 天截至目前</small>
+        </div>
+        <div className="insights-grid">
+          <div className="insight-card">
+            <span>当场达标占比</span>
+            <strong>
+              {insights.successRate === null
+                ? "暂无样本"
+                : `${Math.round(insights.successRate)}%`}
+            </strong>
+            <small>rating≥2 / 全部评分事件；不代表长期记住</small>
+            <small>
+              {formatSuccessRateDelta(
+                insights.successRateDelta,
+                insights.successRate !== null,
+              )}
+            </small>
+          </div>
+          <div className="insight-card">
+            <span>真实复习保持率</span>
+            <strong>{formatTrueRetention(insights.trueRetention.overall)}</strong>
+            <small>仅复习：忘记失败，其余评分成功</small>
+            <small>
+              年轻 &lt;21天 {formatTrueRetention(insights.trueRetention.young)}
+              {" · "}成熟 ≥21天 {formatTrueRetention(insights.trueRetention.mature)}
+              {insights.trueRetention.unclassifiedCount > 0
+                ? ` · 未分桶 ${insights.trueRetention.unclassifiedCount}`
+                : ""}
+            </small>
+          </div>
+          <div className="insight-card">
+            <span>平均回忆</span>
+            <strong>
+              {insights.averageRecallMs !== null
+                ? `${(insights.averageRecallMs / 1000).toFixed(1)}s`
+                 : "暂无样本"}
+            </strong>
+            <small>反应耗时</small>
+          </div>
+          <div className="insight-card">
+            <span>学习天数</span>
+            <strong>{insights.activeDays}</strong>
+            <small>/ 7 天</small>
+          </div>
+        </div>
+        <div className="insights-trend" aria-label="最近 7 天每日学习量">
+          <div className="insights-trend-head">
+            <strong>学习量</strong>
+            <small>每日评分事件数</small>
+          </div>
+          {last7Days.every((day) => day.count === 0) ? (
+            <p className="insights-trend-empty">最近 7 天还没有学习记录</p>
+          ) : (
+            <div className="insights-trend-bars">
+              {last7Days.map((day) => (
+                <div className="insights-trend-col" key={day.key} title={`${day.key} · ${day.count} 次评分`}>
+                  <i className={day.count > 0 ? "active" : ""} style={{ height: `${Math.max(3, (day.count / last7Max) * 40)}px` }} aria-hidden="true" />
+                  <small>{day.label}</small>
+                  <b>{day.count}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="insights-meta">
+          <span>不同单词 <strong>{insights.uniqueWordCount}</strong> · {insights.reviewCount} 次评分</span>
+          <span>完成次数 <strong>{stats.completionCount}</strong> · {stats.coveredCount} 个不同单词</span>
+        </div>
+      </section>
+      </details>
       <details className="trace-details" aria-label="详细学习分析">
         <summary>详细学习分析<span>查询行为 · 薄弱维度 · 冲刺与 cohort</span></summary>
         <div className="trace-details-body">
@@ -1183,168 +1348,6 @@ export default function HistoryView({
       )}
         </div>
       </details>
-
-      <p className="trace-section">历史</p>
-
-      <section className="activity-panel" aria-labelledby="activity-title">
-        <div className="panel-title">
-          <div className="activity-heading">
-            <h2 id="activity-title">背诵日历</h2>
-            <small>{activityDateRange}</small>
-          </div>
-          <div className="activity-panel-tools">
-            <span>{activityDays.filter((day) => day.count > 0).length} 个学习日</span>
-            <div className="activity-controls" aria-label="背诵日历范围">
-              <div className="activity-range">
-                {(Object.keys(activityRangeLabels).map(Number) as ActivityRange[]).map((range) => (
-                  <button
-                    type="button"
-                    className={activityRange === range ? "active" : ""}
-                    key={range}
-                    aria-pressed={activityRange === range}
-                    onClick={() => {
-                      onActivityRangeChange(range);
-                      onSelectDate("");
-                    }}
-                  >
-                    {activityRangeLabels[range]}
-                  </button>
-                ))}
-              </div>
-              <div className="activity-nav">
-                <button
-                  type="button"
-                  aria-label="查看更早日期"
-                  title="查看更早日期"
-                  onClick={() => {
-                    onActivityNavigate(1);
-                    onSelectDate("");
-                  }}
-                >
-                  ←
-                </button>
-                <button
-                  type="button"
-                  aria-label="查看更近日期"
-                  title="查看更近日期"
-                  disabled={activityOffset === 0}
-                  onClick={() => {
-                    onActivityNavigate(-1);
-                    onSelectDate("");
-                  }}
-                >
-                  →
-                </button>
-              </div>
-              {activityOffset > 0 && (
-                <button
-                  type="button"
-                  className="activity-today"
-                  onClick={() => {
-                    onActivityToday();
-                    onSelectDate("");
-                  }}
-                >
-                  回到今天
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="activity-scroll">
-          {reviews.length === 0 ? (
-            <div className="activity-empty" role="status">
-              <p>还没有学习记录</p>
-              <span>完成今天的任务后，这里会按天点亮你的背诵足迹。</span>
-            </div>
-          ) : (
-          <div className="activity-body">
-          <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
-            {activityDays.map((day, index) => (
-              <button
-                type="button"
-                id={`activity-${day.date}`}
-                key={day.date}
-                className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
-                title={`${day.date} · ${day.count} 词`}
-                aria-label={`${day.date}，背诵 ${day.count} 个单词`}
-                aria-pressed={day.date === selectedActivityDate}
-                tabIndex={day.date === activityTabDate ? 0 : -1}
-                onKeyDown={(event) => moveActivityFocus(event, index)}
-                onClick={() => onSelectDate(day.date === selectedActivityDate ? "" : day.date)}
-              />
-            ))}
-          </div>
-          <div className="activity-summary" aria-label="背诵日历摘要">
-            <div>
-              <span>连续学习</span>
-              <strong>{calendarSummary.streak}</strong>
-              <small>天</small>
-            </div>
-            <div>
-              <span>最长连续</span>
-              <strong>{calendarSummary.longest}</strong>
-              <small>天</small>
-            </div>
-            <div>
-              <span>活跃日</span>
-              <strong>{calendarSummary.activeDays}</strong>
-              <small>天</small>
-            </div>
-          </div>
-          </div>
-          )}
-          <div className="activity-legend" aria-hidden="true">
-            <span>少</span>
-            {[0, 1, 2, 3, 4].map((level) => <i className={`level-${level}`} key={level} />)}
-            <span>多</span>
-          </div>
-        </div>
-        {selectedActivityDate && (
-          <div className="activity-detail" aria-live="polite">
-            <div className="activity-detail-head">
-              <div>
-                <strong>{selectedActivityDate.replaceAll("-", ".")}</strong>
-                <span>
-                  {selectedDayReviews.length
-                    ? `${selectedDayNewCount} 新学 · ${selectedDayEvents.length - selectedDayNewCount} 复习 · ${selectedDayReviews.length} 个不同单词 · ${selectedWeakCount} 个薄弱`
-                    : "当天没有学习记录"}
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-label="关闭日期详情"
-                onClick={() => onSelectDate("")}
-              >
-                ×
-              </button>
-            </div>
-            {selectedDayReviews.length > 0 && (
-              <div className="activity-word-list">
-                {selectedDayReviews.map((review) => (
-                  <span
-                    className={`activity-word rating-${review.rating}`}
-                    key={`${review.wordId ?? review.word}-${review.reviewedAt}`}
-                  >
-                    <strong>{review.word}</strong>
-                    <small>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</small>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-      <div className="history-panel">
-        <div className="panel-title"><h2>最近学习</h2><span>{reviews.length} 次记忆记录</span></div>
-        {recentReviews.length ? recentReviews.map((review) => (
-          <div className="history-row" key={`${review.word}-${review.reviewedAt}`}>
-            <strong>{review.word}</strong>
-            <span className={`rating-dot rating-${review.rating}`}>{review.kind === "new" ? "新学" : "复习"} · {ratingLabels[review.rating]}</span>
-            <span>{formatDueTime(review.dueAt, now)}</span>
-          </div>
-        )) : <div className="empty-state">完成第一个单词后，记忆轨迹会出现在这里。</div>}
-      </div>
     </div>
   );
 }

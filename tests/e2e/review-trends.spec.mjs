@@ -113,6 +113,244 @@ async function openHistory(page) {
   await expect(page.getByRole("heading", { name: "本周学习报告" })).toBeVisible();
 }
 
+async function readReviewsCount(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("wordloop-local");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("state-domains", "readonly");
+      const reviews = transaction.objectStore("state-domains").get("reviews");
+      transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => {
+        database.close();
+        resolve(reviews.result?.value?.length ?? 0);
+      };
+    };
+  }));
+}
+
+async function tabTo(page, target) {
+  for (let step = 0; step < 80; step += 1) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((element) => document.activeElement === element)) return;
+  }
+  throw new Error("未能通过正常 Tab 顺序聚焦目标 summary");
+}
+
+function todayReview(id = "today-completion") {
+  return metricReview({
+    id,
+    rating: 2,
+    reviewedAt: new Date().toISOString(),
+    kind: "new",
+    wordId: 1,
+  });
+}
+
+function recentReview(index) {
+  const reviewedAt = new Date(Date.now() - (7 - index) * 60_000).toISOString();
+  return {
+    id: `recent-${index}`,
+    wordId: 200 + index,
+    word: `recent-word-${index}`,
+    rating: index % 4,
+    kind: index % 2 === 0 ? "new" : "review",
+    intervalMs: 86_400_000,
+    dueAt: localDueAt(index + 1),
+    reviewedAt,
+    section: "必考词",
+    unit: 1,
+  };
+}
+
+test("轨迹信息架构使用真实 DOM 顺序且两个详细区默认独立关闭", async ({ context, page }) => {
+  await installStateSeed(context, createState({
+    reviews: [],
+    wordProgress: forecastProgress(),
+  }));
+  await openHistory(page);
+
+  const order = await page.evaluate(() => {
+    const selectors = [
+      'section[aria-labelledby="current-status-title"]',
+      'section[aria-labelledby="weekly-report-title"]',
+      '[aria-labelledby="review-forecast-title"]',
+      '.weak-concentration',
+      'section[aria-labelledby="activity-title"]',
+      '.history-panel',
+      'details[aria-label="近 7 日详细指标"]',
+      'details[aria-label="详细学习分析"]',
+    ];
+    const nodes = selectors.map((selector) => document.querySelector(selector));
+    if (nodes.some((node) => !node)) throw new Error("轨迹页信息架构节点不完整");
+    return nodes.slice(0, -1).map((node, index) =>
+      Boolean(node.compareDocumentPosition(nodes[index + 1])
+        & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  expect(order).toEqual([true, true, true, true, true, true, true]);
+
+  const metrics = page.locator('details[aria-label="近 7 日详细指标"]');
+  const analysis = page.locator('details[aria-label="详细学习分析"]');
+  const metricsSummary = metrics.locator(":scope > summary");
+  const analysisSummary = analysis.locator(":scope > summary");
+  await expect(metrics).not.toHaveAttribute("open", "");
+  await expect(analysis).not.toHaveAttribute("open", "");
+
+  await metricsSummary.click();
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(true);
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(false);
+  await metricsSummary.click();
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(false);
+
+  await analysisSummary.click();
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(true);
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(false);
+  await analysisSummary.click();
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(false);
+});
+
+test("两个轨迹详细区可通过 Tab、Enter 与 Space 独立开合", async ({ context, page }) => {
+  await installStateSeed(context, createState({
+    reviews: [],
+    wordProgress: forecastProgress(),
+  }));
+  await openHistory(page);
+
+  const metrics = page.locator('details[aria-label="近 7 日详细指标"]');
+  const analysis = page.locator('details[aria-label="详细学习分析"]');
+  const metricsSummary = metrics.locator(":scope > summary");
+  const analysisSummary = analysis.locator(":scope > summary");
+  await metricsSummary.scrollIntoViewIfNeeded();
+  await tabTo(page, metricsSummary);
+  await expect(metricsSummary).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(true);
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(false);
+  await page.keyboard.press("Space");
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(false);
+
+  await analysisSummary.scrollIntoViewIfNeeded();
+  await tabTo(page, analysisSummary);
+  await expect(analysisSummary).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(true);
+  await expect.poll(() => metrics.evaluate((element) => element.open)).toBe(false);
+  await page.keyboard.press("Space");
+  await expect.poll(() => analysis.evaluate((element) => element.open)).toBe(false);
+});
+
+test("轨迹主行动三态均离开轨迹并进入真实学习状态", async ({ browser, baseURL }) => {
+  const scenarios = [
+    {
+      name: "有已到期词",
+      state: createState({
+        reviews: [],
+        wordProgress: { 1: progress(1, localDueAt(-1)) },
+      }),
+      summary: "当前有 1 个已到期词，优先完成今日复习。",
+      label: "开始今日任务",
+      sessionTitle: /今日任务 · 0\/1/,
+    },
+    {
+      name: "无到期词但今天已有评分",
+      state: createState({
+        reviews: [todayReview()],
+        wordProgress: { 1: progress(1, localDueAt(1)) },
+      }),
+      summary: "当前暂无已到期词，今天已完成 1 次学习评分。",
+      label: "继续学习",
+    },
+    {
+      name: "无到期词且今天无评分",
+      state: createState({
+        reviews: [],
+        wordProgress: { 1: progress(1, localDueAt(1)) },
+      }),
+      summary: "当前暂无已到期词，可以从新词或薄弱项开始。",
+      label: "开始学习",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const scenarioContext = await browser.newContext({ baseURL });
+    try {
+      await installStateSeed(scenarioContext, scenario.state);
+      const scenarioPage = await scenarioContext.newPage();
+      await scenarioPage.route("**/data/redbook.json*", (route) => route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          metadata: {
+            title: "2027考研英语红宝书",
+            total: 1,
+            sectionCounts: { 必考词: 1, 基础词: 0, 超纲词: 0 },
+          },
+          words: [{
+            id: 1,
+            word: "radiate",
+            phonetic: "/ˈreɪdieɪt/",
+            meaning: "v. 辐射；散发",
+            section: "必考词",
+            unit: 1,
+          }],
+        }),
+      }));
+      await openHistory(scenarioPage);
+      const action = scenarioPage.locator(".trace-primary-action");
+      await expect(action.getByText(scenario.summary, { exact: true })).toBeVisible();
+      await action.getByRole("button", { name: scenario.label, exact: true }).click();
+      await expect(scenarioPage.locator(".learn-view"), scenario.name).toBeVisible();
+      await expect(scenarioPage.getByRole("heading", { name: "每一次回忆都算数" }))
+        .toHaveCount(0);
+      await expect(scenarioPage.getByRole("button", { name: "显示单词释义" }))
+        .toBeEnabled();
+      if (scenario.sessionTitle) {
+        await expect(scenarioPage.locator(".learn-topbar .topbar-title"))
+          .toHaveText(scenario.sessionTitle);
+      } else {
+        await expect(scenarioPage.locator(".learn-topbar .topbar-title"))
+          .not.toContainText("今日任务");
+      }
+    } finally {
+      await scenarioContext.close();
+    }
+  }
+});
+
+test("最近学习只渲染最新 5 条且不截断 IndexedDB 原始 reviews", async ({ context, page }) => {
+  const reviews = Array.from({ length: 8 }, (_, index) => recentReview(index));
+  await installStateSeed(context, createState({ reviews, wordProgress: {} }));
+  await openApp(page);
+  await expect.poll(() => readReviewsCount(page)).toBe(8);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+
+  const panel = page.locator(".history-panel");
+  const rows = panel.locator(".history-row");
+  await expect(rows).toHaveCount(5);
+  await expect.poll(() => rows.evaluateAll((elements) =>
+    elements.map((element) => element.dataset.reviewId))).toEqual([
+    "recent-7",
+    "recent-6",
+    "recent-5",
+    "recent-4",
+    "recent-3",
+  ]);
+  await expect(rows.first().getByText("recent-word-7", { exact: true })).toBeVisible();
+  await expect(panel.getByText("recent-word-0", { exact: true })).toHaveCount(0);
+  await expect(panel.getByText("recent-word-1", { exact: true })).toHaveCount(0);
+  for (let index = 0; index < 5; index += 1) {
+    await expect(rows.nth(index).locator("strong")).not.toBeEmpty();
+    await expect(rows.nth(index).locator(".rating-dot")).toContainText(/新学|复习/);
+    await expect(rows.nth(index).locator(".rating-dot")).toContainText(/忘记|模糊|认识|熟练/);
+    await expect(rows.nth(index).locator(":scope > span").last()).not.toBeEmpty();
+  }
+  await expect.poll(() => readReviewsCount(page)).toBe(8);
+});
+
 test("复习趋势：4 周保持率与困难率共用周报口径并保留空样本", async ({ context, page }) => {
   await installStateSeed(context, createState({
     reviews: trendReviews(),

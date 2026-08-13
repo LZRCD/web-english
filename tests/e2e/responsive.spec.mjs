@@ -67,6 +67,15 @@ async function openRailView(rail, name, verify) {
   await verify();
 }
 
+async function openHistory(page) {
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "当前状态" })).toBeVisible();
+}
+
 async function expectInViewport(control) {
   await expect.poll(() => control.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -216,6 +225,187 @@ test("320px 手机宽度下核心学习页可用且无横向溢出", async ({ co
     page.getByRole("heading", { name: "这一轮记忆已闭合" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("轨迹页七个目标视口保持首屏行动、局部滚动与页面级 reflow", async ({ context, page }) => {
+  test.setTimeout(90_000);
+  const now = new Date();
+  const reviewedAt = new Date(now.getTime() - 86_400_000).toISOString();
+  const nextDueAt = new Date(now.getTime() + 86_400_000).toISOString();
+  await installStateSeed(context, createState({
+    reviews: [{
+      id: "trace-responsive-review",
+      wordId: 1,
+      word: "radiate",
+      rating: 1,
+      kind: "review",
+      intervalMs: 86_400_000,
+      dueAt: nextDueAt,
+      reviewedAt,
+      section: "必考词",
+      unit: 1,
+    }],
+    wordProgress: {
+      1: {
+        wordId: 1,
+        status: "reviewing",
+        firstLearnedAt: reviewedAt,
+        lastReviewedAt: reviewedAt,
+        nextDueAt,
+        lastRating: 1,
+        reviewCount: 1,
+        successCount: 0,
+        lapseCount: 0,
+        consecutiveSuccesses: 0,
+        intervalMs: 86_400_000,
+        fsrsCard: {
+          due: nextDueAt,
+          stability: 1,
+          difficulty: 6,
+          elapsedDays: 1,
+          scheduledDays: 1,
+          learningSteps: 0,
+          reps: 1,
+          lapses: 0,
+          state: 2,
+          lastReview: reviewedAt,
+        },
+      },
+    },
+    lookupWords: [{
+      id: 1,
+      linkedWordId: 1,
+      query: "radiate",
+      kind: "word",
+      phonetic: "/ˈreɪdieɪt/",
+      part: "v.",
+      meaning: "辐射；散发",
+      note: "",
+      source: "redbook",
+      addedAt: reviewedAt,
+    }],
+    lookupStats: {
+      radiate: {
+        count: 3,
+        firstAt: reviewedAt,
+        lastAt: now.toISOString(),
+      },
+    },
+  }));
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1600, height: 880 },
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+    { width: 720, height: 450 },
+    { width: 360, height: 225 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await openHistory(page);
+    const currentStatus = page.locator('section[aria-labelledby="current-status-title"]');
+    const action = currentStatus.locator(".trace-primary-action");
+    const actionButton = action.getByRole("button");
+    const forecastScroll = page.getByRole("region", {
+      name: "未来 30 天到期复习图表，可横向滚动",
+    });
+    const metrics = page.locator('details[aria-label="近 7 日详细指标"]');
+    const analysis = page.locator('details[aria-label="详细学习分析"]');
+
+    const layout = await page.evaluate(() => {
+      const current = document.querySelector('section[aria-labelledby="current-status-title"]');
+      const actionElement = current?.querySelector(".trace-primary-action");
+      const actionControl = actionElement?.querySelector("button");
+      const weekly = document.getElementById("weekly-report-title");
+      const hero = document.querySelector(".trace-hero");
+      if (!current || !actionElement || !actionControl || !weekly || !hero) {
+        throw new Error("轨迹首屏布局节点不完整");
+      }
+      const box = (element) => {
+        const rect = element.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+      };
+      return {
+        documentClient: document.documentElement.clientWidth,
+        documentScroll: document.documentElement.scrollWidth,
+        bodyScroll: document.body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        hero: box(hero),
+        current: box(current),
+        action: box(actionElement),
+        actionControl: box(actionControl),
+        weekly: box(weekly),
+      };
+    });
+
+    expect(layout.documentScroll).toBeLessThanOrEqual(layout.documentClient + 2);
+    expect(layout.bodyScroll).toBeLessThanOrEqual(layout.innerWidth + 2);
+    expect(layout.hero.top).toBeGreaterThanOrEqual(-1);
+    expect(layout.hero.top).toBeLessThanOrEqual(170);
+    if (viewport.height >= 450) {
+      expect(layout.current.top).toBeLessThan(layout.innerHeight);
+    }
+    expect(layout.actionControl.width).toBeGreaterThanOrEqual(40);
+    expect(layout.actionControl.height).toBeGreaterThanOrEqual(40);
+
+    if (viewport.width >= 1000) {
+      expect(layout.action.bottom).toBeLessThanOrEqual(layout.innerHeight);
+      expect(layout.weekly.top).toBeLessThan(layout.innerHeight);
+    } else if (viewport.height >= 640) {
+      expect(layout.action.top).toBeLessThan(layout.innerHeight + 160);
+    }
+
+    await forecastScroll.scrollIntoViewIfNeeded();
+    if (viewport.width <= 720) {
+      await expect.poll(() => forecastScroll.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      )).toBe(true);
+    }
+    await expectNoHorizontalOverflow(page);
+
+    const rail = page.getByRole("complementary", { name: "主导航" });
+    await expect(rail).toBeVisible();
+    if (viewport.height <= 450) await expectInViewport(rail);
+
+    if (viewport.width <= 720) {
+      await expect(actionButton).toBeVisible();
+      const touchTargets = [
+        metrics.locator(":scope > summary"),
+        analysis.locator(":scope > summary"),
+        page.locator(".activity-range").getByRole("button", { name: "20 周" }),
+        page.locator(".activity-range").getByRole("button", { name: "半年" }),
+        page.locator(".activity-range").getByRole("button", { name: "一年" }),
+        page.locator(".activity-nav").getByRole("button", { name: "查看更早日期" }),
+        page.locator(".activity-nav").getByRole("button", { name: "查看更近日期" }),
+        page.locator(".concentration-sprint").first(),
+      ];
+      for (const target of touchTargets) {
+        await target.scrollIntoViewIfNeeded();
+        const size = await target.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return { width: rect.width, height: rect.height };
+        });
+        expect(size.width).toBeGreaterThanOrEqual(39);
+        expect(size.height).toBeGreaterThanOrEqual(39);
+      }
+    }
+
+    if (viewport.height <= 450) {
+      for (const details of [metrics, analysis]) {
+        const summary = details.locator(":scope > summary");
+        await summary.scrollIntoViewIfNeeded();
+        await summary.click();
+        await expect.poll(() => details.evaluate((element) => element.open)).toBe(true);
+        await summary.click();
+        await expect.poll(() => details.evaluate((element) => element.open)).toBe(false);
+      }
+      await rail.getByRole("button", { name: /学习/ }).click();
+      await expect(page.locator(".learn-view")).toBeVisible();
+    }
+  }
 });
 
 test("200% 与 400% 等效布局视口下核心导航与 AI 教练可操作", async ({ context, page }) => {
