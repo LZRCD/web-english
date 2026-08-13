@@ -549,6 +549,7 @@ test("触屏划词可打开弹窗，Escape 关闭后恢复原焦点", async ({ c
   await installStateSeed(context, createState({
     enrichments: RADIATE_ENRICHMENT,
   }));
+  await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   const wordFace = page.getByRole("button", { name: "显示单词释义" });
   await wordFace.click();
@@ -564,6 +565,24 @@ test("触屏划词可打开弹窗，Escape 关闭后恢复原焦点", async ({ c
 
   const popup = page.getByRole("dialog", { name: "划词查询：radiate" });
   await expect(popup).toHaveAttribute("aria-modal", "true");
+  await popup.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  const popupGeometry = await popup.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const transform = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+    return {
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+      transformX: transform.m41,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(popupGeometry.left).toBeGreaterThanOrEqual(11);
+  expect(popupGeometry.right).toBeLessThanOrEqual(popupGeometry.viewportWidth - 11);
+  expect(popupGeometry.transformX)
+    .toBeCloseTo(-popupGeometry.width / 2, 0);
   await expect(popup.getByRole("button", { name: "关闭划词查询" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(popup).toHaveCount(0);
