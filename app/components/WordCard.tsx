@@ -318,6 +318,7 @@ export default function WordCard({
       <div
         className="meaning-panel study-detail"
         ref={wordCardRef as RefObject<HTMLDivElement | null>}
+        tabIndex={-1}
         onMouseUp={onTextSelection}
         onPointerUp={(event) => {
           if (event.pointerType !== "mouse") onTextSelection(event);
@@ -334,7 +335,7 @@ export default function WordCard({
                 onReveal();
                 onSpeak();
               }}
-              aria-label="显示单词释义"
+              aria-label="播放发音"
               title={`播放 ${current.word} 的发音`}
             >
               <h1 className="detail-word">{current.word}</h1>
@@ -366,16 +367,18 @@ export default function WordCard({
               </button>
             </div>
           </div>
-          <p className="detail-summary-status">
-            {statusParts.map((part, index) => (
-              <span key={part.text}>
-                {index > 0 && " · "}
-                {part.highlight
-                  ? <b className="detail-status-due">{part.text}</b>
-                  : part.text}
-              </span>
-            ))}
-          </p>
+          {statusParts.length > 0 && (
+            <p className="detail-summary-status">
+              {statusParts.map((part, index) => (
+                <span key={part.text}>
+                  {index > 0 && " · "}
+                  {part.highlight
+                    ? <b className="detail-status-due">{part.text}</b>
+                    : part.text}
+                </span>
+              ))}
+            </p>
+          )}
         </header>
 
         {/* 划词补漏 / 回忆统计 / 薄弱信号：状态提示 */}
@@ -497,67 +500,71 @@ export default function WordCard({
 
         {/* 2. 释义与例句 */}
         <section className="detail-section detail-definition" aria-label="释义与例句">
-          {guessFeedback?.kind === "correct" && (
-            <p className="guess-correct">
-              {guessFeedback.matched
-                ? `猜中了「${guessFeedback.matched}」，看下完整释义确认`
-                : "猜中了，看下完整释义确认"}
-            </p>
-          )}
-          <div className="meaning-main">
-            {currentSenses.map((sense) => (
-              <div className="meaning-row" key={sense.part}>
-                <span>{sense.part}</span>
-                <div className="meaning-sense-list">
-                  {splitSenseItems(sense.meaning).map((meaning, senseIndex) => {
-                    const familiar = currentFamiliarMeanings.has(meaning);
-                    const frequency = currentSenseFrequency?.find(
-                      (entry) => entry.meaning === meaning,
-                    );
-                    // 核心义以 AI 考频为据：仅真题高频常考义（high）才标注，无考频时不显示
-                    const isCore = frequency?.level === "high";
-                    return (
-                      <button
-                        type="button"
-                        className={[
-                          "meaning-sense",
-                          familiar && "familiar",
-                          isCore && "sense-frequency-highlight",
-                        ].filter(Boolean).join(" ")}
-                        key={meaning}
-                        onClick={() => onToggleMeaningFamiliar(meaning)}
-                        aria-pressed={familiar}
-                        title={familiar ? "取消熟练标记" : "标记为熟练义项"}
-                      >
-                        <span className="sense-index">{senseIndex + 1}</span>
-                        {meaning}
-                        {frequency && (
-                          <small className={`sense-frequency ${frequency.level}`}>
-                            {frequencyLabel(frequency.level)}
-                          </small>
-                        )}
-                        {isCore && (
-                          <small className="sense-core">核心义</small>
-                        )}
-                        {familiar && <small>✓ 熟练</small>}
-                        {frequency?.note && (
-                          <em className="sense-frequency-note">{frequency.note}</em>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+          {(!hideSenses || sensesExpanded) && (
+            <>
+              {guessFeedback?.kind === "correct" && (
+                <p className="guess-correct">
+                  {guessFeedback.matched
+                    ? `猜中了「${guessFeedback.matched}」，看下完整释义确认`
+                    : "猜中了，看下完整释义确认"}
+                </p>
+              )}
+              <div className="meaning-main">
+                {currentSenses.map((sense) => (
+                  <div className="meaning-row" key={sense.part}>
+                    <span>{sense.part}</span>
+                    <div className="meaning-sense-list">
+                      {splitSenseItems(sense.meaning).map((meaning, senseIndex) => {
+                        const familiar = currentFamiliarMeanings.has(meaning);
+                        const frequency = currentSenseFrequency?.find(
+                          (entry) => entry.meaning === meaning,
+                        );
+                        // 核心义以 AI 考频为据：仅真题高频常考义（high）才标注，无考频时不显示
+                        const isCore = frequency?.level === "high";
+                        return (
+                          <button
+                            type="button"
+                            className={[
+                              "meaning-sense",
+                              familiar && "familiar",
+                              isCore && "sense-frequency-highlight",
+                            ].filter(Boolean).join(" ")}
+                            key={meaning}
+                            onClick={() => onToggleMeaningFamiliar(meaning)}
+                            aria-pressed={familiar}
+                            title={familiar ? "取消熟练标记" : "标记为熟练义项"}
+                          >
+                            <span className="sense-index">{senseIndex + 1}</span>
+                            {meaning}
+                            {frequency && (
+                              <small className={`sense-frequency ${frequency.level}`}>
+                                {frequencyLabel(frequency.level)}
+                              </small>
+                            )}
+                            {isCore && (
+                              <small className="sense-core">核心义</small>
+                            )}
+                            {familiar && <small>✓ 熟练</small>}
+                            {frequency?.note && (
+                              <em className="sense-frequency-note">{frequency.note}</em>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          {hideSenses && sensesExpanded && (
-            <button
-              type="button"
-              className="meaning-collapse"
-              onClick={() => setSensesExpanded(false)}
-            >
-              收起释义
-            </button>
+              {hideSenses && sensesExpanded && (
+                <button
+                  type="button"
+                  className="meaning-collapse"
+                  onClick={() => setSensesExpanded(false)}
+                >
+                  收起释义
+                </button>
+              )}
+            </>
           )}
 
           {kaoyanExamples.length > 0 && (

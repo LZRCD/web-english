@@ -303,3 +303,24 @@ test("全书乱序与本地状态保存已接入学习流程", async () => {
   assert.match(enrich, /collocations/);
   assert.doesNotMatch(page, /CET-6|IELTS|GRE|示例词表|算法动态安排/);
 });
+
+test("详情态保留释义隐藏门控与焦点语义", async () => {
+  const wordCard = await readFile(
+    new URL("../app/components/WordCard.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    wordCard,
+    /className="meaning-panel study-detail"[\s\S]*?tabIndex=\{-1\}/,
+  );
+  assert.match(wordCard, /aria-label="播放发音"/);
+  assert.match(
+    wordCard,
+    /statusParts\.length > 0 && \(\s*<p className="detail-summary-status">/,
+  );
+  assert.match(
+    wordCard,
+    /\{\(!hideSenses \|\| sensesExpanded\) && \(\s*<>\s*\{guessFeedback\?\.kind === "correct"[\s\S]*?<div className="meaning-main">[\s\S]*?className="meaning-collapse"[\s\S]*?收起释义[\s\S]*?<\/\>\s*\)\}\s*\{kaoyanExamples\.length/,
+  );
+});
