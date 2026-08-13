@@ -527,10 +527,24 @@ export default function HistoryView({
               <small>未来 30 天 {forecastTotal} 词</small>
             </div>
             <div className="forecast-summary" aria-label="未来排程摘要">
-              <span>当前已到期 <strong>{stats.dueCount}</strong></span>
-              <span>今天及逾期排程桶 <strong>{reviewForecast[0]?.count ?? 0}</strong></span>
-              <span>未来 7 个本地日桶合计 <strong>{forecastWeekCount}</strong></span>
-              <span>{nextForecastPeak ? `下一个未来峰值 ${nextForecastPeak.date} · ${nextForecastPeak.count} 词` : "未来暂无排程峰值"}</span>
+              <div className="forecast-summary-item">
+                <span>当前已到期</span>
+                <strong>{stats.dueCount}</strong>
+              </div>
+              <div className="forecast-summary-item">
+                <span>今日待复习（含逾期）</span>
+                <strong>{reviewForecast[0]?.count ?? 0}</strong>
+              </div>
+              <div className="forecast-summary-item">
+                <span>今起 7 个自然日待复习</span>
+                <strong>{forecastWeekCount}</strong>
+              </div>
+              <div className="forecast-summary-item">
+                <span>下一个复习高峰</span>
+                <strong className="forecast-peak">
+                  {nextForecastPeak ? `${nextForecastPeak.date} · ${nextForecastPeak.count} 词` : "未来暂无排程峰值"}
+                </strong>
+              </div>
             </div>
             <div
               className="forecast-scroll"
@@ -727,15 +741,15 @@ export default function HistoryView({
             </div>
           ) : (
           <div className="activity-body">
-          <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日背诵数量`}>
+          <div className="activity-grid" aria-label={`${activityRangeLabels[activityRange]}每日不同单词数`}>
             {activityDays.map((day, index) => (
               <button
                 type="button"
                 id={`activity-${day.date}`}
                 key={day.date}
                 className={`activity-cell level-${day.level}${day.date === todayKey ? " today" : ""}${day.date === selectedActivityDate ? " selected" : ""}`}
-                title={`${day.date} · ${day.count} 词`}
-                aria-label={`${day.date}，背诵 ${day.count} 个单词`}
+                title={`${day.date} · 学习 ${day.count} 个不同单词`}
+                aria-label={`${day.date}，学习 ${day.count} 个不同单词`}
                 aria-pressed={day.date === selectedActivityDate}
                 tabIndex={day.date === activityTabDate ? 0 : -1}
                 onKeyDown={(event) => moveActivityFocus(event, index)}
@@ -775,7 +789,7 @@ export default function HistoryView({
                 <strong>{selectedActivityDate.replaceAll("-", ".")}</strong>
                 <span>
                   {selectedDayReviews.length
-                    ? `${selectedDayNewCount} 新学 · ${selectedDayEvents.length - selectedDayNewCount} 复习 · ${selectedDayReviews.length} 个不同单词 · ${selectedWeakCount} 个薄弱`
+                    ? `${selectedDayNewCount} 次新学 · ${selectedDayEvents.length - selectedDayNewCount} 次复习 · ${selectedDayReviews.length} 个不同单词 · ${selectedWeakCount} 个薄弱`
                     : "当天没有学习记录"}
                 </span>
               </div>
@@ -819,11 +833,13 @@ export default function HistoryView({
       </div>
 
       <details className="metrics-details" aria-label="近 7 日详细指标">
-        <summary>近 7 日详细指标<span>评分、保持与学习量</span></summary>
-      <section className="insights-panel" aria-labelledby="insights-title">
+        <summary>
+          <span id="insights-title">近 7 日详细指标</span>
+          <span>评分、保持与学习量</span>
+        </summary>
+      <section className="insights-panel" aria-labelledby="insights-title insights-window-note">
         <div className="panel-title">
-          <h2 id="insights-title">近 7 日详细指标</h2>
-          <small>近 7 天截至目前</small>
+          <h2 id="insights-window-note">近 7 天截至目前</h2>
         </div>
         <div className="insights-grid">
           <div className="insight-card">

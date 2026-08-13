@@ -3084,16 +3084,21 @@ select:focus-visible {
   overflow-x: auto;
 }
 
-/* 热力图约 75% + 右侧长期摘要，消除右侧大片空白 */
+/* 热力图 + 右侧摘要组成内容尺寸驱动的居中组；
+   宽度超出容器时只在 .activity-scroll 内部横向滚动 */
 .activity-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  gap: 30px;
+  grid-template-columns: max-content max-content;
+  justify-content: center;
   align-items: start;
+  gap: clamp(16px, 5vw, 120px);
+  width: max-content;
+  margin-inline: auto;
 }
 
 .activity-summary {
   display: grid;
+  width: 190px;
 }
 
 .activity-summary > div {
@@ -3163,6 +3168,16 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+.activity-cell:focus-visible {
+  outline: 3px solid #25845f;
+  outline-offset: 2px;
+}
+
+.activity-controls button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
 .activity-cell.level-1,
 .activity-legend i.level-1 { background: #cfeedd; }
 .activity-cell.level-2,
@@ -3177,7 +3192,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin: 14px 0 0 auto;
+  margin: 14px auto 0;
   color: #959c94;
   font-size: 9px;
 }
@@ -3216,13 +3231,27 @@ select:focus-visible {
 }
 
 .activity-detail-head > button {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  flex: none;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: transparent;
   color: #858d85;
+  font-size: 18px;
   cursor: pointer;
+}
+
+.activity-detail-head > button:hover {
+  color: var(--ink);
+  border-color: #b9c2bb;
+}
+
+.activity-detail-head > button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
 }
 
 .activity-word-list {
@@ -4021,14 +4050,46 @@ kbd {
 .weekly-conclusion p { margin: 0; font-weight: 700; }
 .weekly-conclusion small { color: var(--muted); }
 
+/* 未来排程摘要：四个语义单元独立成卡；
+   宽屏四列、中等视口两列、窄屏单列，互不交叠 */
 .forecast-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 22px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
   margin: 14px 0;
   color: var(--muted);
 }
-.forecast-summary strong { color: var(--ink); font-size: 1.2rem; }
+.forecast-summary-item {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(54, 84, 67, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+.forecast-summary-item span {
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.forecast-summary-item strong {
+  min-width: 0;
+  color: var(--ink);
+  font: 400 22px/1.15 Georgia, serif;
+  overflow-wrap: anywhere;
+}
+.forecast-summary-item .forecast-peak {
+  font-size: 16px;
+  line-height: 1.35;
+}
+@media (max-width: 980px) {
+  .forecast-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .forecast-summary { grid-template-columns: minmax(0, 1fr); }
+}
 
 .metrics-details > summary,
 .trace-details > summary {
@@ -4041,7 +4102,7 @@ kbd {
   gap: 12px;
   font-weight: 750;
 }
-.metrics-details > summary span { color: var(--muted); font-size: .82rem; font-weight: 500; }
+.metrics-details > summary span + span { color: var(--muted); font-size: .82rem; font-weight: 500; }
 .metrics-details .insights-panel { margin-top: 16px; }
 
 @media (max-width: 640px) {
@@ -5571,11 +5632,13 @@ kbd {
   }
 
   .activity-body {
-    grid-template-columns: 1fr;
-    gap: 16px;
+    grid-template-columns: max-content;
+    justify-items: center;
+    gap: 18px;
   }
 
   .activity-summary {
+    width: auto;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -6622,7 +6685,7 @@ kbd {
 }
 
 .weak-concentration-count small {
-  margin-left: 3px;
+  margin-left: 0;
   color: #858d85;
   font-size: 10px;
 }
@@ -6741,10 +6804,10 @@ kbd {
 }
 .weak-concentration-row {
   position: relative;
-  /* 四列固定宽度：标签 / 轨道 / 百分比 / 按钮。所有行共用同一套列，
-     轨道列宽度由列定义决定，任何行的轨道长度都完全一致。 */
+  /* 四列固定：标签 / 轨道 / 数量说明 / 按钮。侧列固定宽度保证所有行
+     轨道起点与终点完全一致；数量说明允许自然换行，不会越过自身列。 */
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) 64px 96px;
+  grid-template-columns: 96px minmax(0, 1fr) 190px 96px;
   align-items: center;
   column-gap: 16px;
   padding: 7px 0;
@@ -6768,9 +6831,13 @@ kbd {
   background: linear-gradient(90deg, #f0b27a, #c36f52);
 }
 .weak-concentration-count {
+  display: grid;
   justify-self: end;
+  justify-items: end;
+  gap: 2px;
   text-align: right;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
   color: #27352e;
   font: 400 15px/1 Georgia, serif;
@@ -6786,7 +6853,7 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
-  max-width: 400px;
+  max-width: min(400px, 100%);
   padding: 8px 10px;
   border: 1px solid rgba(218, 226, 220, 0.9);
   border-radius: 10px;
@@ -6804,6 +6871,35 @@ kbd {
 .weak-concentration-row:hover .weak-concentration-units {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 窄屏三行布局：第一行分册名 + 复习按钮；第二行完整进度条；第三行数量与两种比例 */
+@media (max-width: 640px) {
+  .weak-concentration-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 9px;
+  }
+  .weak-concentration-label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .weak-concentration-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .weak-concentration-count {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    justify-items: start;
+    text-align: left;
+  }
+  .weak-concentration-row > .concentration-sprint {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
 }
 
 /* ---- 信号联动二轮：例句来源词跳转 / 回忆耗时 ---- */

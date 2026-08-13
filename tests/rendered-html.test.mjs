@@ -352,3 +352,35 @@ test("轨迹页源码顺序与渐进披露边界不依赖 CSS order", async () =
     /(?:\.current-status|\.weekly-report|\.forecast-panel|\.weak-concentration|\.activity-panel|\.history-panel|\.metrics-details|\.trace-details)\s*\{\s*order:/,
   );
 });
+
+test("轨迹页排程摘要、日历语义与详细指标标题去重结构守卫", async () => {
+  const [historyView, styles] = await Promise.all([
+    readFile(new URL("../app/components/HistoryView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  // 未来排程摘要：四个独立语义单元 + 更新后的标签文案
+  assert.match(historyView, /className="forecast-summary-item"/);
+  assert.match(historyView, /当前已到期/);
+  assert.match(historyView, /今日待复习（含逾期）/);
+  assert.match(historyView, /今起 7 个自然日待复习/);
+  assert.match(historyView, /下一个复习高峰/);
+
+  // 详细指标：summary 保留唯一标题，展开区不再有同名 h2，
+  // section 通过 aria-labelledby 引用标题与时间窗口说明
+  assert.match(historyView, /<span id="insights-title">近 7 日详细指标<\/span>/);
+  assert.match(historyView, /aria-labelledby="insights-title insights-window-note"/);
+  assert.match(historyView, /<h2 id="insights-window-note">近 7 天截至目前<\/h2>/);
+  assert.doesNotMatch(historyView, /<h2 id="insights-title">/);
+
+  // 日历格子诚实表达“不同单词数”，日期详情区分事件数与不同单词数
+  assert.match(historyView, /学习 \$\{day\.count\} 个不同单词/);
+  assert.match(historyView, /个不同单词 · \$\{selectedWeakCount\} 个薄弱/);
+
+  // 布局与可访问样式守卫
+  assert.match(styles, /\.forecast-summary \{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.activity-body \{[\s\S]*?grid-template-columns: max-content max-content/);
+  assert.match(styles, /\.activity-cell:focus-visible \{/);
+  assert.match(styles, /\.weak-concentration-row \{[\s\S]*?grid-template-columns: 96px minmax\(0, 1fr\) 190px 96px/);
+  assert.match(styles, /\.activity-detail-head > button \{[\s\S]*?width: 40px/);
+});

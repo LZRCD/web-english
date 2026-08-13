@@ -191,6 +191,60 @@ export async function readStoreCount(page, storeName) {
   );
 }
 
+export async function readStoreSnapshot(page, storeName) {
+  return page.evaluate(
+    ({ databaseName, requestedStore }) =>
+      new Promise((resolve, reject) => {
+        const openRequest = globalThis.indexedDB.open(databaseName);
+        openRequest.onerror = () => reject(openRequest.error);
+        openRequest.onsuccess = () => {
+          const database = openRequest.result;
+          if (
+            requestedStore !== "backups"
+            && database.objectStoreNames.contains("state-domains")
+          ) {
+            const transaction = database.transaction("state-domains", "readonly");
+            const request = transaction.objectStore("state-domains").get(requestedStore);
+            request.onerror = () => {
+              database.close();
+              reject(request.error);
+            };
+            request.onsuccess = () => {
+              const snapshot = request.result?.value ?? null;
+              transaction.oncomplete = () => {
+                database.close();
+                resolve(snapshot);
+              };
+            };
+            return;
+          }
+          if (!database.objectStoreNames.contains(requestedStore)) {
+            database.close();
+            resolve(null);
+            return;
+          }
+          const transaction = database.transaction(requestedStore, "readonly");
+          const request = transaction.objectStore(requestedStore).getAll();
+          request.onerror = () => {
+            database.close();
+            reject(request.error);
+          };
+          request.onsuccess = () => {
+            const snapshot = request.result ?? null;
+            transaction.oncomplete = () => {
+              database.close();
+              resolve(snapshot);
+            };
+          };
+        };
+      }),
+    {
+      databaseName: DATABASE_NAME,
+      requestedStore: storeName,
+    },
+  );
+}
+
 export async function waitForApp(page, { expectIndexedDb = true } = {}) {
   await expect(
     page.getByRole("button", { name: "显示单词释义" }),

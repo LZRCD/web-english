@@ -727,3 +727,348 @@ test("详情态学习工具栏与 960px 内容轴左缘对齐且不扩成宽卡"
     await page.reload();
   }
 });
+
+/* ---------- 轨迹页几何验收 ---------- */
+
+function rectsOverlap(first, second) {
+  return first && second
+    && first.left < second.right - 1
+    && second.left < first.right - 1
+    && first.top < second.bottom - 1
+    && second.top < first.bottom - 1;
+}
+
+function geometryDaysAgo(days, hour = 12) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+}
+
+function geometryRedbookWords() {
+  const words = [];
+  for (let id = 1; id <= 12; id += 1) {
+    words.push({
+      id,
+      word: `weak-${id}`,
+      phonetic: "/test/",
+      meaning: "v. 测试",
+      section: "必考词",
+      unit: 1,
+    });
+  }
+  for (let id = 21; id <= 23; id += 1) {
+    words.push({
+      id,
+      word: `weak-${id}`,
+      phonetic: "/test/",
+      meaning: "n. 测试",
+      section: "基础词",
+      unit: 1,
+    });
+  }
+  return words;
+}
+
+function geometryWeakReviews() {
+  const reviews = [];
+  for (let wordId = 1; wordId <= 12; wordId += 1) {
+    reviews.push({
+      id: `geo-w${wordId}`,
+      wordId,
+      word: `weak-${wordId}`,
+      rating: wordId % 2 === 0 ? 0 : 1,
+      kind: "review",
+      intervalMs: 86_400_000,
+      dueAt: geometryDaysAgo(-1, 9),
+      reviewedAt: geometryDaysAgo((wordId % 3) + 1, 8),
+      section: "必考词",
+      unit: 1,
+    });
+  }
+  for (const wordId of [21, 22, 23]) {
+    reviews.push({
+      id: `geo-w${wordId}`,
+      wordId,
+      word: `weak-${wordId}`,
+      rating: 0,
+      kind: "review",
+      intervalMs: 86_400_000,
+      dueAt: geometryDaysAgo(-1, 9),
+      reviewedAt: geometryDaysAgo((wordId % 3) + 1, 8),
+      section: "基础词",
+      unit: 1,
+    });
+  }
+  return reviews;
+}
+
+function geometryLookupSeed() {
+  const lookupWords = [];
+  const lookupStats = {};
+  const ids = [...Array.from({ length: 12 }, (_, index) => index + 1), 21, 22, 23];
+  for (const wordId of ids) {
+    lookupWords.push({
+      id: 9_000_000_000 + wordId,
+      linkedWordId: wordId,
+      query: `weak-${wordId}`,
+      kind: "word",
+      phonetic: "/test/",
+      part: "v.",
+      meaning: "测试",
+      note: "",
+      source: "redbook",
+      addedAt: geometryDaysAgo(6, 8),
+    });
+    lookupStats[`weak-${wordId}`] = {
+      count: 3,
+      firstAt: geometryDaysAgo(7, 8),
+      lastAt: geometryDaysAgo(1, 8),
+    };
+  }
+  return { lookupWords, lookupStats };
+}
+
+function geometryForecastProgress() {
+  const base = (wordId, nextDueAt) => ({
+    wordId,
+    status: "reviewing",
+    firstLearnedAt: geometryDaysAgo(7, 8),
+    lastReviewedAt: geometryDaysAgo(7, 8),
+    nextDueAt,
+    lastRating: 2,
+    reviewCount: 1,
+    successCount: 1,
+    lapseCount: 0,
+    consecutiveSuccesses: 1,
+    intervalMs: 7 * 86_400_000,
+    fsrsCard: {
+      due: nextDueAt,
+      stability: 7,
+      difficulty: 5,
+      elapsedDays: 1,
+      scheduledDays: 7,
+      learningSteps: 0,
+      reps: 1,
+      lapses: 0,
+      state: 2,
+      lastReview: geometryDaysAgo(7, 8),
+    },
+  });
+  return {
+    101: base(101, geometryDaysAgo(-2, 9)),
+    102: base(102, geometryDaysAgo(0, 23)),
+    103: base(103, geometryDaysAgo(-1, 9)),
+    104: base(104, geometryDaysAgo(-20, 9)),
+    105: base(105, geometryDaysAgo(-29, 9)),
+  };
+}
+
+async function traceGeometry(page) {
+  return page.evaluate(() => {
+    const rect = (element) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left,
+        top: box.top,
+        right: box.right,
+        bottom: box.bottom,
+        width: box.width,
+        height: box.height,
+      };
+    };
+    const scroll = document.querySelector(".activity-scroll");
+    const forecastItems = [...document.querySelectorAll(".forecast-summary-item")]
+      .map((item) => ({
+        rect: rect(item),
+        clipped: item.scrollWidth > item.clientWidth + 1,
+        hasLabel: Boolean(item.querySelector("span")?.textContent?.trim()),
+        hasValue: Boolean(item.querySelector("strong")?.textContent?.trim()),
+      }));
+    const weakRows = [...document.querySelectorAll(".weak-concentration-row")]
+      .map((row) => {
+        const countElement = row.querySelector(".weak-concentration-count");
+        return {
+          label: rect(row.querySelector(".weak-concentration-label")),
+          track: rect(row.querySelector(".weak-concentration-track")),
+          count: rect(countElement),
+          sprint: rect(row.querySelector(".concentration-sprint")),
+          countClipped: countElement
+            ? countElement.scrollWidth > countElement.clientWidth + 1
+            : true,
+          countText: row.querySelector(".weak-concentration-count small")?.textContent ?? "",
+        };
+      });
+    return {
+      documentWidth: document.documentElement.clientWidth,
+      documentScroll: document.documentElement.scrollWidth,
+      bodyScroll: document.body.scrollWidth,
+      innerWidth: window.innerWidth,
+      forecastItems,
+      weakRows,
+      grid: rect(document.querySelector(".activity-grid")),
+      summary: rect(document.querySelector(".activity-summary")),
+      scroll: rect(scroll),
+      scrollOverflow: scroll ? scroll.scrollWidth > scroll.clientWidth + 1 : false,
+    };
+  });
+}
+
+test("轨迹页排程摘要、薄弱集中区与背诵日历九个视口不交叠且无页面级横向溢出", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  await page.route("**/data/redbook.json*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      metadata: {
+        title: "2027考研英语红宝书",
+        total: 15,
+        sectionCounts: { 必考词: 12, 基础词: 3, 超纲词: 0 },
+      },
+      words: geometryRedbookWords(),
+    }),
+  }));
+  await installStateSeed(context, createState({
+    reviews: geometryWeakReviews(),
+    wordProgress: geometryForecastProgress(),
+    ...geometryLookupSeed(),
+  }));
+  await openApp(page);
+  await page
+    .getByRole("complementary", { name: "主导航" })
+    .getByRole("button", { name: /轨迹/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "本周学习报告" })).toBeVisible();
+
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 880 },
+    { width: 1440, height: 900 },
+    { width: 1180, height: 820 },
+    { width: 820, height: 1180 },
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+    { width: 720, height: 450 },
+    { width: 360, height: 225 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    const geometry = await traceGeometry(page);
+
+    // 页面级无横向溢出
+    expect(geometry.documentScroll, `${viewport.width}px document`)
+      .toBeLessThanOrEqual(geometry.documentWidth + 2);
+    expect(geometry.bodyScroll, `${viewport.width}px body`)
+      .toBeLessThanOrEqual(geometry.innerWidth + 2);
+
+    // 未来排程摘要：恰好四个语义单元、互不交叠、标签与数值完整
+    expect(geometry.forecastItems, `${viewport.width}px 摘要单元`).toHaveLength(4);
+    for (const item of geometry.forecastItems) {
+      expect(item.clipped, `${viewport.width}px 摘要裁切`).toBe(false);
+      expect(item.hasLabel, `${viewport.width}px 摘要标签`).toBe(true);
+      expect(item.hasValue, `${viewport.width}px 摘要数值`).toBe(true);
+    }
+    for (let first = 0; first < geometry.forecastItems.length; first += 1) {
+      for (let second = first + 1; second < geometry.forecastItems.length; second += 1) {
+        expect(
+          rectsOverlap(geometry.forecastItems[first].rect, geometry.forecastItems[second].rect),
+          `${viewport.width}px 摘要交叠`,
+        ).toBe(false);
+      }
+    }
+    const rowTops = new Set(geometry.forecastItems.map((item) => Math.round(item.rect.top)));
+    if (viewport.width > 980) {
+      expect(rowTops.size, `${viewport.width}px 四列`).toBe(1);
+    } else if (viewport.width > 560) {
+      expect(rowTops.size, `${viewport.width}px 两列`).toBe(2);
+    } else {
+      expect(rowTops.size, `${viewport.width}px 单列`).toBe(4);
+    }
+
+    // 薄弱集中区：进度条、数量说明、复习按钮互不交叠且完整可见
+    expect(geometry.weakRows, `${viewport.width}px 薄弱行`).toHaveLength(2);
+    for (const row of geometry.weakRows) {
+      expect(row.countClipped, `${viewport.width}px 薄弱说明裁切`).toBe(false);
+      expect(row.countText).toContain("贡献占比");
+      expect(row.countText).toContain("分册内薄弱率");
+      expect(row.sprint.width).toBeGreaterThanOrEqual(39);
+      expect(row.sprint.height).toBeGreaterThanOrEqual(39);
+      expect(rectsOverlap(row.count, row.track), `${viewport.width}px 说明压进度条`).toBe(false);
+      expect(rectsOverlap(row.count, row.sprint), `${viewport.width}px 说明压按钮`).toBe(false);
+      expect(rectsOverlap(row.track, row.sprint), `${viewport.width}px 进度条压按钮`).toBe(false);
+    }
+    if (viewport.width > 640) {
+      const [firstRow, secondRow] = geometry.weakRows;
+      expect(Math.abs(firstRow.track.left - secondRow.track.left),
+        `${viewport.width}px 轨道左对齐`).toBeLessThanOrEqual(2);
+      expect(Math.abs(firstRow.track.right - secondRow.track.right),
+        `${viewport.width}px 轨道右对齐`).toBeLessThanOrEqual(2);
+    } else {
+      // 窄屏：数量说明移至进度条下方
+      for (const row of geometry.weakRows) {
+        expect(row.count.top, `${viewport.width}px 说明在轨道下方`)
+          .toBeGreaterThanOrEqual(row.track.bottom - 1);
+      }
+    }
+
+    // 背诵日历：热力图与摘要组成紧凑内容组，互不交叠
+    expect(geometry.grid, `${viewport.width}px 热力图`).toBeTruthy();
+    expect(geometry.summary, `${viewport.width}px 摘要`).toBeTruthy();
+    expect(rectsOverlap(geometry.grid, geometry.summary), `${viewport.width}px 日历交叠`).toBe(false);
+    if (viewport.width > 820) {
+      const gap = geometry.summary.left - geometry.grid.right;
+      expect(gap, `${viewport.width}px 日历间距`).toBeGreaterThanOrEqual(14);
+      expect(gap, `${viewport.width}px 日历间距`).toBeLessThanOrEqual(122);
+      const leftGap = geometry.grid.left - geometry.scroll.left;
+      const rightGap = geometry.scroll.right - geometry.summary.right;
+      expect(Math.abs(leftGap - rightGap), `${viewport.width}px 日历居中`).toBeLessThanOrEqual(40);
+    } else {
+      // 移动端：摘要排到热力图下方且不被裁切
+      expect(geometry.summary.top, `${viewport.width}px 摘要下移`)
+        .toBeGreaterThanOrEqual(geometry.grid.bottom - 1);
+      expect(geometry.summary.right, `${viewport.width}px 摘要右缘`)
+        .toBeLessThanOrEqual(geometry.documentWidth + 1);
+      await expect(
+        page.locator(".activity-nav").getByRole("button", { name: "查看更早日期" }),
+      ).toBeVisible();
+    }
+  }
+
+  // 140 / 182 / 365 天在桌面与移动视口均不产生页面级横向溢出，仅日历内部滚动
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    for (const [label, expected] of [["20 周", 140], ["半年", 182], ["一年", 365]]) {
+      await page.locator(".activity-range").getByRole("button", { name: label }).click();
+      await expect(page.locator(".activity-cell")).toHaveCount(expected);
+      const widths = await page.evaluate(() => ({
+        documentScroll: document.documentElement.scrollWidth,
+        documentWidth: document.documentElement.clientWidth,
+        bodyScroll: document.body.scrollWidth,
+        innerWidth: window.innerWidth,
+      }));
+      expect(widths.documentScroll, `${label}@${viewport.width} document`)
+        .toBeLessThanOrEqual(widths.documentWidth + 2);
+      expect(widths.bodyScroll, `${label}@${viewport.width} body`)
+        .toBeLessThanOrEqual(widths.innerWidth + 2);
+    }
+  }
+
+  // 悬停单元明细：浮层不越出视口且不造成页面级横向溢出
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator(".activity-range").getByRole("button", { name: "20 周" }).click();
+  const firstRow = page.locator(".weak-concentration-row").first();
+  await firstRow.hover();
+  const units = firstRow.locator(".weak-concentration-units");
+  await expect.poll(() => units.evaluate((element) => getComputedStyle(element).opacity))
+    .toBe("1");
+  const overlay = await units.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right };
+  });
+  const documentWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(overlay.left).toBeGreaterThanOrEqual(-1);
+  expect(overlay.right).toBeLessThanOrEqual(documentWidth + 1);
+  await expectNoHorizontalOverflow(page);
+});

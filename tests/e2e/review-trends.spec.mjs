@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createState } from "./fixtures.mjs";
-import { installStateSeed, openApp } from "./helpers.mjs";
+import {
+  installStateSeed,
+  openApp,
+  readStoreCount,
+  readStoreSnapshot,
+} from "./helpers.mjs";
 
 function localWeekStart() {
   const date = new Date();
@@ -447,4 +452,270 @@ test("复习图表：320px 与小高度等效视口下可访问且不撑破页�
     await disclosure.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
     await expect(disclosure).toBeVisible();
   }
+});
+
+/* ---------- 背诵日历专项 ---------- */
+
+/** 本地日中安全时刻（12:30），避免 UTC/本地日期边界漂移 */
+function localCalendarTime(daysBefore, hour = 12, minute = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysBefore);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
+/** 本地今天内的安全时刻：本地午夜后 offsetMinutes 分钟；
+    若尚未到该时刻则退回当前时刻，保证绝不晚于“现在”。 */
+function localTodaySafeTime(offsetMinutes) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const candidate = new Date(start.getTime() + offsetMinutes * 60_000);
+  return (candidate.getTime() < now.getTime() ? candidate : now).toISOString();
+}
+
+function calendarReview(id, wordId, word, rating, kind, reviewedAt, extra = {}) {
+  return {
+    id,
+    wordId,
+    word,
+    rating,
+    kind,
+    intervalMs: 86_400_000,
+    dueAt: localCalendarTime(-1, 9),
+    reviewedAt,
+    section: "必考词",
+    unit: 1,
+    ...extra,
+  };
+}
+
+/** 今天：同词两次评分（0→3）＋1 复习；昨天：1 新学＋2 复习（1 薄弱）；
+ *  前天留空；3 天前：2 复习（1 薄弱）。 */
+function calendarSeedReviews() {
+  return [
+    calendarReview("cal-today-a-1", 1, "calibrate", 0, "new", localTodaySafeTime(1)),
+    calendarReview("cal-today-a-2", 1, "calibrate", 3, "new", localTodaySafeTime(2)),
+    calendarReview("cal-today-f", 6, "fabricate", 2, "review", localTodaySafeTime(3)),
+    calendarReview("cal-yes-b", 2, "boycott", 2, "new", localCalendarTime(1, 9, 0)),
+    calendarReview("cal-yes-c", 3, "contrive", 1, "review", localCalendarTime(1, 11, 0)),
+    calendarReview("cal-yes-d", 4, "diligent", 2, "review", localCalendarTime(1, 14, 0)),
+    calendarReview("cal-old-e", 5, "evoke", 0, "review", localCalendarTime(3, 9, 0)),
+    calendarReview("cal-old-a", 1, "calibrate", 2, "review", localCalendarTime(3, 16, 0)),
+  ];
+}
+
+function calendarSeedState() {
+  return createState({ reviews: calendarSeedReviews(), wordProgress: {} });
+}
+
+async function tabUntilActivityCell(page) {
+  for (let step = 0; step < 80; step += 1) {
+    await page.keyboard.press("Tab");
+    const className = await page.evaluate(() => document.activeElement?.className ?? "");
+    if (String(className).includes("activity-cell")) return;
+  }
+  throw new Error("未能通过真实 Tab 顺序进入背诵日历");
+}
+
+test("背诵日历：范围切换、历史翻页与回到今天状态正确且 IndexedDB 只读", async ({ context, page }) => {
+  await installStateSeed(context, calendarSeedState());
+  await openHistory(page);
+
+  const panel = page.locator('section[aria-labelledby="activity-title"]');
+  const cells = panel.locator(".activity-cell");
+  const ranges = page.locator(".activity-range");
+  const nearer = page.locator(".activity-nav").getByRole("button", { name: "查看更近日期" });
+  const earlier = page.locator(".activity-nav").getByRole("button", { name: "查看更早日期" });
+  const backToday = page.locator(".activity-today");
+  const heading = panel.locator(".activity-heading small");
+
+  const baselineCount = await readStoreCount(page, "reviews");
+  const baselineSnapshot = await readStoreSnapshot(page, "reviews");
+  expect(baselineCount).toBe(8);
+
+  // 默认 20 周：140 个日格；当前窗口“查看更近日期”禁用、“回到今天”隐藏
+  await expect(cells).toHaveCount(140);
+  await expect(ranges.getByRole("button", { name: "20 周" })).toHaveAttribute("aria-pressed", "true");
+  await expect(nearer).toBeDisabled();
+  await expect(backToday).toHaveCount(0);
+  await expect(panel.locator(".activity-grid")).toHaveAttribute("aria-label", /每日不同单词数/);
+
+  // 半年 182 格、一年 365 格；IndexedDB 不变
+  await ranges.getByRole("button", { name: "半年" }).click();
+  await expect(cells).toHaveCount(182);
+  await expect(ranges.getByRole("button", { name: "半年" })).toHaveAttribute("aria-pressed", "true");
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+  await ranges.getByRole("button", { name: "一年" }).click();
+  await expect(cells).toHaveCount(365);
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+
+  // 回到 20 周并记录当前窗口日期范围
+  await ranges.getByRole("button", { name: "20 周" }).click();
+  await expect(cells).toHaveCount(140);
+  const currentRangeText = await heading.textContent();
+
+  // 查看更早日期：窗口实际后移，更近与回到今天可用
+  await earlier.click();
+  await expect(nearer).toBeEnabled();
+  await expect(backToday).toBeVisible();
+  await expect.poll(async () => (await heading.textContent())).not.toBe(currentRangeText);
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+
+  // 查看更近日期：返回当前窗口，按钮状态复原
+  await nearer.click();
+  await expect(nearer).toBeDisabled();
+  await expect(backToday).toHaveCount(0);
+  await expect.poll(async () => (await heading.textContent())).toBe(currentRangeText);
+
+  // 回到今天：从历史窗口一键返回当前窗口
+  await earlier.click();
+  await expect(backToday).toBeVisible();
+  await backToday.click();
+  await expect(backToday).toHaveCount(0);
+  await expect(nearer).toBeDisabled();
+  await expect.poll(async () => (await heading.textContent())).toBe(currentRangeText);
+
+  // 历史窗口中切换范围会回到当前窗口
+  await earlier.click();
+  await expect(nearer).toBeEnabled();
+  await ranges.getByRole("button", { name: "半年" }).click();
+  await expect(cells).toHaveCount(182);
+  await expect(nearer).toBeDisabled();
+  await expect(backToday).toHaveCount(0);
+
+  // 所有日历交互前后 reviews 数量与内容完全一致
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+  expect(await readStoreSnapshot(page, "reviews")).toEqual(baselineSnapshot);
+});
+
+test("背诵日历：日期详情区分事件数与不同单词数，重复单词只显当天最后评分", async ({ context, page }) => {
+  await installStateSeed(context, calendarSeedState());
+  await openHistory(page);
+
+  const todayKey = dateKey(new Date());
+  const yesterdayKey = dateKey(localCalendarTime(1, 12));
+  const emptyKey = dateKey(localCalendarTime(2, 12));
+  const baselineCount = await readStoreCount(page, "reviews");
+  const baselineSnapshot = await readStoreSnapshot(page, "reviews");
+  const detail = page.locator(".activity-detail");
+
+  // 今天：2 次新学 + 1 次复习 = 2 个不同单词，0 薄弱
+  const todayCell = page.locator(`#activity-${todayKey}`);
+  await expect(todayCell).toHaveAttribute("aria-label", `${todayKey}，学习 2 个不同单词`);
+  await todayCell.click();
+  await expect(detail.locator(".activity-detail-head span"))
+    .toHaveText("2 次新学 · 1 次复习 · 2 个不同单词 · 0 个薄弱");
+  await expect(detail.locator(".activity-word")).toHaveCount(2);
+  // 重复单词只渲染一次，且显示当天最后一次评分（rating 3 → 熟练）
+  const calibrateChip = detail.locator(".activity-word").filter({ hasText: "calibrate" });
+  await expect(calibrateChip).toHaveCount(1);
+  await expect(calibrateChip.locator("small")).toHaveText("新学 · 熟练");
+  await expect(todayCell).toHaveAttribute("aria-pressed", "true");
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+
+  // 再点同一日期关闭详情
+  await todayCell.click();
+  await expect(detail).toHaveCount(0);
+  await expect(todayCell).toHaveAttribute("aria-pressed", "false");
+
+  // 昨天：1 次新学 + 2 次复习 = 3 个不同单词，1 个薄弱（rating 1 → 模糊）
+  const yesterdayCell = page.locator(`#activity-${yesterdayKey}`);
+  await yesterdayCell.click();
+  await expect(detail.locator(".activity-detail-head span"))
+    .toHaveText("1 次新学 · 2 次复习 · 3 个不同单词 · 1 个薄弱");
+  await expect(detail.locator(".activity-word")).toHaveCount(3);
+  const contriveChip = detail.locator(".activity-word").filter({ hasText: "contrive" });
+  await expect(contriveChip).toHaveCount(1);
+  await expect(contriveChip.locator("small")).toHaveText("复习 · 模糊");
+
+  // 关闭按钮关闭详情
+  await detail.getByRole("button", { name: "关闭日期详情" }).click();
+  await expect(detail).toHaveCount(0);
+  await expect(yesterdayCell).toHaveAttribute("aria-pressed", "false");
+
+  // 空日期：明确空状态
+  const emptyCell = page.locator(`#activity-${emptyKey}`);
+  await emptyCell.click();
+  await expect(detail.locator(".activity-detail-head span")).toHaveText("当天没有学习记录");
+  await expect(detail.locator(".activity-word-list")).toHaveCount(0);
+  await emptyCell.click();
+  await expect(detail).toHaveCount(0);
+
+  expect(await readStoreCount(page, "reviews")).toBe(baselineCount);
+  expect(await readStoreSnapshot(page, "reviews")).toEqual(baselineSnapshot);
+});
+
+test("背诵日历：真实 Tab 进入、方向键与七行网格一致且只有一个 roving tab stop", async ({ context, page }) => {
+  await installStateSeed(context, calendarSeedState());
+  await openHistory(page);
+
+  const cells = page.locator(".activity-cell");
+  const todayKey = dateKey(new Date());
+  const prevWeekKey = dateKey(localCalendarTime(7, 12));
+  const prevDayKey = dateKey(localCalendarTime(1, 12));
+  const firstKey = dateKey(localCalendarTime(139, 12));
+  const rovingIds = async () => cells.evaluateAll((elements) =>
+    elements.filter((element) => element.tabIndex === 0).map((element) => element.id));
+  const focusedId = async () => page.evaluate(() => document.activeElement?.id);
+
+  // 初始恰好一个 roving tab stop（今天）
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
+
+  // 通过真实 Tab 顺序进入日历；键盘焦点具备清晰 focus-visible
+  await tabUntilActivityCell(page);
+  await expect(page.locator(`#activity-${todayKey}`)).toBeFocused();
+  expect(await page.evaluate(() => {
+    const element = document.activeElement;
+    return element?.matches(":focus-visible")
+      && parseFloat(getComputedStyle(element).outlineWidth) > 0;
+  })).toBe(true);
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
+
+  // ArrowLeft：上一列（索引 -7）；选中状态与日期详情同步
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(focusedId).toBe(`activity-${prevWeekKey}`);
+  await expect(page.locator(`#activity-${prevWeekKey}`)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".activity-detail-head strong")).toHaveText(prevWeekKey.replaceAll("-", "."));
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(focusedId).toBe(`activity-${todayKey}`);
+
+  // ArrowUp：上一行（索引 -1）；ArrowDown：下一行（索引 +1）
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(focusedId).toBe(`activity-${prevDayKey}`);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(focusedId).toBe(`activity-${todayKey}`);
+
+  // 右边界：连续 ArrowRight 不越界、焦点不丢失
+  for (let step = 0; step < 25; step += 1) await page.keyboard.press("ArrowRight");
+  await expect.poll(focusedId).toBe(`activity-${todayKey}`);
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
+
+  // 左边界：连续 ArrowLeft 停在最早一天且不丢失焦点
+  for (let step = 0; step < 25; step += 1) await page.keyboard.press("ArrowLeft");
+  await expect.poll(focusedId).toBe(`activity-${firstKey}`);
+  await expect.poll(rovingIds).toEqual([`activity-${firstKey}`]);
+
+  // 日期详情关闭按钮：Tab 可达、focus 样式清晰、约 40×40
+  await page.keyboard.press("Tab");
+  const close = page.getByRole("button", { name: "关闭日期详情" });
+  await expect(close).toBeFocused();
+  expect(await page.evaluate(() => {
+    const element = document.activeElement;
+    const rect = element?.getBoundingClientRect();
+    return element?.matches(":focus-visible")
+      && rect && rect.width >= 40 && rect.height >= 40;
+  })).toBe(true);
+  await close.click();
+  await expect(page.locator(".activity-detail")).toHaveCount(0);
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
+
+  // 范围切换与翻页后仍只有一个 roving tab stop；历史窗口落在窗口内最后一天
+  await page.locator(".activity-range").getByRole("button", { name: "半年" }).click();
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
+  await page.locator(".activity-nav").getByRole("button", { name: "查看更早日期" }).click();
+  const historyLastKey = dateKey(localCalendarTime(182, 12));
+  await expect.poll(rovingIds).toEqual([`activity-${historyLastKey}`]);
+  await page.locator(".activity-today").click();
+  await expect.poll(rovingIds).toEqual([`activity-${todayKey}`]);
 });
