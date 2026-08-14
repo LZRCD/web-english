@@ -116,6 +116,17 @@ import {
   etymologyInputForWord,
   isCurrentEtymologyCache,
 } from "../lib/etymology";
+import {
+  buildCurrentEtymologyDatasetInputKey,
+} from "../lib/etymology-dataset";
+import {
+  datasetFrequencyToDisplay,
+  mergeSenseExamples,
+  passedDatasetExamples,
+  personalSenseFrequencyValid,
+  usablePersonalSenseExamples,
+} from "../lib/merged-senses";
+import { usePrivateDatasets } from "./hooks/usePrivateDatasets";
 import BooksView from "./components/BooksView";
 import CoachPanel from "./components/CoachPanel";
 import HistoryView from "./components/HistoryView";
@@ -433,6 +444,20 @@ export default function Home() {
     current.word,
     redbookReady,
   );
+  const privateDatasets = usePrivateDatasets(current);
+  const lookupLinkedWord = selectionLookup?.result?.linkedWordId !== undefined
+    ? wordById.get(selectionLookup.result.linkedWordId)
+    : undefined;
+  const lookupPrivateDatasets = usePrivateDatasets(lookupLinkedWord);
+  // 划词弹窗的义项考频：个人缓存优先 → 基础数据（词条身份一致才命中）
+  const lookupSenseFrequency = lookupLinkedWord?.id === undefined
+    ? undefined
+    : (() => {
+        const senseTexts = splitWordSenses(lookupLinkedWord);
+        const personal = senseFrequency[lookupLinkedWord.id];
+        if (personalSenseFrequencyValid(personal, senseTexts)) return personal;
+        return datasetFrequencyToDisplay(lookupPrivateDatasets.frequency, senseTexts);
+      })();
   const vocabTestWords = useMemo(
     () => redbookWords.filter((word) => isPrimaryLearningWord(word.id)),
     [redbookWords],
@@ -892,13 +917,60 @@ export default function Home() {
   const unfamiliarMeanings = currentMeaningItems.filter(
     (meaning) => !currentFamiliarMeanings.has(meaning),
   );
-  // 强化填空例句优先级：含当前词的已见例句 → 当前词释义例句 → 红宝书原句
+  // 义项考频解析优先级：当前输入仍有效的个人缓存 → 当前输入仍有效的预生成基础数据
+  // → 逐词生成入口（未命中时为 undefined，按钮保留原有行为）。
+  // 派生量小，直接每次渲染计算，避免 React Compiler 拒绝保留 memo 优化。
+  const personalSenseFrequency = current.id === undefined
+    ? undefined
+    : senseFrequency[current.id];
+  const effectiveSenseFrequency = personalSenseFrequencyValid(
+    personalSenseFrequency,
+    currentMeaningItems,
+  )
+    ? personalSenseFrequency
+    : datasetFrequencyToDisplay(
+        privateDatasets.frequency,
+        currentMeaningItems,
+      );
+  // 释义例句：按单个义项合并（个人重写 → 模型复核通过的基础例句 → 待复核基础例句）
+  const mergedSenseExamples = mergeSenseExamples({
+    senseTexts: currentMeaningItems,
+    enrichment: currentEnrichment,
+    dataset: privateDatasets.examples,
+  });
+  // 词根助记解析优先级：个人缓存（inputKey 有效）→ 基础数据（inputKey 有效）
+  // → 逐词生成入口。
+  const effectiveEtymology = useMemo(() => {
+    if (current.id === undefined) return undefined;
+    const input = etymologyInputForWord(current);
+    const personal = currentEnrichment?.etymology;
+    if (input && isCurrentEtymologyCache(personal, input)) return personal;
+    const datasetEntry = privateDatasets.etymology;
+    if (
+      datasetEntry
+      && datasetEntry.inputKey === buildCurrentEtymologyDatasetInputKey(
+        current.id,
+        current,
+      )
+    ) {
+      return datasetEntry;
+    }
+    return undefined;
+  }, [current, currentEnrichment?.etymology, privateDatasets.etymology]);
+  // 强化填空例句优先级：含当前词的已见例句 → 个人释义例句（二审失败不复用）
+  // → 模型复核通过的基础例句 → 红宝书原句。待复核基础例句绝不进入强化语境。
+  const datasetPassedExamples = passedDatasetExamples(privateDatasets.examples);
+  const usablePersonalExamples = usablePersonalSenseExamples(currentEnrichment);
   const reinforcementBaseSentence =
     currentReusedSentences[0]?.sentence
-    ?? currentEnrichment?.senseExamples?.find(
+    ?? usablePersonalExamples.find(
       (example) => unfamiliarMeanings.includes(example.meaning),
     )?.sentence
-    ?? currentEnrichment?.senseExamples?.[0]?.sentence
+    ?? datasetPassedExamples.find((record) =>
+      unfamiliarMeanings.includes(currentMeaningItems[record.senseIndex] ?? ""),
+    )?.sentence
+    ?? usablePersonalExamples[0]?.sentence
+    ?? datasetPassedExamples[0]?.sentence
     ?? current.sentence;
   const reinforcementSentence = reinforcementBaseSentence
     ? clozeSentence(reinforcementBaseSentence, current.word)
@@ -906,7 +978,8 @@ export default function Home() {
   const reinforcementMeaning = unfamiliarMeanings[0]
     ?? currentMeaningItems[0]
     ?? currentMeaning.meaning;
-  // 生成/重写例句时随请求附上的已见例句：跨词已见例句 + 本词既有释义例句，去重限长
+  // 生成/重写例句时随请求附上的已见例句：跨词已见例句 + 本词既有释义例句
+  // + 模型复核通过的基础例句，去重限长（参考上下文，不参与静默截断）
   const existingSentences = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];
@@ -915,18 +988,19 @@ export default function Home() {
       seen.add(item.sentence);
       list.push(item.sentence);
     }
-    for (const example of currentEnrichment?.senseExamples ?? []) {
+    for (const example of usablePersonalSenseExamples(currentEnrichment)) {
       if (seen.has(example.sentence)) continue;
       seen.add(example.sentence);
       list.push(example.sentence);
     }
-    return list.slice(0, 6);
-  }, [currentEnrichment, currentReusedSentences]);
-  const currentEtymology = useMemo(() => {
-    const input = etymologyInputForWord(current);
-    const entry = currentEnrichment?.etymology;
-    return input && isCurrentEtymologyCache(entry, input) ? entry : undefined;
-  }, [current, currentEnrichment?.etymology]);
+    for (const record of passedDatasetExamples(privateDatasets.examples)) {
+      if (seen.has(record.sentence)) continue;
+      seen.add(record.sentence);
+      list.push(record.sentence);
+    }
+    return list.slice(0, 10);
+  }, [currentEnrichment, currentReusedSentences, privateDatasets.examples]);
+  const currentEtymology = effectiveEtymology;
 
   const {
     aiOpen, aiInput, aiAnswer, aiLoading, aiMode,
@@ -2605,11 +2679,10 @@ export default function Home() {
                 hasRecordedAudio={hasRecordedAudio}
                 hideChineseMeaning={hideChineseMeaning}
                 guessContextFirst={guessContextFirst}
-                currentSenseFrequency={
-                  current.id === undefined ? undefined : senseFrequency[current.id]
-                }
+                currentSenseFrequency={effectiveSenseFrequency}
                 frequencyLoading={frequencyLoading}
                 currentEtymology={currentEtymology}
+                mergedSenseExamples={mergedSenseExamples}
                 etymologyLoading={etymologyLoading}
                 etymologyError={etymologyError}
                 reusedSentences={currentReusedSentences}
@@ -2925,11 +2998,7 @@ export default function Home() {
       {selectionLookup && vocabTestSource === null && (
         <SelectionLookupPopup
           lookup={selectionLookup}
-          senseFrequency={
-            selectionLookup.result?.linkedWordId === undefined
-              ? undefined
-              : senseFrequency[selectionLookup.result.linkedWordId]
-          }
+          senseFrequency={lookupSenseFrequency}
           onTranslate={translateSelection}
           onSpeak={() => {
             const result = selectionLookup.result;

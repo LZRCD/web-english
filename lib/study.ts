@@ -412,7 +412,7 @@ function normalizeSenseFrequency(value: unknown): SenseFrequencyMap {
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      .slice(0, 12);
+      .slice(0, 20);
     if (entries.length) result[wordId] = entries;
   }
   return result;
@@ -838,7 +838,7 @@ function normalizeEnrichments(value: unknown) {
               };
             })
             .filter((entry) => entry.meaning && entry.sentence && entry.translation)
-            .slice(0, 8)
+            .slice(0, 20)
         : undefined,
       collocations: Array.isArray(item.collocations)
         ? item.collocations.filter((entry): entry is string => typeof entry === "string").slice(0, 4)

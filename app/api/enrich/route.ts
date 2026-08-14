@@ -24,6 +24,11 @@ type EnrichmentRequest = {
   existingSentences?: string[];
 };
 
+/** 逐词生成入口的显式安全上限：覆盖当前最大 17 个义项并留余量。 */
+const MAX_SENSES_PER_REQUEST = 18;
+/** 已见例句参考上下文上限（参考上下文，不是生成目标，不参与义项截断）。 */
+const MAX_EXISTING_SENTENCES = 10;
+
 function normalizeEnrichment(content: string, senses: string[]) {
   const enrichment = parseJsonContent<Record<string, unknown>>(content);
   const collocations = Array.isArray(enrichment.collocations)
@@ -64,17 +69,17 @@ async function handlePost(request: NextRequest) {
         .filter((item): item is string => typeof item === "string")
         .map((item) => boundedText(item, 160))
         .filter(Boolean)
-        .slice(0, 6)
+        .slice(0, MAX_SENSES_PER_REQUEST)
     : [];
   const existingSentences = Array.isArray(body.existingSentences)
     ? body.existingSentences
         .filter((item): item is string => typeof item === "string")
         .map((item) => boundedText(item, 500))
         .filter(Boolean)
-        .slice(0, 6)
+        .slice(0, MAX_EXISTING_SENTENCES)
     : [];
   if (!senses.length && meaning) {
-    senses.push(...splitWordSenses({ meaning }).slice(0, 6));
+    senses.push(...splitWordSenses({ meaning }).slice(0, MAX_SENSES_PER_REQUEST));
   }
   const effectiveMeaning = senses.join("；") || meaning || "";
   if (!word || !effectiveMeaning) {

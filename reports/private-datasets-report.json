@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-08-14T10:07:50.357Z",
+  "datasets": [
+    {
+      "dataset": "sense-frequency",
+      "contentVersion": "aee3d10a9577498b",
+      "schemaVersion": 1,
+      "promptVersion": "sense-frequency-prompt-v1",
+      "methodVersion": "sense-frequency-method-v1",
+      "modelId": "deepseek-v4-flash",
+      "provider": "opencode-go",
+      "inputDataHash": "3c45c23de1ead516a8051154640dd9e961e437e24621667c7dd29bdfb71574a8",
+      "generatedAt": "2026-08-14T07:24:24.192Z",
+      "counts": {
+        "processedWordCount": 6549,
+        "processedSenseCount": 25340,
+        "labeledSenseCount": 21460,
+        "corpusSupportedCount": 7833,
+        "modelConsensusCount": 13627,
+        "needsReviewCount": 3880,
+        "levelCounts": {
+          "high": 6458,
+          "medium": 7344,
+          "low": 7658
+        },
+        "forcedGuessCount": 0,
+        "truncationCount": 0
+      },
+      "run": {
+        "startedAt": "2026-08-14T07:24:24.192Z",
+        "updatedAt": "2026-08-14T08:31:46.468Z",
+        "finished": true,
+        "totalItems": 6549,
+        "completedItems": 6549,
+        "failedItems": 0,
+        "modelCalls": 26472,
+        "promptTokens": 8107884,
+        "completionTokens": 2570706
+      },
+      "stillFailed": 0,
+      "reasonCodes": {
+        "model_consensus": 13627,
+        "corpus_absent_or_unassigned": 13627,
+        "corpus_supported": 7833,
+        "unstable_judgments": 3880,
+        "monosense": 352
+      },
+      "failureMessages": []
+    },
+    {
+      "dataset": "sense-examples",
+      "contentVersion": "5c05e717aec35815",
+      "schemaVersion": 1,
+      "promptVersion": "sense-examples-prompt-v1",
+      "methodVersion": "sense-examples-method-v1",
+      "modelId": "deepseek-v4-flash",
+      "provider": "opencode-go",
+      "inputDataHash": "3c45c23de1ead516a8051154640dd9e961e437e24621667c7dd29bdfb71574a8",
+      "generatedAt": "2026-08-14T07:30:59.575Z",
+      "counts": {
+        "processedSenseCount": 25340,
+        "acceptedExampleCount": 24234,
+        "needsReviewCount": 1106,
+        "exactDuplicateCount": 0,
+        "nearDuplicateCount": 0
+      },
+      "run": {
+        "startedAt": "2026-08-14T07:30:59.575Z",
+        "updatedAt": "2026-08-14T09:44:12.186Z",
+        "finished": true,
+        "totalItems": 2,
+        "completedItems": 6556,
+        "failedItems": 0,
+        "modelCalls": 35171,
+        "promptTokens": 13174876,
+        "completionTokens": 6411951
+      },
+      "stillFailed": 0,
+      "reasonCodes": {
+        "missing_target_word": 521,
+        "adversarial_ambiguous": 516,
+        "review1_mismatch": 142,
+        "review2_mismatch": 142,
+        "adversarial_duplicate": 27,
+        "near_duplicate_reference": 5
+      },
+      "failureMessages": []
+    },
+    {
+      "dataset": "etymology",
+      "contentVersion": "0b3082a3f4e42f5c",
+      "schemaVersion": 1,
+      "promptVersion": "etymology-prompt-v1",
+      "methodVersion": "etymology-method-v1",
+      "modelId": "deepseek-v4-flash",
+      "provider": "opencode-go",
+      "inputDataHash": "3c45c23de1ead516a8051154640dd9e961e437e24621667c7dd29bdfb71574a8",
+      "generatedAt": "2026-08-14T07:34:08.338Z",
+      "counts": {
+        "processedWordCount": 6549,
+        "modeCounts": {
+          "verified_morphology": 402,
+          "surface_form": 2553,
+          "mnemonic_only": 3406,
+          "needs_review": 188
+        },
+        "templateFlaggedCount": 49
+      },
+      "run": {
+        "startedAt": "2026-08-14T07:34:08.338Z",
+        "updatedAt": "2026-08-14T09:35:38.575Z",
+        "finished": true,
+        "totalItems": 1,
+        "completedItems": 8398,
+        "failedItems": 0,
+        "modelCalls": 26881,
+        "promptTokens": 8161760,
+        "completionTokens": 1762757
+      },
+      "stillFailed": 0,
+      "reasonCodes": {
+        "regenerated_after_structural_issues": 1033,
+        "unverified_origin_claim": 121,
+        "not_relevant_to_meaning": 71,
+        "template_similarity": 59,
+        "fragment_not_in_word": 24,
+        "fact_check_corrected": 14,
+        "relation_conflict": 5,
+        "mnemonic_only_claims_root": 1
+      },
+      "failureMessages": []
+    }
+  ]
+}

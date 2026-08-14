@@ -5,6 +5,7 @@ import {
   RADIATE_ENRICHMENT,
 } from "./fixtures.mjs";
 import {
+  blockPrivateDatasets,
   installStateSeed,
   openApp,
   openSettings,
@@ -349,10 +350,13 @@ test("划选例句中的英文可查义、加入划词集并持久化", async ({
 });
 
 test("高频考义在学习卡与划词弹窗一致高亮", async ({ browser, context, page }) => {
+  await blockPrivateDatasets(page);
   const senseFrequency = {
     1: [
       { meaning: "散发", level: "high" },
       { meaning: "流露", level: "medium" },
+      { meaning: "发出 (光、辐射等)", level: "low" },
+      { meaning: "呈辐射状发散 (或伸展)", level: "low" },
     ],
   };
   await installStateSeed(context, createState({
@@ -432,6 +436,7 @@ test("高频考义在学习卡与划词弹窗一致高亮", async ({ browser, co
       enrichments: RADIATE_ENRICHMENT,
     }));
     const noFrequencyPage = await noFrequencyContext.newPage();
+    await blockPrivateDatasets(noFrequencyPage);
     await openApp(noFrequencyPage);
     await noFrequencyPage.getByRole("button", { name: "显示单词释义" }).click();
     await expect(noFrequencyPage.locator(".sense-frequency-highlight")).toHaveCount(0);
@@ -625,6 +630,7 @@ test("浏览器阻止录音播放时分类为 autoplay-blocked 并回退 TTS", a
 });
 
 test("反馈不符例句后只二审并重写目标义项", async ({ context, page }) => {
+  await blockPrivateDatasets(page);
   const aiEnrichment = structuredClone(RADIATE_ENRICHMENT);
   aiEnrichment[1].source = "ai";
   aiEnrichment[1].verified = false;

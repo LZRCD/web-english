@@ -24,6 +24,7 @@
 # misc
 .DS_Store
 *.pem
+/.wordloop-data/
 
 # debug
 npm-debug.log*
@@ -57,5 +58,8 @@ next-env.d.ts
 /public/data/redbook.json
 /scripts/kaoyan-corpus/
 /public/data/kaoyan-examples/
+/public/data/sense-frequency/
+/public/data/sense-examples/
+/public/data/etymology/
 /public/data/dictionary/[a-z].[0-9a-f]*.json
 /public/data/dictionary/ranges/[a-z].[0-9a-f]*.json

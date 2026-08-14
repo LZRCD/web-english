@@ -19,6 +19,9 @@ type SenseFrequencyRequest = {
   senses?: string[];
 };
 
+/** 逐词生成入口的显式安全上限：覆盖当前最大 17 个义项并留余量，超限明确截断为上限。 */
+const MAX_SENSES_PER_REQUEST = 18;
+
 async function handlePost(request: NextRequest) {
   const body = await readJsonBody<SenseFrequencyRequest>(request, 32 * 1024);
   const word = boundedText(body.word, 160);
@@ -27,7 +30,7 @@ async function handlePost(request: NextRequest) {
         .filter((item): item is string => typeof item === "string")
         .map((item) => boundedText(item, 160))
         .filter(Boolean)
-        .slice(0, 8)
+        .slice(0, MAX_SENSES_PER_REQUEST)
     : [];
   if (!word || senses.length < 2) {
     return NextResponse.json({ error: "需要多义词及其至少两个义项" }, { status: 400 });

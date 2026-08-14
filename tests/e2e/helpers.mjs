@@ -30,8 +30,7 @@ export async function installStateSeed(
   );
 }
 
-export async function installSilentBroadcastChannel(context) {
-  await context.addInitScript(() => {
+export async function installSilentBroadcastChannel(context) {  await context.addInitScript(() => {
     class SilentBroadcastChannel {
       constructor(name) {
         this.name = name;
@@ -260,6 +259,20 @@ export async function waitForApp(page, { expectIndexedDb = true } = {}) {
 export async function openApp(page, options) {
   await page.goto("/");
   await waitForApp(page, options);
+}
+
+/**
+ * 屏蔽三套私有预生成数据集的网络请求（模拟“数据不存在”），
+ * 用于验证原有逐词生成入口回退行为的用例。
+ */
+export async function blockPrivateDatasets(page, { datasets = [
+  "sense-frequency",
+  "sense-examples",
+  "etymology",
+] } = {}) {
+  for (const dataset of datasets) {
+    await page.route(`**/data/${dataset}/**`, (route) => route.abort());
+  }
 }
 
 /**

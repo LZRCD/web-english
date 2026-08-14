@@ -15,6 +15,7 @@ import type {
   WordProgress,
 } from "../../lib/learning";
 import type { ReusedSentence } from "../../lib/sentence-index";
+import type { DisplaySenseExample } from "../../lib/merged-senses";
 import { wordRetrievability } from "../../lib/learning";
 import type {
   StabilizedDimension,
@@ -26,6 +27,7 @@ import { formatDueTime } from "../../lib/study";
 import type { RedbookLoadGuidance } from "../../lib/redbook";
 import { maskWord, splitSenseItems } from "../../lib/word-utils";
 import type { EtymologyCacheEntry } from "../../lib/etymology";
+import type { EtymologyDatasetEntry } from "../../lib/sense-datasets";
 import type { KaoyanExample } from "../../lib/kaoyan-examples";
 
 type RedbookStatus = "loading" | "ready" | "error";
@@ -55,12 +57,14 @@ type WordCardProps = {
   hideChineseMeaning: boolean;
   /** 多释义单词先显示英文语境句，让人猜测后再展开中文释义 */
   guessContextFirst: boolean;
-  /** 当前词的义项考频（AI 生成缓存） */
+  /** 当前词的义项考频（个人缓存或预生成基础数据，已按优先级合并） */
   currentSenseFrequency?: SenseFrequencyEntry[];
   /** 义项考频生成中 */
   frequencyLoading: boolean;
-  /** 当前真实输入命中的 AI 词根助记缓存 */
-  currentEtymology?: EtymologyCacheEntry;
+  /** 当前真实输入命中的词根助记（个人缓存或基础数据） */
+  currentEtymology?: EtymologyCacheEntry | EtymologyDatasetEntry;
+  /** 按义项合并后的释义例句（个人重写 → 基础数据），与义项一一对应，可为 undefined 占位 */
+  mergedSenseExamples: Array<DisplaySenseExample | undefined>;
   etymologyLoading: boolean;
   etymologyError: string;
   /** 该词出现在这些已见例句中（跨词复用） */
@@ -125,8 +129,8 @@ type WordCardProps = {
     senses: string[];
     guess: string;
   }) => Promise<{ correct: boolean; matched: string } | null>;
-  onReportSenseMismatch: (index: number) => void;
-  onRewriteSenseExample: (index: number) => void;
+  onReportSenseMismatch: (example: DisplaySenseExample) => void;
+  onRewriteSenseExample: (example: DisplaySenseExample) => void;
   onTextSelection: (
     event: MouseEvent<HTMLElement> | PointerEvent<HTMLElement>,
   ) => void;
@@ -157,6 +161,7 @@ export default function WordCard({
   currentSenseFrequency,
   frequencyLoading,
   currentEtymology,
+  mergedSenseExamples,
   etymologyLoading,
   etymologyError,
   reusedSentences,
@@ -208,6 +213,12 @@ export default function WordCard({
     )],
     [currentSenses],
   );
+  const displaySenseExamples = useMemo(
+    () => mergedSenseExamples.filter(
+      (example): example is DisplaySenseExample => example !== undefined,
+    ),
+    [mergedSenseExamples],
+  );
   const hideSenses = hideChineseMeaning
     || (guessContextFirst && currentSenseItems.length >= 2);
   // 切换单词时收起释义（渲染期间调整状态，避免沿用上一词的展开状态）
@@ -217,10 +228,14 @@ export default function WordCard({
     setSensesExpanded(false);
   }
   const guessSentence =
-    currentEnrichment?.senseExamples?.[0]?.sentence
+    mergedSenseExamples.find((example) =>
+      example !== undefined && example.personalReview?.status !== "failed",
+    )?.sentence
     ?? current.sentence;
   const guessTranslation =
-    currentEnrichment?.senseExamples?.[0]?.translation;
+    mergedSenseExamples.find((example) =>
+      example !== undefined && example.personalReview?.status !== "failed",
+    )?.translation;
   // 隐藏释义阶段猜词：输入中文，命中任一义项即展开
   const [guessInput, setGuessInput] = useState("");
   const [guessing, setGuessing] = useState(false);
@@ -281,7 +296,9 @@ export default function WordCard({
       : level === "medium"
         ? "◐ 中频"
         : "· 低频";
-  const affixKindLabel = (kind: EtymologyCacheEntry["content"]["affixes"][number]["kind"]) =>
+  const affixKindLabel = (
+    kind: "prefix" | "root" | "suffix" | "other",
+  ) =>
     kind === "prefix"
       ? "前缀"
       : kind === "root"
@@ -289,6 +306,24 @@ export default function WordCard({
         : kind === "suffix"
           ? "后缀"
           : "构词片段";
+  // 个人缓存与基础数据两种词根助记结构的统一读取
+  const etymologyDatasetMode =
+    currentEtymology && !("content" in currentEtymology)
+      ? currentEtymology.mode
+      : undefined;
+  const etymologyContent = currentEtymology
+    ? "content" in currentEtymology
+      ? currentEtymology.content
+      : currentEtymology
+    : undefined;
+  const etymologyModeLabel = (mode: NonNullable<typeof etymologyDatasetMode>) =>
+    mode === "verified_morphology"
+      ? "可靠构词依据"
+      : mode === "surface_form"
+        ? "现代词形拆解"
+        : mode === "mnemonic_only"
+          ? "纯记忆联想 · 无词根依据"
+          : "内容待人工复核";
 
   const cardClass = [
     "word-card",
@@ -609,64 +644,68 @@ export default function WordCard({
           )}
 
           {/* 例句 / 内容补充 */}
-          {(current.sentence || currentEnrichment?.senseExamples?.length) ? (
+          {(current.sentence || displaySenseExamples.length) ? (
             <div className="context-block">
-              {currentEnrichment?.senseExamples?.length ? (
+              {displaySenseExamples.length ? (
                 <>
                   <span className="sense-examples-label">释义例句</span>
                   <ol className="sense-examples">
-                    {currentEnrichment.senseExamples.map((example, index) => (
+                    {displaySenseExamples.map((example) => (
                       <li
                         className="sense-example"
-                        key={`${example.meaning}-${index}`}
+                        key={`${example.meaning}-${example.senseIndex}`}
                       >
-                        <strong>{index + 1}. {(!hideSenses || sensesExpanded) ? example.meaning : ""}</strong>
+                        <strong>{example.senseIndex + 1}. {(!hideSenses || sensesExpanded) ? example.meaning : ""}</strong>
                         <p className="context-sentence">{example.sentence}</p>
                         {(!hideSenses || sensesExpanded) && (
                           <p className="context-translation">
                             {example.translation}
                           </p>
                         )}
-                        {currentEnrichment.source === "ai" && (
-                          <div className="sense-example-quality">
-                            <small>
-                              {example.review?.status === "pending"
-                                ? "正在语义二审…"
-                                : example.review?.status === "passed"
-                                  ? "语义二审通过"
-                                  : example.review?.status === "failed"
-                                    ? `二审未通过${example.review.note ? `：${example.review.note}` : ""}`
-                                    : typeof example.confidence === "number"
-                                      ? `生成置信度 ${Math.round(example.confidence * 100)}%`
-                                      : "尚未反馈"}
-                            </small>
-                            <span>
-                              <button
-                                type="button"
-                                className="quiet"
-                                disabled={
-                                  reviewingSense !== null
-                                  || rewritingSense !== null
-                                }
-                                onClick={() => onReportSenseMismatch(index)}
-                              >
-                                {reviewingSense === index
-                                  ? "二审中…"
-                                  : "例句与义项不符"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  reviewingSense !== null
-                                  || rewritingSense !== null
-                                }
-                                onClick={() => onRewriteSenseExample(index)}
-                              >
-                                {rewritingSense === index ? "重写中…" : "只重写此条"}
-                              </button>
-                            </span>
-                          </div>
-                        )}
+                        <div className="sense-example-quality">
+                          <small>
+                            {example.source === "dataset" ? (
+                              example.datasetReviewStatus === "model_passed"
+                                ? "AI 原创 · 模型二审 · 未人工核验"
+                                : "AI 原创 · 待人工复核 · 未人工核验"
+                            ) : example.personalReview?.status === "pending"
+                              ? "正在语义二审…"
+                              : example.personalReview?.status === "passed"
+                                ? "语义二审通过"
+                                : example.personalReview?.status === "failed"
+                                  ? `二审未通过${example.personalReview.note ? `：${example.personalReview.note}` : ""}`
+                                  : typeof example.confidence === "number"
+                                    ? `生成置信度 ${Math.round(example.confidence * 100)}%`
+                                    : "尚未反馈"}
+                          </small>
+                          <span>
+                            <button
+                              type="button"
+                              className="quiet"
+                              disabled={
+                                reviewingSense !== null
+                                || rewritingSense !== null
+                              }
+                              onClick={() => onReportSenseMismatch(example)}
+                            >
+                              {reviewingSense === example.senseIndex
+                                ? "二审中…"
+                                : "例句与义项不符"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                reviewingSense !== null
+                                || rewritingSense !== null
+                              }
+                              onClick={() => onRewriteSenseExample(example)}
+                            >
+                              {rewritingSense === example.senseIndex
+                                ? "重写中…"
+                                : "只重写此条"}
+                            </button>
+                          </span>
+                        </div>
                       </li>
                     ))}
                   </ol>
@@ -784,8 +823,8 @@ export default function WordCard({
 
         {/* 3. AI 助记 */}
         <section className="detail-section detail-ai-memory" aria-label="AI 助记">
-          {/* AI 词根拆解只在揭示后由用户显式生成；缓存命中时直接展示。 */}
-          {currentEtymology ? (
+          {/* AI 词根拆解：个人缓存或预生成基础数据命中时直接展示。 */}
+          {etymologyContent ? (
             <section
               className="etymology-card"
               aria-label="AI 词根拆解与助记"
@@ -794,7 +833,11 @@ export default function WordCard({
               <div className="etymology-heading">
                 <div>
                   <h3>AI 词根拆解与助记</h3>
-                  <span>AI 助记 · 非词源考据</span>
+                  <span>
+                    {etymologyDatasetMode
+                      ? `${etymologyModeLabel(etymologyDatasetMode)} · 未人工核验`
+                      : "AI 助记 · 非词源考据"}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -807,18 +850,24 @@ export default function WordCard({
               <dl className="etymology-content">
                 <div>
                   <dt>拆解</dt>
-                  <dd>{currentEtymology.content.breakdown}</dd>
+                  <dd>{etymologyContent.breakdown}</dd>
                 </div>
                 <div>
                   <dt>核心词根</dt>
-                  <dd>{currentEtymology.content.root}</dd>
+                  <dd>
+                    {etymologyContent.root ?? (
+                      <span className="etymology-no-root">
+                        未拆分核心词根（诚实模式，不虚构词根）
+                      </span>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>前后缀 / 构词片段</dt>
                   <dd>
-                    {currentEtymology.content.affixes.length ? (
+                    {etymologyContent.affixes.length ? (
                       <ul className="etymology-affixes">
-                        {currentEtymology.content.affixes.map((affix, index) => (
+                        {etymologyContent.affixes.map((affix, index) => (
                           <li key={`${affix.form}-${affix.kind}-${index}`}>
                             <strong>{affix.form}</strong>
                             <span>{affixKindLabel(affix.kind)} · {affix.meaning}</span>
@@ -832,9 +881,12 @@ export default function WordCard({
                 </div>
                 <div>
                   <dt>记忆联想</dt>
-                  <dd>{currentEtymology.content.mnemonic}</dd>
+                  <dd>{etymologyContent.mnemonic}</dd>
                 </div>
               </dl>
+              <small className="etymology-disclaimer">
+                AI 助记仅用于记忆联想，不是权威词源考据。
+              </small>
               {etymologyError && (
                 <p className="etymology-error" role="alert">{etymologyError}</p>
               )}

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createState } from "./fixtures.mjs";
 import {
+  blockPrivateDatasets,
   installStateSeed,
   openApp,
   readStoreRecord,
@@ -42,6 +43,7 @@ function savingEnrichment(etymology) {
 }
 
 test("词根助记场景A：显式生成、合并写回、刷新命中且失败不覆盖", async ({ context, page }) => {
+  await blockPrivateDatasets(page);
   let requestCount = 0;
   let failRegeneration = false;
   let capturedBody;
@@ -134,6 +136,7 @@ test("词根助记场景A：显式生成、合并写回、刷新命中且失败�
 });
 
 test("词根助记场景B：失效缓存、云端失败、本地关系降级与无线索静默", async ({ browser, context, page }) => {
+  await blockPrivateDatasets(page);
   const staleEntry = {
     schemaVersion: 1,
     promptVersion: "etymology-v0",
@@ -182,6 +185,7 @@ test("词根助记场景B：失效缓存、云端失败、本地关系降级与�
   });
   try {
     const noCluePage = await noClueContext.newPage();
+    await blockPrivateDatasets(noCluePage);
     await noCluePage.route("**/api/etymology", (route) => route.fulfill({
       status: 502,
       contentType: "application/json",
@@ -214,6 +218,7 @@ test("词根助记场景B：失效缓存、云端失败、本地关系降级与�
 });
 
 test("词根助记场景C：键盘生成、可访问加载态、320px 与 200%/400%", async ({ context, page }) => {
+  await blockPrivateDatasets(page);
   let requestCount = 0;
   let releaseResponse;
   const responseGate = new Promise((resolve) => {
