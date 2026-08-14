@@ -18,7 +18,7 @@ export function mergeWordEnrichment(
   return { ...current, ...definedIncoming };
 }
 
-/** 严格校验每个目标释义恰好对应一条例句，并按请求顺序返回。 */
+/** 按请求顺序校验每条例句字段完整；释义文本允许模型改写，缺失时回退请求释义。 */
 export function normalizeSenseExamples(
   value: unknown,
   requestedSenses: string[],
@@ -47,7 +47,7 @@ export function normalizeSenseExamples(
         ? Math.max(0, Math.min(1, Number(record.confidence)))
         : 0.8,
     };
-    if (!example.meaning || !example.sentence || !example.translation) {
+    if (!example.sentence || !example.translation) {
       throw new Error("模型返回的例句字段不完整");
     }
     return example;
@@ -56,12 +56,8 @@ export function normalizeSenseExamples(
   if (examples.length !== senses.length) {
     throw new Error(`例句数量应为 ${senses.length} 条`);
   }
-  const byMeaning = new Map<string, NormalizedSenseExample>();
-  for (const example of examples) {
-    if (!senses.includes(example.meaning) || byMeaning.has(example.meaning)) {
-      throw new Error("例句与目标释义未一一对应");
-    }
-    byMeaning.set(example.meaning, example);
-  }
-  return senses.map((sense) => byMeaning.get(sense)!);
+  return senses.map((sense, index) => ({
+    ...examples[index],
+    meaning: examples[index].meaning || sense,
+  }));
 }

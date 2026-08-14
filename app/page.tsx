@@ -906,7 +906,7 @@ export default function Home() {
   const reinforcementMeaning = unfamiliarMeanings[0]
     ?? currentMeaningItems[0]
     ?? currentMeaning.meaning;
-  // 生成/重写例句时的「禁止重复」清单：跨词已见例句 + 本词既有释义例句，去重限长
+  // 生成/重写例句时随请求附上的已见例句：跨词已见例句 + 本词既有释义例句，去重限长
   const existingSentences = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];

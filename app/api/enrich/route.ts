@@ -20,7 +20,7 @@ type EnrichmentRequest = {
   familiarMeanings?: string[];
   /** 待逐条造句的释义列表 */
   senses?: string[];
-  /** 已见例句原文（含本词既有释义例句与其他词的例句），供模型避免重复 */
+  /** 已见例句原文（含本词既有释义例句与其他词的例句），随请求发给模型参考 */
   existingSentences?: string[];
 };
 
@@ -95,7 +95,7 @@ async function handlePost(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: "你是严谨的考研英语词典编辑。只返回 JSON，不要 markdown。字段必须是 senseExamples、collocations，不要生成 phonetic 或任何音标字段。senseExamples 是数组，必须为 senses 中的每个释义各生成 1 句原创考研阅读风格英文例句，元素为 { meaning, sentence, translation, confidence }：meaning 必须与输入 senses 中对应条目逐字一致；sentence 必须通过语境线索（场景、搭配、动作主体）唯一指向该释义，让读者无法解读为其他义项；不同义项的例句必须互不相同，句子结构、用词、情节不得重复或相似（尤其近义义项，如“港口/港湾”）；禁止使用或改写 existingSentences 中提供的任何句子，也不得生成与其含义雷同的句子；translation 是对应中文翻译，须与 sentence 和该义项一致；confidence 是 0 到 1 的语义匹配置信度，句子无法唯一指向该义项时必须打低分（低于 0.7）。禁止用 familiarMeanings 中已熟练的含义作为核心义项。collocations 是 2 到 4 个与这些释义相关的常用英文搭配数组。不要捏造词源，不要引用受版权保护的原句。",
+            content: "你是严谨的考研英语词典编辑。只返回 JSON，不要 markdown。字段必须是 senseExamples、collocations，不要生成 phonetic 或任何音标字段。senseExamples 是数组，必须为 senses 中的每个释义各生成 1 句原创考研阅读风格英文例句，元素为 { meaning, sentence, translation, confidence }：meaning 是例句对应的中文释义；sentence 是英文例句；translation 是例句的中文翻译；confidence 是 0 到 1 的语义匹配置信度。禁止用 familiarMeanings 中已熟练的含义作为核心义项。collocations 是 2 到 4 个与这些释义相关的常用英文搭配数组。不要捏造词源，不要引用受版权保护的原句。",
           },
           {
             role: "user",

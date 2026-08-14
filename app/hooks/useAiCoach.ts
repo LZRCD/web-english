@@ -24,7 +24,7 @@ type UseAiCoachOptions = {
   setSenseFrequency: Dispatch<SetStateAction<SenseFrequencyMap>>;
   unfamiliarMeanings: string[];
   currentFamiliarMeanings: Set<string>;
-  /** 已见例句原文（本词既有释义例句 + 跨词复用例句），生成时禁止与其重复 */
+  /** 已见例句原文（本词既有释义例句 + 跨词复用例句），随请求发给模型参考 */
   existingSentences: string[];
   onNotify: (message: string, duration?: number) => void;
 };
@@ -382,7 +382,7 @@ export function useAiCoach({
           meaning: example.meaning,
           senses: [example.meaning],
           familiarMeanings: [...currentFamiliarMeanings],
-          // 其余义项例句 + 已见例句，重写后不得与其雷同
+          // 其余义项例句 + 已见例句，一并提供给模型参考
           existingSentences: [
             ...new Set([
               ...(enrichment?.senseExamples

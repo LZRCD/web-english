@@ -87,8 +87,8 @@ test("状态解析拒绝非对象、非法版本和未来版本", () => {
 test("内容补充必须为每个释义恰好返回一条例句", () => {
   const senses = ["辐射", "流露"];
   const normalized = normalizeSenseExamples([
-    { meaning: "流露", sentence: "She radiates confidence.", translation: "她流露出自信。", confidence: 2 },
     { meaning: "辐射", sentence: "Stars radiate energy.", translation: "恒星辐射能量。", confidence: 0.6 },
+    { meaning: "流露", sentence: "She radiates confidence.", translation: "她流露出自信。", confidence: 2 },
   ], senses);
   assert.deepEqual(normalized.map((item) => item.meaning), senses);
   assert.deepEqual(normalized.map((item) => item.confidence), [0.6, 1]);
@@ -96,12 +96,35 @@ test("内容补充必须为每个释义恰好返回一条例句", () => {
     () => normalizeSenseExamples(normalized.slice(0, 1), senses),
     /例句数量应为 2 条/,
   );
+  // 释义文本允许模型改写，按顺序对应，不再要求逐字一致
+  const rewritten = normalizeSenseExamples([
+    normalized[0],
+    { ...normalized[1], meaning: "散发出" },
+  ], senses);
+  assert.deepEqual(rewritten.map((item) => item.meaning), ["辐射", "散发出"]);
+  // 释义缺失时回退到对应请求释义
+  const fallback = normalizeSenseExamples([
+    normalized[0],
+    {
+      sentence: normalized[1].sentence,
+      translation: normalized[1].translation,
+      confidence: normalized[1].confidence,
+    },
+  ], senses);
+  assert.deepEqual(fallback.map((item) => item.meaning), senses);
   assert.throws(
     () => normalizeSenseExamples([
       normalized[0],
-      { ...normalized[1], meaning: "其他" },
+      { ...normalized[1], sentence: "" },
     ], senses),
-    /未一一对应/,
+    /例句字段不完整/,
+  );
+  assert.throws(
+    () => normalizeSenseExamples([
+      normalized[0],
+      { ...normalized[1], translation: "" },
+    ], senses),
+    /例句字段不完整/,
   );
 });
 
