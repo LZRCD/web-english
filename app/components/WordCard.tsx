@@ -86,8 +86,10 @@ type WordCardProps = {
   onMuteLeech?: () => void;
   /** 薄弱信号区文案（冲刺态/日常态区分） */
   sprintWeakLabel?: string;
-  /** 一键把当前词加入今日任务 */
+  /** 启动当前词补漏，或在今日会话中确认去重 */
   onAddToToday?: () => void;
+  /** 补漏按钮的真实动作文案 */
+  addToTodayLabel?: string;
   /** 该词的薄弱信号时间线文本（多行，供标签悬停查看） */
   signalTimelineText?: string;
   /** 曾有真实薄弱证据、现已满足恢复条件的维度（正向反馈） */
@@ -177,6 +179,7 @@ export default function WordCard({
   currentLeech,
   onMuteLeech,
   onAddToToday,
+  addToTodayLabel,
   onFocusSourceWord,
   wordSource,
   clock,
@@ -469,7 +472,7 @@ export default function WordCard({
             </div>
             {onAddToToday && (
               <button type="button" className="weak-add-today" onClick={onAddToToday}>
-                加入今日任务
+                {addToTodayLabel ?? "开始一词补漏"}
               </button>
             )}
           </div>

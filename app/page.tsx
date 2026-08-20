@@ -104,6 +104,7 @@ import { useAudio } from "./hooks/useAudio";
 import { useClock } from "./hooks/useClock";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useKaoyanExamples } from "./hooks/useKaoyanExamples";
+import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useSearch } from "./hooks/useSearch";
 import { useSelectionLookup } from "./hooks/useSelectionLookup";
 import { useStudyPersistence } from "./hooks/useStudyPersistence";
@@ -245,6 +246,7 @@ export default function Home() {
     advanceSession,
     restoreSession,
     clearSession,
+    appendTodayDue,
     clearStaleToday,
   } = useStudySession();
   const [enrichments, setEnrichments] = useState<Record<number, WordEnrichment>>({});
@@ -268,6 +270,7 @@ export default function Home() {
   const [wordbookTab, setWordbookTab] = useState<"favorites" | "mistakes" | "stubborn" | "lookups">("favorites");
   const [vocabTestSource, setVocabTestSource] = useState<"welcome" | "wordbook" | null>(null);
   const [pendingWordId, setPendingWordId] = useState<number | null>(null);
+  const [pendingTodayWordId, setPendingTodayWordId] = useState<number | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [hideChineseMeaning, setHideChineseMeaning] = useState(false);
   const [guessContextFirst, setGuessContextFirst] = useState(false);
@@ -304,6 +307,8 @@ export default function Home() {
   const wordCardRef = useRef<HTMLElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const vocabTestTriggerRef = useRef<HTMLElement | null>(null);
+  const todaySwitchDialogRef = useRef<HTMLElement>(null);
+  const todaySwitchTriggerRef = useRef<HTMLElement | null>(null);
   const previousSessionCompleteRef = useRef(sessionComplete);
   const toastTimerRef = useRef<number | undefined>(undefined);
   const ratingUndoTimerRef = useRef<number | undefined>(undefined);
@@ -320,6 +325,12 @@ export default function Home() {
       toastTimerRef.current = undefined;
     }, duration);
   }, []);
+  useFocusTrap(
+    todaySwitchDialogRef,
+    pendingTodayWordId !== null,
+    cancelTodaySessionSwitch,
+    todaySwitchTriggerRef,
+  );
 
   useEffect(() => () => {
     if (toastTimerRef.current !== undefined) {
@@ -1508,6 +1519,7 @@ export default function Home() {
     sessionComplete: sessionCompleteRef,
     operationInProgress: dataOperationRef,
     vocabTestOpen: vocabTestOpenRef,
+    todaySwitchOpen: todaySwitchOpenRef,
   } = useSyncedRefs({
     started,
     activeView,
@@ -1523,6 +1535,7 @@ export default function Home() {
     sessionComplete,
     operationInProgress,
     vocabTestOpen: vocabTestSource !== null,
+    todaySwitchOpen: pendingTodayWordId !== null,
   });
 
   useKeyboardShortcuts({
@@ -1531,6 +1544,7 @@ export default function Home() {
       || vocabTestOpenRef.current
       || aiOpenRef.current
       || searchOpenRef.current
+      || todaySwitchOpenRef.current
       || selectionLookupRef.current !== undefined,
     shortcuts: [
       {
@@ -2018,10 +2032,34 @@ export default function Home() {
     );
   }
 
-  // 学习卡一键补漏：当前词加入今日任务（独立轻量会话，不动 buildTodayQueue）
+  function cancelTodaySessionSwitch() {
+    setPendingTodayWordId(null);
+  }
+
+  function confirmTodaySessionSwitch() {
+    const wordId = pendingTodayWordId;
+    setPendingTodayWordId(null);
+    if (wordId !== null) {
+      startSession("today", "今日任务 · 补漏", [wordId]);
+    }
+  }
+
+  // 学习卡一词补漏：今日会话去重；其他未完成会话需确认后才切换。
   function startTodayWithCurrent(): boolean {
     if (current.id === undefined) {
       showToast("当前单词未关联学习项", 1800);
+      return false;
+    }
+    if (activeSession?.kind === "today" && !sessionComplete) {
+      appendTodayDue([current.id]);
+      showToast("当前词已在当前今日任务中，未重复加入", 1800);
+      return true;
+    }
+    if (activeSession && !sessionComplete) {
+      todaySwitchTriggerRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      setPendingTodayWordId(current.id);
       return false;
     }
     return startSession("today", "今日任务 · 补漏", [current.id]);
@@ -2471,7 +2509,7 @@ export default function Home() {
       <aside
         className="side-rail"
         aria-label="主导航"
-        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || pendingTodayWordId !== null || (isMobile && aiOpen)}
       >
         <button className="brand" onClick={() => setActiveView("learn")} aria-label="词环首页">
           <span className="brand-orbit"><i /></span>
@@ -2514,7 +2552,7 @@ export default function Home() {
 
       <section
         className="workspace"
-        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || (isMobile && aiOpen)}
+        inert={!started || vocabTestSource !== null || operationInProgress || loadStatus === "loading" || pendingTodayWordId !== null || (isMobile && aiOpen)}
       >
         <header className={activeView === "learn" ? "topbar learn-topbar" : "topbar"}>
           <div>
@@ -2734,6 +2772,11 @@ export default function Home() {
                     : "本词存在薄弱信号："
                 }
                 onAddToToday={() => startTodayWithCurrent()}
+                addToTodayLabel={
+                  activeSession?.kind === "today" && !sessionComplete
+                    ? "当前词已在今日任务"
+                    : "开始一词补漏"
+                }
                 signalTimelineText={
                   current.id === undefined
                     ? undefined
@@ -3067,6 +3110,49 @@ export default function Home() {
           onClose={() => setSearchOpen(false)}
           returnFocusRef={searchTriggerRef}
         />
+      )}
+
+      {pendingTodayWordId !== null && (
+        <div
+          className="search-backdrop"
+          role="presentation"
+          onClick={cancelTodaySessionSwitch}
+        >
+          <section
+            ref={todaySwitchDialogRef}
+            className="search-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="切换到一词补漏"
+            aria-describedby="today-switch-description"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(520px, 100%)",
+              gridTemplateRows: "auto auto auto",
+              gap: 16,
+            }}
+          >
+            <div className="search-head">
+              <div>
+                <p className="eyebrow">SESSION SWITCH</p>
+                <h2>切换到一词补漏？</h2>
+              </div>
+            </div>
+            <p id="today-switch-description" style={{ margin: 0, lineHeight: 1.7 }}>
+              当前“{activeSession?.title}”仍有 {activeSessionStats.total - activeSessionStats.completed} 词未完成。
+              继续会切换到仅含当前词的补漏会话；旧会话不会自动保留，
+              已评分历史不受影响。
+            </p>
+            <div className="search-summary">
+              <button type="button" autoFocus onClick={cancelTodaySessionSwitch}>
+                保留当前会话
+              </button>
+              <button type="button" onClick={confirmTodaySessionSwitch}>
+                切换并开始一词补漏
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {dailySentenceOpen && vocabTestSource === null && (
