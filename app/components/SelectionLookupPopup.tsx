@@ -115,8 +115,19 @@ function SelectionLookupBody({
     lookup.result?.contextPart,
     senseFrequency,
   ));
+  const userToggledRef = useRef(false);
+
+  useEffect(() => {
+    if (userToggledRef.current) return;
+    setExpandedParts(buildInitialExpanded(
+      senseGroups,
+      lookup.result?.contextPart,
+      senseFrequency,
+    ));
+  }, [lookup.result?.contextPart, senseFrequency, senseGroups]);
 
   const togglePart = useCallback((part: string) => {
+    userToggledRef.current = true;
     setExpandedParts((previous) => ({
       ...previous,
       [part]: !previous[part],
