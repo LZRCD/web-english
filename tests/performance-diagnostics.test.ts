@@ -363,8 +363,16 @@ test("Range 请求超时后自动回退整分片", async () => {
       requestCount += 1;
       if (requestCount === 1) {
         return new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () =>
-            reject(init.signal?.reason), { once: true });
+          // 保底定时器：AbortSignal.timeout 使用 unref 定时器，若事件循环
+          // 没有其它待办会在超时触发前排空，导致本测试被 runner 取消
+          // （cancelledByParent）。这个 ref 定时器既保持循环存活，也保证
+          // 首个请求最迟 100ms 内以 TimeoutError 决断。
+          const fallbackTimer = setTimeout(() =>
+            reject(new DOMException("range timeout", "TimeoutError")), 100);
+          init?.signal?.addEventListener("abort", () => {
+            clearTimeout(fallbackTimer);
+            reject(init.signal?.reason);
+          }, { once: true });
         });
       }
       return new Response(JSON.stringify({
