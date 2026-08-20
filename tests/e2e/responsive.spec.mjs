@@ -43,7 +43,7 @@ async function learningGeometry(page) {
 
     const rect = (element) => {
       const box = element.getBoundingClientRect();
-      return { left: box.left, width: box.width };
+      return { left: box.left, width: box.width, clientWidth: element.clientWidth };
     };
     return {
       detailMode: learnView.classList.contains("detail-mode"),
@@ -974,10 +974,24 @@ test("Study Detail 保持顶部流式长页面且舞台不参与居中", async (
     // 顶部对齐：舞台贴近 study-main-stack 顶部，不垂直居中
     expect(detail.stage.top, `${viewport.width}px 详情态顶部对齐`)
       .toBeLessThanOrEqual(detail.stack.top + 3);
-    // learn-view 是唯一纵向滚动源
-    expect(await page.locator(".learn-view").evaluate(
-      (element) => getComputedStyle(element).overflowY,
-    )).toBe("auto");
+    // 正文滚动区是唯一纵向滚动源，评分栏占据独立操作区
+    const scrollModel = await page.evaluate(() => {
+      const learnView = document.querySelector(".learn-view");
+      const stack = document.querySelector(".study-main-stack");
+      if (!learnView || !stack) throw new Error("详情态滚动节点不完整");
+      return {
+        learnOverflow: getComputedStyle(learnView).overflowY,
+        learnClientHeight: learnView.clientHeight,
+        learnScrollHeight: learnView.scrollHeight,
+        stackOverflow: getComputedStyle(stack).overflowY,
+        stackClientHeight: stack.clientHeight,
+        stackScrollHeight: stack.scrollHeight,
+      };
+    });
+    expect(scrollModel.learnOverflow).toBe("hidden");
+    expect(scrollModel.learnScrollHeight).toBeLessThanOrEqual(scrollModel.learnClientHeight + 1);
+    expect(scrollModel.stackOverflow).toBe("auto");
+    expect(scrollModel.stackScrollHeight).toBeGreaterThan(scrollModel.stackClientHeight);
     // Sticky 评分栏
     expect(await page.locator(".rating-bar").evaluate(
       (element) => getComputedStyle(element).position,
@@ -1127,8 +1141,10 @@ test("详情态学习工具栏与 960px 内容轴左缘对齐且不扩成宽卡"
     expect(Math.abs(detail.learningContext.left - detail.orbitStage.left))
       .toBeLessThanOrEqual(1);
     expect(detail.learningContext.width).toBeLessThan(detail.orbitStage.width - 8);
+    const detailGutter = viewport.width <= 480 ? 24 : 48;
     expect(Math.abs(
-      detail.orbitStage.width - Math.min(960, detail.studyMainStack.width - 48),
+      detail.orbitStage.width
+        - Math.min(960, detail.studyMainStack.clientWidth - detailGutter),
     )).toBeLessThanOrEqual(1);
     expect(detail.documentScrollWidth)
       .toBeLessThanOrEqual(detail.documentClientWidth + 2);

@@ -245,6 +245,26 @@ test("真题例句 A：按需单 shard、真实标签/链接、划词、零学�
   await expect(region).toContainText("新题型");
   await expect(region).toContainText("翻译");
   await expect(region).toContainText("真题版权归相关考试主管机构；本站仅用于个人学习，来源页用于核对。");
+  const lightweightLayout = await region.evaluate((element) => {
+    const regionStyle = getComputedStyle(element);
+    const item = element.querySelector("li");
+    const source = element.querySelector(".kaoyan-example-source");
+    const sentence = element.querySelector(".context-sentence");
+    if (!item || !source || !sentence) throw new Error("真题例句布局节点不完整");
+    const itemStyle = getComputedStyle(item);
+    const sourceRect = source.getBoundingClientRect();
+    const sentenceRect = sentence.getBoundingClientRect();
+    return {
+      borderLeftWidth: Number.parseFloat(regionStyle.borderLeftWidth),
+      paddingLeft: Number.parseFloat(regionStyle.paddingLeft),
+      itemPaddingLeft: Number.parseFloat(itemStyle.paddingLeft),
+      textAxisDelta: Math.abs(sourceRect.left - sentenceRect.left),
+    };
+  });
+  expect(lightweightLayout.borderLeftWidth).toBe(0);
+  expect(lightweightLayout.paddingLeft).toBeLessThanOrEqual(2);
+  expect(lightweightLayout.itemPaddingLeft).toBeLessThanOrEqual(2);
+  expect(lightweightLayout.textAxisDelta).toBeLessThanOrEqual(1);
   const firstLink = region.getByRole("link", { name: "来源页：懒笔记整理" }).first();
   await expect(firstLink).toHaveAttribute("href", radiateExamples[0].sourceUrl);
   await expect(firstLink).toHaveAttribute("target", "_blank");
