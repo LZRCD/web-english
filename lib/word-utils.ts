@@ -62,13 +62,53 @@ export function splitSenseItems(value: string) {
   return items;
 }
 
-/** 拆分单词的展示义项：按词性分段后再按逗号/分号拆分并去重，与卡片展示一致 */
-export function splitWordSenses(word: Pick<Word, "meaning" | "part">): string[] {
+/** 单个展示义项（含词性标签）。part 为词性标签串（如 "vi."、"vi. vt."、"n. vt."）。 */
+export type WordSenseWithPart = { part: string; text: string };
+
+/**
+ * 拆分单词的展示义项（带词性）：按词性分段后按逗号/分号拆分，跨词性按 text 去重
+ * （首个出现保留）；part 取所有携带该文本的词性分组的并集，{vi, vt} 并集规范化为
+ * "vi. vt."（任意顺序，与红宝书"vi. vt. X"双词性表达一致）。
+ * 文本集合与顺序与 splitWordSenses 完全一致；与卡片展示/库存派生共用同一实现。
+ */
+export function splitWordSensesWithParts(word: Pick<Word, "meaning" | "part">): WordSenseWithPart[] {
   const parsed = splitMeaning(word.meaning);
-  const senses = word.part
+  const segments = word.part
     ? [{ part: word.part, meaning: parsed.meaning }]
     : parsed.senses;
-  return [...new Set(senses.flatMap((sense) => splitSenseItems(sense.meaning)))];
+  const flat: Array<{ part: string; text: string }> = [];
+  for (const segment of segments) {
+    for (const text of splitSenseItems(segment.meaning)) {
+      flat.push({ part: segment.part, text });
+    }
+  }
+  const order: string[] = [];
+  const byText = new Map<string, string[]>();
+  for (const item of flat) {
+    const parts = item.part.split(/\s+/).filter(Boolean);
+    if (!byText.has(item.text)) {
+      order.push(item.text);
+      byText.set(item.text, [...parts]);
+    } else {
+      const existing = byText.get(item.text)!;
+      for (const p of parts) if (!existing.includes(p)) existing.push(p);
+    }
+  }
+  return order.map((text) => {
+    const parts = byText.get(text)!;
+    // 并集规则（E2 边界）：仅当该文本的全部持有词性 ⊆ {vi, vt} 才合并为规范 "vi. vt."；
+    // 其它情况（跨段 n./vt.、三连 int.vi.vt.、v./vi. 等）保持首词性标签（与旧行为一致），避免误合并。
+    const viVtOnly = parts.length >= 1 && parts.length <= 2 && parts.every((p) => p === "vi." || p === "vt.");
+    const finalParts = viVtOnly
+      ? (parts.length === 2 ? ["vi.", "vt."] : [parts[0]])
+      : [parts[0]];
+    return { part: finalParts.join(" "), text };
+  });
+}
+
+/** 拆分单词的展示义项：按词性分段后再按逗号/分号拆分并去重，与卡片展示一致 */
+export function splitWordSenses(word: Pick<Word, "meaning" | "part">): string[] {
+  return splitWordSensesWithParts(word).map((sense) => sense.text);
 }
 
 /** 遮掩单词中间字母为 ·，用于强化拼写提示 */
