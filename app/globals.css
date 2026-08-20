@@ -8511,6 +8511,43 @@ kbd {
   }
 }
 
+/* 200%/400% 等效极矮视口：未揭示词卡也回到单一自然流，避免主学习区被 flex 压成窄条。 */
+@media (max-height: 480px) {
+  .learn-view:not(.detail-mode) {
+    overflow-y: auto;
+  }
+
+  .learn-view:not(.detail-mode) .study-main-stack {
+    flex: 1 0 auto;
+    min-height: min-content;
+    overflow: visible;
+  }
+}
+
+/* 极窄且极矮时评分说明改为单列阅读；保留完整文案与字号，让每个评分按钮可独立滚入视口。 */
+@media (max-width: 480px) and (max-height: 480px) {
+  .learn-view.detail-mode .rating-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .learn-view.detail-mode .rating-bar button {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 7px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    column-gap: 8px;
+    text-align: left;
+  }
+
+  .learn-view.detail-mode .rating-bar button:last-child {
+    border-bottom: 0;
+  }
+
+  .learn-view.detail-mode .rating-bar button span {
+    display: grid;
+  }
+}
+
 /* =====================================================================
    第 78 轮：轨迹页「记忆档案」UI 精修
    减少卡片套娃 → 结论优先阅读层级 → 压缩空白与空数据噪音。
