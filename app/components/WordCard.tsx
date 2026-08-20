@@ -716,32 +716,34 @@ export default function WordCard({
                   {(!hideSenses || sensesExpanded) && (
                     <p className="context-translation">{current.translation}</p>
                   )}
-                </>
-              )}
-              {currentEnrichment && (
-                <div className="content-meta">
-                  <small className="content-source">
-                    {currentEnrichment.source === "ai"
-                      ? "AI 生成 · 已缓存 · 未人工核验"
-                      : "词典内容"}
-                    {currentEnrichment.targetMeanings?.length
-                      ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
-                      : ""}
-                  </small>
-                  {currentEnrichment.source === "ai" && (
-                    <button
-                      type="button"
-                      onClick={onEnrichWord}
-                      disabled={
-                        enrichmentLoading || !unfamiliarMeanings.length
-                      }
-                    >
-                      {enrichmentLoading
-                        ? "重写中…"
-                        : "按未熟练义项重写"}
-                    </button>
+                  {/* 来源元信息只在展示富化单句本身的此分支渲染，
+                      避免在逐义项例句列表下方形成整组来源错标 */}
+                  {currentEnrichment && (
+                    <div className="content-meta">
+                      <small className="content-source">
+                        {currentEnrichment.source === "ai"
+                          ? "AI 生成 · 已缓存 · 未人工核验"
+                          : "词典内容"}
+                        {currentEnrichment.targetMeanings?.length
+                          ? ` · 针对：${currentEnrichment.targetMeanings.join("、")}`
+                          : ""}
+                      </small>
+                      {currentEnrichment.source === "ai" && (
+                        <button
+                          type="button"
+                          onClick={onEnrichWord}
+                          disabled={
+                            enrichmentLoading || !unfamiliarMeanings.length
+                          }
+                        >
+                          {enrichmentLoading
+                            ? "重写中…"
+                            : "按未熟练义项重写"}
+                        </button>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           ) : (

@@ -30,6 +30,50 @@ function getElucidatorSentence(page) {
   return page.getByText(ELUCIDATOR_SENTENCE, { exact: true }).first();
 }
 
+async function isolateProvenanceNetwork(page) {
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (
+      !["127.0.0.1", "localhost"].includes(url.hostname)
+      || url.pathname.startsWith("/api/")
+    ) {
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+  await blockPrivateDatasets(page);
+  await page.route("**/data/redbook.json*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      metadata: {
+        title: "合成红宝书",
+        total: 1,
+        sectionCounts: { 必考词: 1, 基础词: 0, 超纲词: 0 },
+      },
+      words: [{
+        id: 1,
+        word: "radiate",
+        phonetic: "/ˈreɪdieɪt/",
+        meaning: "v. 散发;流露;发出 (光、辐射等);呈辐射状发散 (或伸展)",
+        sentence: "The lamp radiates a steady light.",
+        translation: "这盏灯发出稳定的光。",
+        section: "必考词",
+        unit: 1,
+      }],
+    }),
+  }));
+  await page.route("**/data/redbook-analysis.json*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      metadata: { auditedEntries: 6550, learningItemCount: 1 },
+      entries: { 1: {} },
+    }),
+  }));
+}
+
 async function openElucidatorLookup(context, page) {
   await installStateSeed(context, createState({
     enrichments: RADIATE_ENRICHMENT,
@@ -654,6 +698,82 @@ test("浏览器阻止录音播放时分类为 autoplay-blocked 并回退 TTS", a
       sample.metric === "audio.play.invoke"
       && sample.tags?.fallbackReason === "autoplay-blocked");
   })).toBe(true);
+});
+
+test("逐义项例句保留各条复核标签且不显示整组来源", async ({ context, page }) => {
+  await isolateProvenanceNetwork(page);
+  const enrichment = structuredClone(RADIATE_ENRICHMENT);
+  enrichment[1] = {
+    ...enrichment[1],
+    source: "ai",
+    verified: false,
+    senseExamples: [
+      {
+        ...enrichment[1].senseExamples[0],
+        confidence: 0.87,
+      },
+      {
+        ...enrichment[1].senseExamples[1],
+        review: {
+          status: "passed",
+          confidence: 0.96,
+          reviewedAt: "2026-08-21T00:00:00.000Z",
+        },
+      },
+    ],
+  };
+  await installStateSeed(context, createState({ enrichments: enrichment }));
+  await openApp(page);
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+
+  const examples = page.locator(".sense-example");
+  await expect(examples).toHaveCount(2);
+  await expect(examples.nth(0)).toContainText("生成置信度 87%");
+  await expect(examples.nth(1)).toContainText("语义二审通过");
+  await expect(examples.getByRole("button", { name: "例句与义项不符" }))
+    .toHaveCount(2);
+  await expect(examples.getByRole("button", { name: "只重写此条" }))
+    .toHaveCount(2);
+  await expect(page.locator(".content-meta")).toHaveCount(0);
+  await expect(page.locator(".content-source")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "按未熟练义项重写" }))
+    .toHaveCount(0);
+});
+
+test("富化单句显示真实总来源、目标义项与总重写入口", async ({ context, page }) => {
+  await isolateProvenanceNetwork(page);
+  await installStateSeed(context, createState({
+    enrichments: {
+      1: {
+        sentence: "Stars radiate energy into space.",
+        translation: "恒星向太空辐射能量。",
+        targetMeanings: ["散发", "发出 (光、辐射等)"],
+        source: "ai",
+        verified: false,
+      },
+    },
+  }));
+  await openApp(page);
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+
+  await expect(page.locator(".sense-example")).toHaveCount(0);
+  const source = page.locator(".content-source");
+  await expect(source).toHaveText(
+    "AI 生成 · 已缓存 · 未人工核验 · 针对：散发、发出 (光、辐射等)",
+  );
+  await expect(page.getByRole("button", { name: "按未熟练义项重写" }))
+    .toBeVisible();
+});
+
+test("无富化缓存的红宝书基础句不伪造来源", async ({ context, page }) => {
+  await isolateProvenanceNetwork(page);
+  await installStateSeed(context, createState());
+  await openApp(page);
+  await page.getByRole("button", { name: "显示单词释义" }).click();
+
+  await expect(page.locator(".context-sentence")).toBeVisible();
+  await expect(page.locator(".content-meta")).toHaveCount(0);
+  await expect(page.locator(".content-source")).toHaveCount(0);
 });
 
 test("反馈不符例句后只二审并重写目标义项", async ({ context, page }) => {
