@@ -199,6 +199,9 @@ export function resolveKnownLookupResult(input: {
       : savedLookup.phonetic;
     return {
       result: {
+        ...(savedLookup.linkedWordId === undefined
+          ? {}
+          : { linkedWordId: savedLookup.linkedWordId }),
         query: savedLookup.query,
         kind: savedLookup.kind,
         phonetic,
