@@ -967,6 +967,58 @@ export function useStudyPersistence({
     }
   }, [hydrated, loadStatus, operationInProgress, state, todayKey]);
 
+  const persistActiveQuizExit = useCallback(async () => {
+    if (!stateRef.current.activeQuiz) return true;
+    if (!beginAuthoritativeWrite()) {
+      notify("当前数据尚未准备好，本组仍保留；请等待当前操作结束后再退出", 5000);
+      return false;
+    }
+
+    let keepBlocked = true;
+    setSaveStatus("saving");
+    try {
+      let status: "saved" | "fallback" = "saved";
+      let savedLatest = false;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const version = localStateVersionRef.current;
+        status = await persistStateSnapshot({
+          ...stateRef.current,
+          activeQuiz: undefined,
+        }, true);
+        if (status === "fallback" && "indexedDB" in window) {
+          throw new Error("题组退出未写入主存储");
+        }
+        if (version === localStateVersionRef.current) {
+          savedLatest = true;
+          break;
+        }
+      }
+      if (!savedLatest) {
+        throw new Error("退出期间学习状态持续变化，请稍后重试");
+      }
+      setSaveStatus(status);
+      setLastSaveTime(Date.now());
+      pendingLocalChangesRef.current = false;
+      updateLoadStatus("ready");
+      keepBlocked = false;
+      return true;
+    } catch {
+      stashRecoveryCopy(stateRef.current);
+      setSaveStatus("error");
+      notify("退出未完成，本组仍保留；请前往设置重试保存后再退出", 5000);
+      return false;
+    } finally {
+      finishAuthoritativeWrite(keepBlocked);
+    }
+  }, [
+    beginAuthoritativeWrite,
+    finishAuthoritativeWrite,
+    notify,
+    persistStateSnapshot,
+    stashRecoveryCopy,
+    updateLoadStatus,
+  ]);
+
   const retrySave = useCallback(async () => {
     const mustReconcile = storageBlockedRef.current
       || loadStatusRef.current === "error";
@@ -1401,6 +1453,7 @@ export function useStudyPersistence({
     lastSaveTime,
     automaticBackups,
     recoveryCopies,
+    persistActiveQuizExit,
     retrySave,
     exportBackup,
     exportRecoveryCopy,

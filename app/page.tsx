@@ -1213,6 +1213,7 @@ export default function Home() {
     lastSaveTime,
     automaticBackups,
     recoveryCopies,
+    persistActiveQuizExit,
     retrySave,
     exportBackup,
     exportRecoveryCopy,
@@ -2858,6 +2859,7 @@ export default function Home() {
             onRecordResult={recordQuizResult}
             savedQuiz={quizForView}
             onQuizStateChange={setActiveQuiz}
+            onExitQuiz={persistActiveQuizExit}
             dailyClozeInput={dailyClozeInput}
             dailyClozeCache={currentDailyCloze}
             onDailyClozeChange={setDailyCloze}

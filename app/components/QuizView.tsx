@@ -54,6 +54,7 @@ type QuizViewProps = {
   ) => void;
   savedQuiz?: QuizSessionState;
   onQuizStateChange: (session: QuizSessionState | undefined) => void;
+  onExitQuiz: () => Promise<boolean>;
   dailyClozeInput: DailyClozeInput;
   dailyClozeCache?: DailyClozeCacheEntry;
   onDailyClozeChange: (entry: DailyClozeCacheEntry | undefined) => void;
@@ -82,6 +83,7 @@ export default function QuizView({
   onRecordResult,
   savedQuiz,
   onQuizStateChange,
+  onExitQuiz,
   dailyClozeInput,
   dailyClozeCache,
   onDailyClozeChange,
@@ -103,7 +105,9 @@ export default function QuizView({
   const [complete, setComplete] = useState(false);
   const [dailyClozeLoading, setDailyClozeLoading] = useState(false);
   const [dailyClozeError, setDailyClozeError] = useState("");
+  const [exitPending, setExitPending] = useState(false);
   const dailyClozeRequestRef = useRef(false);
+  const exitPendingRef = useRef(false);
   const questionStartedAt = useRef(0);
   const quizStartedAtRef = useRef(new Date().toISOString());
   const submittedQuestionRef = useRef<string | null>(null);
@@ -314,16 +318,24 @@ export default function QuizView({
     }
   };
 
-  const returnToModes = () => {
-    onQuizStateChange(undefined);
-    setMode(undefined);
-    setSessionId("");
-    setSessionInputKey(undefined);
-    setQuestions([]);
-    setComplete(false);
-    setAnswer("");
-    setAnswers({});
-    setCorrectCount(0);
+  const returnToModes = async () => {
+    if (exitPendingRef.current) return;
+    exitPendingRef.current = true;
+    setExitPending(true);
+    const exited = await onExitQuiz();
+    if (exited) {
+      onQuizStateChange(undefined);
+      setMode(undefined);
+      setSessionId("");
+      setSessionInputKey(undefined);
+      setQuestions([]);
+      setComplete(false);
+      setAnswer("");
+      setAnswers({});
+      setCorrectCount(0);
+    }
+    exitPendingRef.current = false;
+    setExitPending(false);
   };
 
   if (!mode) {
@@ -454,7 +466,12 @@ export default function QuizView({
   return (
     <div className="content-view quiz-view">
       <div className="quiz-session-head">
-        <button type="button" className="quiz-back" onClick={returnToModes}>← 退出本组</button>
+        <button
+          type="button"
+          className="quiz-back"
+          disabled={exitPending}
+          onClick={returnToModes}
+        >{exitPending ? "正在保存…" : "← 退出本组"}</button>
         <div>
           <strong>{currentQuestion.label}</strong>
           <span>{questionIndex + 1} / {questions.length}</span>
