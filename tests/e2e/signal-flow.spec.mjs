@@ -1575,7 +1575,7 @@ test("信号联动：学习卡非冲刺态薄弱提示与一键补漏", async ({
   // 非冲刺态也显示薄弱信号（日常文案）+ 一键补漏按钮
   await expect(page.getByText("本词存在薄弱信号：")).toBeVisible();
   await expect(page.locator(".weak-signal-tags")).not.toBeEmpty();
-  const addToday = page.getByRole("button", { name: "加入今日任务" });
+  const addToday = page.getByRole("button", { name: "开始一词补漏" });
   await expect(addToday).toBeVisible();
   await addToday.click();
   // 进入今日任务会话（补漏），词卡仍显示薄弱信号
