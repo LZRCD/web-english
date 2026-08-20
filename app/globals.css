@@ -5399,8 +5399,12 @@ kbd {
 
 @media (max-width: 820px) {
   .app-shell {
+    --mobile-main-nav-height: 60px;
+    --mobile-main-nav-bottom: calc(10px + env(safe-area-inset-bottom));
     grid-template-columns: minmax(0, 1fr);
-    padding-bottom: 70px;
+    padding-bottom: calc(
+      var(--mobile-main-nav-height) + var(--mobile-main-nav-bottom)
+    );
     /* 装饰圆环可超出视口，但不允许撑出横向滚动 */
     overflow-x: clip;
   }
@@ -5411,9 +5415,9 @@ kbd {
   }
 
   .side-rail {
-    inset: auto 10px 10px;
+    inset: auto 10px var(--mobile-main-nav-bottom);
     width: auto;
-    height: 60px;
+    height: var(--mobile-main-nav-height);
     padding: 6px 8px;
     border: 1px solid var(--line);
     border-radius: 20px;
@@ -5421,6 +5425,29 @@ kbd {
     align-items: center;
     background: rgba(255, 255, 255, 0.94);
     box-shadow: 0 16px 40px rgba(31, 42, 35, 0.1);
+  }
+
+  .toast {
+    bottom: calc(
+      var(--mobile-main-nav-bottom) + var(--mobile-main-nav-height) + 12px
+    );
+    width: max-content;
+    max-width: min(calc(100vw - 32px), 360px);
+    border-radius: var(--radius-md);
+    padding: 6px 8px 6px 14px;
+    line-height: 1.45;
+  }
+
+  .toast span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .toast button {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 45px;
+    padding: 0 0 0 10px;
   }
 
   .brand {
