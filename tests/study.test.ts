@@ -67,9 +67,11 @@ import {
 } from "../lib/date-utils.ts";
 import {
   buildWordTextIndex,
+  buildRedbookLookupResult,
   recordLookupStat,
   rememberLookupResult,
   resolveKnownLookupResult,
+  splitWordSensesByPart,
   upsertLookupWord,
   type LookupResult,
 } from "../lib/selection-lookup.ts";
@@ -1651,6 +1653,57 @@ test("展示义项与考频标注口径一致：逗号分隔的多义项不被�
   );
 });
 
+// ── splitWordSensesByPart（划词弹窗按词性分组展示） ──────────────────────────
+
+test("按词性分组：多词性各自成组（state 结构）", () => {
+  assert.deepEqual(splitWordSensesByPart({
+    meaning: "n. 状况;国家;州;政府 vt. 陈述,说明;规定 adj. 国家的;国事的;州的",
+  }), [
+    { part: "n.", senses: ["状况", "国家", "州", "政府"] },
+    { part: "vt.", senses: ["陈述", "说明", "规定"] },
+    { part: "adj.", senses: ["国家的", "国事的", "州的"] },
+  ]);
+});
+
+test("按词性分组：同段 vt. vi. 共享义项只落在首个词性分组", () => {
+  assert.deepEqual(splitWordSensesByPart({
+    meaning: "vt. vi. 散发,流露;发出 (光、辐射等) vi. 呈辐射状发散 (或伸展)",
+  }), [
+    { part: "vt.", senses: ["散发", "流露", "发出 (光、辐射等)"] },
+    { part: "vi.", senses: ["呈辐射状发散 (或伸展)"] },
+  ]);
+});
+
+test("按词性分组：跨段同文本只保留首个词性分组（与 flat 去重口径一致）", () => {
+  assert.deepEqual(splitWordSensesByPart({ meaning: "n. 地址 vt. 地址" }), [
+    { part: "n.", senses: ["地址"] },
+  ]);
+});
+
+test("按词性分组：无词性分段时整体一段并沿用传入词性标签", () => {
+  assert.deepEqual(splitWordSensesByPart({
+    meaning: "状况;国家",
+    part: "n. vt. adj.",
+  }), [
+    { part: "n. vt. adj.", senses: ["状况;国家"] },
+  ]);
+});
+
+test("按词性分组：非词性标签（ECDICT/AI 的“本地词典/短语”）不按词性拆分", () => {
+  assert.deepEqual(splitWordSensesByPart({
+    meaning: "n. 州,状态 a. 国家的 vt. 说明",
+    part: "本地词典",
+  }), [
+    { part: "本地词典", senses: ["n. 州,状态 a. 国家的 vt. 说明"] },
+  ]);
+  assert.deepEqual(splitWordSensesByPart({
+    meaning: "谨慎的阐释者",
+    part: "短语",
+  }), [
+    { part: "短语", senses: ["谨慎的阐释者"] },
+  ]);
+});
+
 test("考研进度三层口径：看过不等于考试日就绪", () => {
   // 无效考试日期返回 null
   assert.equal(examProgressTiers({}, ""), null);
@@ -1908,6 +1961,231 @@ test("划词纯投影：红宝书 exact/folded 命中优先级与音标来源保
   assert.equal(folded?.result.meaning, "遗弃");
   assert.equal(folded?.result.phonetic, "əˈbændən");
   assert.equal(folded?.result.phoneticSource, "dictionary");
+})
+
+test("划词纯投影：红宝书多词性词目携带按词性分组的释义", () => {
+  const multiPart = buildRedbookLookupResult({
+    id: 1330,
+    word: "state",
+    meaning: "n. 状况;国家;州;政府 vt. 陈述,说明;规定 adj. 国家的;国事的;州的",
+    section: "必考词",
+    unit: 19,
+  }, "/steit/");
+  assert.deepEqual(multiPart.sensesByPart, [
+    { part: "n.", senses: ["状况", "国家", "州", "政府"] },
+    { part: "vt.", senses: ["陈述", "说明", "规定"] },
+    { part: "adj.", senses: ["国家的", "国事的", "州的"] },
+  ]);
+  assert.equal(multiPart.part, "n. vt. adj.");
+  assert.equal(multiPart.meaning, "状况;国家;州;政府；陈述,说明;规定；国家的;国事的;州的");
+
+  // 无词性分段的词目不生成该字段（保持既有结果形状不变）
+  const plain = buildRedbookLookupResult({
+    id: 1,
+    word: "Abandon",
+    meaning: "放弃",
+    section: "必考词",
+    unit: 2,
+  }, "/əˈbændən/");
+  assert.equal(plain.sensesByPart, undefined);
+})
+
+test("划词持久化边界：rich AI/红宝书保存时剥离 UI 字段且保留身份", () => {
+  const richAi: LookupResult = {
+    query: "radiate",
+    kind: "word",
+    phonetic: "/ˈreɪdieɪt/",
+    phoneticSource: "dictionary",
+    part: "v.",
+    meaning: "散发",
+    note: "The confidence radiates outward.",
+    source: "ai",
+    sensesByPart: [{ part: "v.", senses: ["散发"] }],
+    contextPart: "v.",
+  };
+  const aiAddedAt = "2026-08-01T00:00:00.000Z";
+  const savedAi = upsertLookupWord([], richAi, aiAddedAt)[0];
+  assert.deepEqual(
+    Object.keys(savedAi).filter((key) =>
+      key === "sensesByPart" || key === "contextPart"
+    ),
+    [],
+  );
+  assert.equal(Object.hasOwn(savedAi, "sensesByPart"), false);
+  assert.equal(Object.hasOwn(savedAi, "contextPart"), false);
+  assert.equal(savedAi.addedAt, aiAddedAt);
+  assert.equal(savedAi.phoneticSource, "dictionary");
+  assert.equal(richAi.contextPart, "v.");
+  assert.deepEqual(richAi.sensesByPart, [{ part: "v.", senses: ["散发"] }]);
+
+  const richRedbook = buildRedbookLookupResult({
+    id: 1330,
+    word: "state",
+    meaning: "n. 状况;国家 vt. 陈述;说明 adj. 国家的",
+    section: "必考词",
+    unit: 19,
+  }, "/steit/");
+  const redbookAddedAt = "2026-08-02T00:00:00.000Z";
+  const firstRedbook = upsertLookupWord([], richRedbook, redbookAddedAt)[0];
+  const updatedRedbook = upsertLookupWord(
+    [firstRedbook],
+    { ...richRedbook, meaning: "更新释义", contextPart: "n." },
+    "2026-08-03T00:00:00.000Z",
+  )[0];
+  assert.equal(Object.hasOwn(firstRedbook, "sensesByPart"), false);
+  assert.equal(Object.hasOwn(firstRedbook, "contextPart"), false);
+  assert.equal(Object.hasOwn(updatedRedbook, "sensesByPart"), false);
+  assert.equal(Object.hasOwn(updatedRedbook, "contextPart"), false);
+  assert.equal(updatedRedbook.linkedWordId, 1330);
+  assert.equal(updatedRedbook.id, firstRedbook.id);
+  assert.equal(updatedRedbook.addedAt, redbookAddedAt);
+})
+
+test("划词持久化边界：remember 清理新旧缓存中的 UI 字段与 JSON", () => {
+  const rich: LookupResult = {
+    query: "state",
+    kind: "word",
+    phonetic: "/steit/",
+    phoneticSource: "dictionary",
+    part: "n.",
+    meaning: "状态",
+    note: "current context",
+    source: "ai",
+    sensesByPart: [{ part: "n.", senses: ["状态"] }],
+    contextPart: "n.",
+  };
+  const cache = rememberLookupResult({
+    legacy: {
+      ...rich,
+      query: "legacy",
+      contextPart: "adj.",
+    },
+  }, rich.query, "Example context", rich);
+  for (const cached of Object.values(cache)) {
+    assert.equal(Object.hasOwn(cached, "sensesByPart"), false);
+    assert.equal(Object.hasOwn(cached, "contextPart"), false);
+  }
+  const serialized = JSON.stringify(cache);
+  assert.doesNotMatch(serialized, /sensesByPart|contextPart/);
+  assert.equal(rich.contextPart, "n.");
+  assert.deepEqual(rich.sensesByPart, [{ part: "n.", senses: ["状态"] }]);
+})
+
+test("划词缓存命中：只在内存为可信 AI 词性恢复 contextPart", () => {
+  const aiResult: LookupResult = {
+    query: "radiate",
+    kind: "word",
+    phonetic: "",
+    part: "v.",
+    meaning: "散发",
+    note: "context",
+    source: "ai",
+    contextPart: "v.",
+  };
+  const stableAiCache = rememberLookupResult(
+    {},
+    aiResult.query,
+    "Confidence radiates outward.",
+    aiResult,
+  );
+  const newCacheHit = resolveKnownLookupResult({
+    query: "RADIATE",
+    context: "CONFIDENCE RADIATES OUTWARD.",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [],
+    lookupCache: stableAiCache,
+    phoneticIndex: {},
+  });
+  assert.equal(newCacheHit?.result.contextPart, "v.");
+  assert.equal(Object.hasOwn(Object.values(stableAiCache)[0], "contextPart"), false);
+
+  const stableKey = Object.keys(stableAiCache)[0];
+  const stableValue = Object.values(stableAiCache)[0];
+  const oldRichCache: Record<string, LookupResult> = {
+    [stableKey]: {
+      ...stableValue,
+      part: "adj.",
+      sensesByPart: [{ part: "adj.", senses: ["辐射状的"] }],
+      contextPart: "n.",
+    },
+  };
+  const oldCacheHit = resolveKnownLookupResult({
+    query: "radiate",
+    context: "Confidence radiates outward.",
+    wordByText: buildWordTextIndex([]),
+    lookupWords: [],
+    lookupCache: oldRichCache,
+    phoneticIndex: {},
+  });
+  assert.equal(oldCacheHit?.result.contextPart, "adj.");
+  assert.equal(Object.hasOwn(oldCacheHit?.result ?? {}, "sensesByPart"), false);
+
+  for (const result of [{
+    ...aiResult,
+    query: "flash-label",
+    part: "DS FLASH",
+  }, {
+    ...aiResult,
+    query: "dictionary-label",
+    part: "n.",
+    source: "dictionary" as const,
+  }, {
+    ...aiResult,
+    query: "redbook-label",
+    part: "n.",
+    source: "redbook" as const,
+  }]) {
+    const lookupCache = rememberLookupResult({}, result.query, "Context", result);
+    const hit = resolveKnownLookupResult({
+      query: result.query,
+      context: "Context",
+      wordByText: buildWordTextIndex([]),
+      lookupWords: [],
+      lookupCache,
+      phoneticIndex: {},
+    });
+    assert.equal(hit?.result.contextPart, undefined);
+    assert.equal(Object.hasOwn(hit?.result ?? {}, "contextPart"), false);
+  }
+})
+
+test("划词持久化边界：分域、备份与 parseStoredState 往返保持旧 payload", () => {
+  const saved = upsertLookupWord([], {
+    query: "radiate",
+    kind: "word",
+    phonetic: "/ˈreɪdieɪt/",
+    phoneticSource: "dictionary",
+    part: "v.",
+    meaning: "散发",
+    note: "context",
+    source: "ai",
+    sensesByPart: [{ part: "v.", senses: ["散发"] }],
+    contextPart: "v.",
+  }, "2026-08-01T00:00:00.000Z")[0];
+  const state = parseStoredState(JSON.stringify({
+    schemaVersion: STORAGE_VERSION,
+    lookupWords: [saved],
+  }));
+  const snapshot = splitStoredState(state);
+  const backup = createBackupDocument(state, "2026-08-01T01:00:00.000Z");
+
+  for (const lookupWord of [
+    snapshot.settings.lookupWords[0],
+    backup.state.lookupWords[0],
+  ]) {
+    assert.equal(Object.hasOwn(lookupWord, "sensesByPart"), false);
+    assert.equal(Object.hasOwn(lookupWord, "contextPart"), false);
+  }
+  assert.doesNotMatch(
+    JSON.stringify({ snapshot, backup }),
+    /sensesByPart|contextPart/,
+  );
+  assert.deepEqual(combineStoredState(snapshot).lookupWords, state.lookupWords);
+  assert.deepEqual(
+    parseStoredState(JSON.stringify(backup.state)).lookupWords,
+    state.lookupWords,
+  );
+  assert.equal(backup.schemaVersion, STORAGE_VERSION);
 })
 
 test("划词纯投影：已保存结果优先于 query/context 缓存且保留 AI 音标语义", () => {
