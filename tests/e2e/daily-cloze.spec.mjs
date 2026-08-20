@@ -298,6 +298,11 @@ test("每日短文 C：缓存刷新恢复、离线命中与当天输入变化失
   regenerationStatus = 0;
   await page.getByRole("button", { name: "开始今日短文" }).click();
   await expect(page.locator(".quiz-option")).toHaveText(options);
+  // 等缓存启动的 activeQuiz 落盘（自动保存有 150ms 防抖），再离线重载
+  await expect.poll(async () =>
+    Boolean((await readStoreRecord(page, "settings", "current"))
+      ?.activeQuiz?.inputKey),
+  ).toBe(true);
 
   await page.unroute("**/api/daily-cloze");
   await page.route("**/api/daily-cloze", (route) => route.abort("internetdisconnected"));
