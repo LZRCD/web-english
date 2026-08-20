@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 本地运行时副本、私有轮次脚本与临时目录，非项目源码：
+    ".wordloop-runtime/**",
+    ".wordloop-data/**",
+    "tmp/**",
   ]),
 ]);
 

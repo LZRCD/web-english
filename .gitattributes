@@ -14,3 +14,13 @@ lib/data-versions.generated.ts text eol=lf
 
 # 二进制文件
 *.tsbuildinfo binary
+
+# 源码固定 LF：保持 WSL/Windows 工作区状态一致，防止 CRLF 噪音进入 diff
+# （不写 *.json / *.md 等通用规则，避免覆盖上方数据资产 -text 规则）
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.ps1 text eol=lf
