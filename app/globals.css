@@ -1384,9 +1384,15 @@ select:focus-visible {
   font-size: 13px;
 }
 
-/* 词面是整块巨型按钮，不绘制大面积 focus 矩形；键盘聚焦时仅点亮提示文案 */
+/* 词面是整块巨型按钮；焦点环只包围主词，避免用大矩形框住整卡 */
 .word-face:focus-visible {
   outline: none;
+}
+
+.word-face:focus-visible h1 {
+  outline: 2px solid var(--mint);
+  outline-offset: 8px;
+  border-radius: 10px;
 }
 
 .word-face:focus-visible span {

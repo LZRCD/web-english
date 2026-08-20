@@ -3,7 +3,7 @@
 import type { WordProgressMap } from "../../lib/learning";
 import { wordRetrievability } from "../../lib/learning";
 import { formatDueTime, splitMeaning } from "../../lib/study";
-import { useRef } from "react";
+import { useRef, type RefObject } from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { Word } from "../../lib/study";
 
@@ -19,6 +19,7 @@ type SearchPanelProps = {
   onStartSearch: () => void;
   onStartWordSession: (wordIds: number[]) => void;
   onClose: () => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
 };
 
 export default function SearchPanel({
@@ -33,22 +34,23 @@ export default function SearchPanel({
   onStartSearch,
   onStartWordSession,
   onClose,
+  returnFocusRef,
 }: SearchPanelProps) {
   const panelRef = useRef<HTMLElement>(null);
-  useFocusTrap(panelRef, open);
+  useFocusTrap(panelRef, open, onClose, returnFocusRef);
 
   if (!open) return null;
   const now = new Date(clock);
 
   return (
-    <div className="search-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="search-backdrop" role="presentation" onClick={onClose}>
       <section
         ref={panelRef}
         className="search-panel"
         role="dialog"
         aria-modal="true"
         aria-label="全局查词"
-        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="search-head">
           <div>

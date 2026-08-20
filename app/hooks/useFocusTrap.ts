@@ -28,15 +28,22 @@ export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
   active: boolean,
   onEscape?: () => void,
+  returnFocusRef?: RefObject<HTMLElement | null>,
 ) {
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
 
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;
     if (!container) return;
 
-    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    previousFocusRef.current = returnFocusRef?.current
+      ?? (document.activeElement as HTMLElement | null);
 
     const items = getFocusable(container);
     const autoFocusItem = container.querySelector<HTMLElement>("[autofocus]");
@@ -44,7 +51,8 @@ export function useFocusTrap(
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onEscape?.();
+        event.preventDefault();
+        onEscapeRef.current?.();
         return;
       }
       if (event.key !== "Tab") return;
@@ -68,5 +76,5 @@ export function useFocusTrap(
       previousFocusRef.current?.focus?.();
       previousFocusRef.current = null;
     };
-  }, [active, containerRef, onEscape]);
+  }, [active, containerRef, returnFocusRef]);
 }

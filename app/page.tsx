@@ -302,6 +302,7 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const reinforcementInputRef = useRef<HTMLInputElement>(null);
   const wordCardRef = useRef<HTMLElement>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const vocabTestTriggerRef = useRef<HTMLElement | null>(null);
   const previousSessionCompleteRef = useRef(sessionComplete);
   const toastTimerRef = useRef<number | undefined>(undefined);
@@ -2541,7 +2542,12 @@ export default function Home() {
             <span className="daily-sentence-trigger-label short">长难句</span>
             {currentDailySentence && <i className="daily-sentence-ready-dot" aria-hidden="true" />}
           </button>
-          <button className="search-trigger" type="button" onClick={() => setSearchOpen(true)}>
+          <button
+            ref={searchTriggerRef}
+            className="search-trigger"
+            type="button"
+            onClick={() => setSearchOpen(true)}
+          >
             <span>⌕</span> <span className="search-label">查词</span> <kbd>/</kbd>
           </button>
           <div className="daily-progress" aria-label={`今日新学 ${stats.newCount} 个，当前目标 ${effectiveNewGoal} 个`}>
@@ -3059,6 +3065,7 @@ export default function Home() {
             startSession("search", `专项学习${word ? ` · ${word.word}` : ""}`, wordIds);
           }}
           onClose={() => setSearchOpen(false)}
+          returnFocusRef={searchTriggerRef}
         />
       )}
 

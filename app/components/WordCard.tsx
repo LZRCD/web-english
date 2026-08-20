@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useState,
   type FormEventHandler,
@@ -336,6 +337,23 @@ export default function WordCard({
 
   // 展开态：不再把全部详情塞进超长 Flashcard，切换为独立的 Study Detail 布局
   const showDetail = revealed && redbookReady && reinforcementRating === null;
+  useEffect(() => {
+    if (!showDetail) return;
+    const frame = window.requestAnimationFrame(() => {
+      const card = wordCardRef.current;
+      const activeElement = document.activeElement;
+      if (
+        activeElement !== document.body
+        && (!activeElement || !card?.contains(activeElement))
+      ) {
+        return;
+      }
+      card
+        ?.querySelector<HTMLButtonElement>(".detail-word-button")
+        ?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [current.id, showDetail, wordCardRef]);
   // 紧凑 Header 状态行：今日到期 · 必考词 · Unit N
   const statusParts: { text: string; highlight: boolean }[] = [];
   if (currentProgress) {
