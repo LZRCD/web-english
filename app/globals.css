@@ -2028,15 +2028,51 @@ select:focus-visible {
   z-index: 70;
   width: min(360px, calc(100vw - 24px));
   max-height: min(330px, calc(100vh - 24px));
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   transform: translateX(-50%);
   border: 1px solid #cfddd5;
   border-top: 3px solid #4b9c75;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 18px 55px rgba(29, 52, 39, 0.2);
-  padding: 14px 16px 16px;
+  padding: 12px 14px 14px;
   animation: selection-lookup-in 180ms ease-out both;
+}
+
+/* ScrollBody：仅释义区滚动；滚动条弱化、不成为视觉焦点，正文不贴滚动条 */
+.selection-lookup-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 2px;
+  padding-right: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(104, 132, 116, 0.35) transparent;
+}
+
+.selection-lookup-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.selection-lookup-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.selection-lookup-body::-webkit-scrollbar-thumb {
+  background: rgba(104, 132, 116, 0.35);
+  border-radius: 999px;
+}
+
+.selection-lookup-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(104, 132, 116, 0.55);
+}
+
+.selection-lookup-body::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
 }
 
 .selection-lookup-head,
@@ -2047,6 +2083,7 @@ select:focus-visible {
 }
 
 .selection-lookup-head {
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
 }
@@ -2061,43 +2098,57 @@ select:focus-visible {
   border: 0;
   background: transparent;
   color: #8d958f;
-  padding: 0 2px;
+  padding: 2px 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
 }
 
+.selection-lookup-head > button:hover {
+  color: #3f4b44;
+  background: #eef3f0;
+}
+
+.selection-lookup-head > button:focus-visible {
+  outline: 2px solid #4b9c75;
+  outline-offset: 2px;
+}
+
 .selection-lookup-query {
+  flex: 0 0 auto;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .selection-lookup-query strong {
-  font: 500 24px/1.1 Georgia, "Times New Roman", serif;
+  font: 600 27px/1.15 Georgia, "Times New Roman", serif;
 }
 
 .selection-lookup-query small {
-  color: #7f8881;
-  font: 500 11px/1 "Courier New", monospace;
+  color: #8a928c;
+  font: 400 15px/1 "Courier New", monospace;
 }
 
 .selection-lookup-speak {
   flex: 0 0 auto;
+  align-self: center;
   margin-left: auto;
-  width: 27px;
-  height: 27px;
+  width: 34px;
+  height: 34px;
   border: 1px solid #cde3d6;
-  border-radius: 9px;
+  border-radius: 11px;
   background: #f0f8f3;
   color: #2f7f5b;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1;
 }
 
 .selection-lookup-speak:hover {
   border-color: #9fc8b1;
   background: #e6f5ec;
+  color: #1f6a49;
 }
 
 .selection-lookup-speak:disabled {
@@ -2107,7 +2158,7 @@ select:focus-visible {
 
 .selection-lookup-action {
   width: 100%;
-  margin-top: 14px;
+  margin-top: 12px;
   border: 1px solid #cde3d6;
   border-radius: 11px;
   background: #f0f8f3;
@@ -2133,7 +2184,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 15px 0 2px;
+  margin: 12px 0 0;
   color: #657169;
   font-size: 11px;
 }
@@ -2150,13 +2201,7 @@ select:focus-visible {
 .selection-lookup-meaning {
   align-items: flex-start;
   gap: 10px;
-  margin-top: 13px;
-}
-
-.selection-lookup-meaning span {
-  flex: 0 0 auto;
-  color: #459b75;
-  font: 700 9px/1.5 "Courier New", monospace;
+  margin-top: 10px;
 }
 
 .selection-lookup-meaning p {
@@ -2169,7 +2214,7 @@ select:focus-visible {
 .selection-lookup-note,
 .selection-lookup-saved {
   display: block;
-  margin-top: 9px;
+  margin-top: 8px;
   color: #7e8780;
   font-size: 9px;
   line-height: 1.5;
@@ -2181,7 +2226,7 @@ select:focus-visible {
 
 .selection-lookup-context {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 8px;
   border: 1px solid #dbe5df;
   border-radius: 9px;
   background: #fff;
@@ -2197,7 +2242,7 @@ select:focus-visible {
 }
 
 .selection-lookup-error {
-  margin-top: 13px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2600,7 +2645,6 @@ select:focus-visible {
   min-width: 0;
   gap: 6px;
   padding-left: 11px;
-  border-left: 2px solid #bfd1df;
 }
 
 .kaoyan-example-source {
@@ -6203,21 +6247,91 @@ kbd {
 .selection-lookup-senses {
   display: grid;
   flex: 1 1 auto;
-  gap: 5px;
+  gap: 16px;
+}
+.selection-lookup-sense-group {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+.selection-lookup-sense-part {
+  color: #459b75;
+  font: 600 12px/1.4 "Courier New", monospace;
+  letter-spacing: 0.05em;
+}
+/* 词性收纳行：整行可点击，仅轻量 hover 反馈；不使用大面积卡片/按钮背景 */
+.selection-lookup-sense-part-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.selection-lookup-sense-part-row:hover {
+  background: rgba(75, 156, 117, 0.07);
+}
+.selection-lookup-sense-part-row:focus-visible {
+  outline: 2px solid #4b9c75;
+  outline-offset: 1px;
+}
+.selection-lookup-sense-arrow {
+  flex: 0 0 auto;
+  color: #459b75;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+.selection-lookup-sense-part-row[aria-expanded="true"] .selection-lookup-sense-arrow {
+  transform: rotate(90deg);
+}
+/* 折叠摘要：单行、弱化、超出省略；不撑宽 Popover */
+.selection-lookup-sense-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8d958f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.selection-lookup-sense-items {
+  display: grid;
+  gap: 8px;
+  padding-left: 16px;
 }
 .selection-lookup-meaning p.selection-lookup-sense {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 4px 7px;
+  margin: 0;
+  color: #27332c;
+  font-size: 13px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
+/* 高频核心释义：保持正文颜色，仅提升字重（不再使用整行浅红卡片） */
 .selection-lookup-meaning p.selection-lookup-sense.sense-frequency-highlight {
-  border-color: #f0d3c6;
-  background: #fff5ef;
-  font-weight: 700;
+  background: transparent;
+  font-weight: 600;
 }
+/* 高频标签：辅助 metadata，小号浅红 pill，只给标签自身背景 */
 .selection-lookup-sense .sense-frequency {
-  margin-left: 6px;
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fdeee8;
+  color: #b4503a;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 .sense-frequency-note {
   display: block;
@@ -9375,4 +9489,238 @@ kbd {
   .history-row {
     padding-inline: 16px;
   }
+}
+
+/* =====================================================================
+   详情页（点击卡片后）字体放大
+   仅作用于 study-detail 详情布局，不影响学习主卡与其他页面。
+   ===================================================================== */
+
+/* ---- Header：词 / 音标 / 状态行 ---- */
+.study-detail .detail-word {
+  font-size: clamp(46px, 4.2vw, 56px);
+}
+
+.study-detail .detail-phonetic {
+  font: 400 19px/1 "Courier New", monospace;
+}
+
+.study-detail .detail-summary-status {
+  font-size: 14px;
+}
+
+/* ---- 分节标题 ---- */
+.study-detail .detail-section-title {
+  font: 700 13px/1 "Courier New", monospace;
+  letter-spacing: 0.1em;
+}
+
+/* ---- 猜词区 ---- */
+.study-detail .guess-context-label {
+  font: 700 13px/1.5 "Courier New", monospace;
+}
+
+.study-detail .guess-context-hint {
+  font-size: 13px;
+}
+
+.study-detail .meaning-hidden .context-sentence {
+  font-size: 18px;
+}
+
+.study-detail .guess-input-row input,
+.study-detail .guess-input-row button {
+  font-size: 15px;
+}
+
+.study-detail .guess-wrong,
+.study-detail .guess-correct {
+  font-size: 14px;
+}
+
+.study-detail .guess-mistake-badge {
+  font: 700 12px/1.4 "Courier New", monospace;
+}
+
+/* ---- 释义 ---- */
+.study-detail .meaning-main span {
+  font: 700 12.5px/1 "Courier New", monospace;
+}
+
+.study-detail .meaning-sense {
+  font-size: 19px;
+}
+
+.study-detail .meaning-sense small {
+  font: 700 9.5px/1 "Courier New", monospace;
+}
+
+.study-detail .sense-frequency-note {
+  font-size: 12px;
+}
+
+.study-detail .meaning-reveal,
+.study-detail .meaning-collapse {
+  font-size: 14px;
+}
+
+/* ---- 例句 / 翻译 ---- */
+.study-detail .context-sentence {
+  font: 500 17px/1.55 Georgia, serif;
+}
+
+.study-detail .context-translation {
+  font-size: 14px;
+}
+
+.study-detail .sense-examples-label {
+  font: 700 11px/1 "Courier New", monospace;
+  letter-spacing: 0.08em;
+}
+
+.study-detail .sense-example strong {
+  font-size: 13px;
+}
+
+.study-detail .sense-example .context-sentence {
+  font: 500 16px/1.55 Georgia, serif;
+}
+
+.study-detail .sense-example-quality > small {
+  font-size: 12px;
+}
+
+.study-detail .sense-example-quality button {
+  font-size: 12px;
+}
+
+.study-detail .content-source {
+  font-size: 11px;
+}
+
+.study-detail .content-meta button {
+  font-size: 11px;
+}
+
+/* ---- 考研真题原句 ---- */
+.study-detail .kaoyan-examples-label {
+  font: 700 11px/1.4 "Courier New", monospace;
+  letter-spacing: 0.08em;
+}
+
+.study-detail .kaoyan-example-source {
+  font-size: 12px;
+}
+
+.study-detail .kaoyan-copyright {
+  font-size: 11px;
+}
+
+/* ---- 跨词例句复用 ---- */
+.study-detail .reused-sentences > span {
+  font: 700 11px/1.4 "Courier New", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.study-detail .reused-sentences .context-sentence {
+  font-size: 16px;
+}
+
+.study-detail .reused-sentences .context-translation {
+  font-size: 14px;
+}
+
+.study-detail .reused-sentences li > small {
+  font-size: 12px;
+}
+
+.study-detail .reused-more {
+  font-size: 13px;
+}
+
+/* ---- AI 助记 / 词族 ---- */
+.study-detail .etymology-heading h3 {
+  font: 700 16px/1.35 system-ui, sans-serif;
+}
+
+.study-detail .etymology-heading span,
+.study-detail .etymology-generate small {
+  font-size: 12px;
+}
+
+.study-detail .etymology-content dt {
+  font: 700 11px/1.55 "Courier New", monospace;
+  letter-spacing: 0.04em;
+}
+
+.study-detail .etymology-content dd {
+  font-size: 13px;
+}
+
+.study-detail .etymology-generate button {
+  font-size: 13px;
+}
+
+.study-detail .etymology-disclaimer {
+  font-size: 11px;
+}
+
+.study-detail .etymology-error {
+  font-size: 12px;
+}
+
+.study-detail .local-root-hint p {
+  font-size: 13px;
+}
+
+.study-detail .word-relation strong {
+  font-size: 13px;
+}
+
+.study-detail .word-relation small {
+  font-size: 12px;
+}
+
+/* ---- 常用搭配 ---- */
+.study-detail .collocation-block p {
+  font-size: 16px;
+}
+
+/* ---- 词条信息 ---- */
+.study-detail .word-details span {
+  font-size: 12px;
+}
+
+.study-detail .word-details strong {
+  font-size: 13px;
+}
+
+/* ---- 状态提示（划词补漏 / 薄弱信号） ---- */
+.study-detail .lookup-hint {
+  font: 600 13px/1.5 "Courier New", monospace;
+}
+
+.study-detail .sprint-weak-reasons > span {
+  font-size: 13px;
+}
+
+.study-detail .weak-signal-tag,
+.study-detail .weak-signal-mute,
+.study-detail .weak-stabilized-tag {
+  font: 600 11px/1.5 "Courier New", monospace;
+}
+
+.study-detail .weak-add-today {
+  font-size: 12px;
+}
+
+/* ---- 内容补充 CTA ---- */
+.study-detail .context-ai span {
+  font: 700 11px/1 "Courier New", monospace;
+  letter-spacing: 0.08em;
+}
+
+.study-detail .context-ai p {
+  font-size: 14px;
 }

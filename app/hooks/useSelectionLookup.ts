@@ -373,6 +373,12 @@ export function useSelectionLookup(
       window.innerHeight - popupHeight - 12,
       Math.max(12, preferredY),
     );
+    // 选中词的原始几何信息：弹窗挂载后按实际尺寸重新定位（下方优先、翻转、视口内收拢）
+    const anchor = {
+      centerX: rangeBox.left + rangeBox.width / 2,
+      top: rangeBox.top,
+      bottom: rangeBox.bottom,
+    };
     const commonNode = range.commonAncestorContainer;
     const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
       ? commonNode as Element
@@ -409,6 +415,7 @@ export function useSelectionLookup(
         context,
         x,
         y,
+        anchor,
         status: "ready",
         result: resolved.result,
         cached: resolved.cached,
@@ -444,7 +451,7 @@ export function useSelectionLookup(
       }
       return;
     }
-    setSelectionLookup({ query, context, x, y, status: "idle" });
+    setSelectionLookup({ query, context, x, y, anchor, status: "idle" });
   }, [
     current.meaning,
     current.sentence,
@@ -458,7 +465,7 @@ export function useSelectionLookup(
     translateOptions: { forceAi?: boolean } = {},
   ) => {
     if (!selectionLookup || selectionLookup.status === "loading") return;
-    const { query, context, x, y } = selectionLookup;
+    const { query, context, x, y, anchor } = selectionLookup;
     const normalizedQuery = query.toLowerCase();
     const lookupMode = lookupAttemptsRef.current.has(normalizedQuery)
       ? "repeat"
@@ -486,6 +493,7 @@ export function useSelectionLookup(
           context,
           x,
           y,
+          anchor,
           status: "ready",
           result: known.result,
           cached: known.cached,
@@ -521,7 +529,7 @@ export function useSelectionLookup(
 
     const controller = new AbortController();
     lookupAbortRef.current = controller;
-    setSelectionLookup({ query, context, x, y, status: "loading" });
+    setSelectionLookup({ query, context, x, y, anchor, status: "loading" });
     try {
       if (!translateOptions.forceAi) {
         const dictionaryResult = await findInLocalDictionary(query, { traceId });
@@ -537,6 +545,7 @@ export function useSelectionLookup(
             context,
             x,
             y,
+            anchor,
             status: "ready",
             result: dictionaryResult,
           });
@@ -585,6 +594,7 @@ export function useSelectionLookup(
         context,
         x,
         y,
+        anchor,
         status: "ready",
         result: trustedResult,
       });
@@ -599,6 +609,7 @@ export function useSelectionLookup(
         context,
         x,
         y,
+        anchor,
         status: "error",
         error: error instanceof Error
           ? error.message

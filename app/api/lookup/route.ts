@@ -44,6 +44,8 @@ function normalizeLookup(payload: LookupPayload, query: string) {
     kind,
     phonetic: "",
     part: boundedText(payload.part, 32),
+    // 模型已按 context 推断词性：作为「语境词性」渐进增强字段，弹窗默认展开对应词性
+    contextPart: boundedText(payload.part, 32),
     meaning: boundedText(payload.meaning, 200),
     note: boundedText(payload.note, 200),
     source: "ai" as const,

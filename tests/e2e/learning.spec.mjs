@@ -405,6 +405,17 @@ test("高频考义在学习卡与划词弹窗一致高亮", async ({ browser, co
   await expect(mediumPopupSense).not.toHaveClass(/\bsense-frequency-highlight\b/);
   await expect(popup.locator(".sense-frequency-highlight")).toHaveCount(1);
 
+  // 划词弹窗按词性分组展示：vt. 组与 vi. 组各自成块，高频义项位于 vt. 组内
+  await expect(popup.locator(".selection-lookup-sense-group")).toHaveCount(2);
+  await expect(popup.locator(".selection-lookup-sense-part").nth(0)).toHaveText("vt.");
+  await expect(popup.locator(".selection-lookup-sense-part").nth(1)).toHaveText("vi.");
+  await expect(popup.locator(".selection-lookup-sense-group").nth(0))
+    .toContainText("散发");
+  await expect(popup.locator(".selection-lookup-sense-group").nth(1))
+    .toContainText("呈辐射状发散 (或伸展)");
+
+  // 划词弹窗保持「小、轻、快」：高频释义不再使用整行浅红卡片，
+  // 释义保持正文样式仅提升字重，高频信息收敛为独立的小号浅红 pill
   const highPopupStyle = await highPopupSense.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
@@ -413,7 +424,23 @@ test("高频考义在学习卡与划词弹窗一致高亮", async ({ browser, co
       fontWeight: Number(style.fontWeight),
     };
   });
-  expect(highPopupStyle).toEqual(highCardStyle);
+  expect(highPopupStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(highPopupStyle.borderTopWidth).toBe("0px");
+  expect(highPopupStyle.fontWeight).toBeGreaterThanOrEqual(550);
+  expect(highPopupStyle.fontWeight).toBeLessThanOrEqual(650);
+
+  const highPopupTagStyle = await highPopupSense
+    .locator(".sense-frequency")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        padding: style.padding,
+      };
+    });
+  expect(highPopupTagStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(highPopupTagStyle.borderRadius).toBe("999px");
 
   await popup.getByRole("button", { name: "关闭划词查询" }).click();
   await expect(popup).toHaveCount(0);
