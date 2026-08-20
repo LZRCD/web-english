@@ -106,6 +106,7 @@ export default function QuizView({
   const dailyClozeRequestRef = useRef(false);
   const questionStartedAt = useRef(0);
   const quizStartedAtRef = useRef(new Date().toISOString());
+  const submittedQuestionRef = useRef<string | null>(null);
   const currentQuestion = questions[questionIndex];
   const answerResult = currentQuestion ? answers[currentQuestion.id] : undefined;
   const progressPercent = questions.length
@@ -277,6 +278,9 @@ export default function QuizView({
     if (!currentQuestion || answerResult) return;
     const normalized = submittedAnswer.trim();
     if (!normalized) return;
+    const submissionKey = `${sessionId}:${questionIndex}:${currentQuestion.id}`;
+    if (submittedQuestionRef.current === submissionKey) return;
+    submittedQuestionRef.current = submissionKey;
     const correct = isQuizAnswerCorrect(currentQuestion, normalized);
     const recallMs = Math.max(
       0,

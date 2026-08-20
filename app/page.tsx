@@ -306,6 +306,8 @@ export default function Home() {
   const previousSessionCompleteRef = useRef(sessionComplete);
   const toastTimerRef = useRef<number | undefined>(undefined);
   const ratingUndoTimerRef = useRef<number | undefined>(undefined);
+  const ratingSubmissionRef = useRef<number | null>(null);
+  const quizSubmissionRef = useRef<string | null>(null);
   const [startupTraceId] = useState(() => createPerformanceTrace("startup"));
   const showToast = useCallback((message: string, duration = 3000) => {
     setToast(message);
@@ -1551,7 +1553,7 @@ export default function Home() {
             && redbookReadyRef.current
             && !sessionCompleteRef.current
           ) {
-            setRevealed(true);
+            revealCurrentWord();
           }
         },
       },
@@ -1659,6 +1661,11 @@ export default function Home() {
     setRecallStartedAt(new Date().getTime());
   }
 
+  function revealCurrentWord() {
+    ratingSubmissionRef.current = null;
+    setRevealed(true);
+  }
+
   function beginFromWelcome() {
     // 默认主入口 = 今日任务；无可用队列时退回自由学习（额外练习）
     if (redbookReadyRef.current && startTodaySession()) return;
@@ -1717,6 +1724,8 @@ export default function Home() {
       setReinforcementRecallMs(measuredRecallMs ?? null);
       return;
     }
+    if (ratingSubmissionRef.current === current.id) return;
+    ratingSubmissionRef.current = current.id;
     const now = new Date().toISOString();
     const recallMs = skipReinforcement && reinforcementRecallMs !== null
       ? reinforcementRecallMs
@@ -1816,6 +1825,9 @@ export default function Home() {
   ) {
     const word = question.word;
     if (!redbookReady || word.id === undefined) return;
+    const submissionKey = `${sessionId ?? "quiz"}:${question.id}`;
+    if (quizSubmissionRef.current === submissionKey) return;
+    quizSubmissionRef.current = submissionKey;
     const now = new Date();
     const nowIso = now.toISOString();
     // 仅「每日首次有效作答」或「到期词首次作答」写入 FSRS，
@@ -1929,7 +1941,7 @@ export default function Home() {
       }));
     }
     setActiveView("learn");
-    setRevealed(true);
+    revealCurrentWord();
     setRecallStartedAt(new Date().getTime());
     setUndoStack((stack) => stack.slice(0, -1));
     setUndoVisible(false);
@@ -2734,7 +2746,7 @@ export default function Home() {
                 reviewingSense={reviewingSense}
                 rewritingSense={rewritingSense}
                 unfamiliarMeanings={unfamiliarMeanings}
-                onReveal={() => setRevealed(true)}
+                onReveal={revealCurrentWord}
                 onRetryRedbookLoad={retryRedbookLoad}
                 onToggleFavorite={() => toggleFavorite()}
                 onSpeak={speak}
