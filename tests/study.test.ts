@@ -25,6 +25,7 @@ import {
   rebuildStubbornWords,
   resolveWeakProgress,
   sessionProgress,
+  todayAppendCopy,
   type WordProgress,
   examProgressTiers,
 } from "../lib/learning.ts";
@@ -76,6 +77,9 @@ import {
   type LookupResult,
 } from "../lib/selection-lookup.ts";
 import { buildRedbookLoadGuidance } from "../lib/redbook.ts";
+import {
+  persistActiveQuizExitWrite,
+} from "../lib/storage.ts";
 
 function createQuizAttempts(count: number): QuizAttempt[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -2330,3 +2334,102 @@ test("划词纯投影：统计保留 firstAt，缓存按既有插入顺序裁剪
     phoneticIndex: {},
   }), null);
 })
+
+test("退出题组：主存储写失败但 fallback（localStorage）写成功视为已提交（降级 fallback）", async () => {
+  // 模拟 persistStateSnapshot：IndexedDB 主存储失败 → writeFallbackState 成功返回 "fallback"。
+  let persistCalls = 0;
+  const result = await persistActiveQuizExitWrite(
+    async () => {
+      persistCalls += 1;
+      return "fallback";
+    },
+    () => 1, // 版本稳定：无并发学习状态变化
+  );
+
+  // fallback 写成功 = 退出已提交：主存储里 activeQuiz 已被清除，只把状态降级为 fallback。
+  assert.equal(result.committed, true);
+  assert.equal(result.saveStatus, "fallback");
+  assert.equal(persistCalls, 1);
+});
+
+test("退出题组：主存储写失败后 fallback 也失败时拒绝提交，交由调用方走恢复副本 + 失败提示", async () => {
+  const result = await persistActiveQuizExitWrite(
+    async () => {
+      throw new Error("IndexedDB 与 localStorage 均写入失败");
+    },
+    () => 1,
+  );
+
+  assert.equal(result.committed, false);
+  assert.equal(result.saveStatus, "error");
+});
+
+test("退出题组：主存储成功仍为 saved 且已提交", async () => {
+  const result = await persistActiveQuizExitWrite(
+    async () => "saved",
+    () => 1,
+  );
+
+  assert.equal(result.committed, true);
+  assert.equal(result.saveStatus, "saved");
+});
+
+test("退出题组：写期间版本变化则重试最新快照，版本对齐后才提交", async () => {
+  let version = 1;
+  let persistCalls = 0;
+  const result = await persistActiveQuizExitWrite(
+    async () => {
+      persistCalls += 1;
+      if (persistCalls === 1) version = 2; // 第一次写期间学习状态变化
+      return "saved";
+    },
+    () => version,
+  );
+
+  assert.equal(result.committed, true);
+  assert.equal(result.saveStatus, "saved");
+  assert.equal(persistCalls, 2);
+});
+
+test("退出题组：版本持续变化 5 次后放弃并返回 error，不再无限重试", async () => {
+  let version = 0;
+  const result = await persistActiveQuizExitWrite(
+    async () => {
+      version += 1; // 每次写期间版本都前进，始终无法对齐
+      return "saved";
+    },
+    () => version,
+  );
+
+  assert.equal(result.committed, false);
+  assert.equal(result.saveStatus, "error");
+});
+
+test("今日任务进行中补漏判重：已在队列不追加保持原文案，不在队列追加并改为「已加入」文案", () => {
+  const already = todayAppendCopy(true);
+  assert.equal(already.shouldAppend, false);
+  assert.equal(already.toast, "当前词已在当前今日任务中，未重复加入");
+  assert.equal(already.label, "当前词已在今日任务");
+
+  const pending = todayAppendCopy(false);
+  assert.equal(pending.shouldAppend, true);
+  assert.equal(pending.toast, "已追加到今日任务");
+  assert.equal(pending.label, "加入今日任务");
+});
+
+test("今日任务进行中补漏：判重后再按结果追加，今日队列成员不重复", () => {
+  const session = createStudySession("today", "今日任务", [1, 2], new Date("2026-08-21T08:00:00.000Z"));
+
+  const alreadyCopy = todayAppendCopy(session.wordIds.includes(2));
+  const unchanged = alreadyCopy.shouldAppend
+    ? { ...session, wordIds: [...session.wordIds, 2] }
+    : session;
+  assert.equal(unchanged, session);
+  assert.deepEqual(unchanged.wordIds, [1, 2]);
+
+  const pendingCopy = todayAppendCopy(session.wordIds.includes(3));
+  const appended = pendingCopy.shouldAppend
+    ? { ...session, wordIds: [...session.wordIds, 3] }
+    : session;
+  assert.deepEqual(appended.wordIds, [1, 2, 3]);
+});

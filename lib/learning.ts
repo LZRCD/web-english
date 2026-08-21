@@ -689,6 +689,29 @@ export function buildTodaySessionBatch(
   };
 }
 
+export type TodayAppendCopy = {
+  /** 当前词不在今日队列时是否追加；已在队列则只提示、不重复加入。 */
+  shouldAppend: boolean;
+  toast: string;
+  label: string;
+};
+
+/** 今日任务进行中一词补漏的判重文案：已在队列保持原文案，不在队列才追加并改为「已加入」文案。 */
+export function todayAppendCopy(alreadyInTodayQueue: boolean): TodayAppendCopy {
+  if (alreadyInTodayQueue) {
+    return {
+      shouldAppend: false,
+      toast: "当前词已在当前今日任务中，未重复加入",
+      label: "当前词已在今日任务",
+    };
+  }
+  return {
+    shouldAppend: true,
+    toast: "已追加到今日任务",
+    label: "加入今日任务",
+  };
+}
+
 /** 当前词进入学习卡的可解释来源；无法细分时回退到会话级说明。 */
 export function buildStudyWordSource(input: {
   session?: StudySession;

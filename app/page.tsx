@@ -50,6 +50,7 @@ import {
   rebuildWordProgress,
   resolveWeakProgress,
   stubbornWordIds,
+  todayAppendCopy,
   weakWordIds,
   type SenseFrequencyMap,
   type StudySession,
@@ -463,15 +464,16 @@ export default function Home() {
     ? wordById.get(selectionLookup.result.linkedWordId)
     : undefined;
   const lookupPrivateDatasets = usePrivateDatasets(lookupLinkedWord);
-  // 划词弹窗的义项考频：个人缓存优先 → 基础数据（词条身份一致才命中）
-  const lookupSenseFrequency = lookupLinkedWord?.id === undefined
-    ? undefined
-    : (() => {
-        const senseTexts = splitWordSenses(lookupLinkedWord);
-        const personal = senseFrequency[lookupLinkedWord.id];
-        if (personalSenseFrequencyValid(personal, senseTexts)) return personal;
-        return datasetFrequencyToDisplay(lookupPrivateDatasets.frequency, senseTexts);
-      })();
+  // 划词弹窗的义项考频：个人缓存优先 → 基础数据（词条身份一致才命中）。
+  // 用 useMemo 保持引用稳定：SelectionLookupPopupBody 的折叠态 effect 依赖
+  // senseFrequency 引用，避免 Home 每次渲染产生新对象而反复重置用户手动切换词性前的展开状态。
+  const lookupSenseFrequency = useMemo(() => {
+    if (lookupLinkedWord?.id === undefined) return undefined;
+    const senseTexts = splitWordSenses(lookupLinkedWord);
+    const personal = senseFrequency[lookupLinkedWord.id];
+    if (personalSenseFrequencyValid(personal, senseTexts)) return personal;
+    return datasetFrequencyToDisplay(lookupPrivateDatasets.frequency, senseTexts);
+  }, [lookupLinkedWord, senseFrequency, lookupPrivateDatasets.frequency]);
   const vocabTestWords = useMemo(
     () => redbookWords.filter((word) => isPrimaryLearningWord(word.id)),
     [redbookWords],
@@ -2051,8 +2053,11 @@ export default function Home() {
       return false;
     }
     if (activeSession?.kind === "today" && !sessionComplete) {
-      appendTodayDue([current.id]);
-      showToast("当前词已在当前今日任务中，未重复加入", 1800);
+      const copy = todayAppendCopy(
+        current.id !== undefined && activeSession.wordIds.includes(current.id),
+      );
+      if (copy.shouldAppend) appendTodayDue([current.id]);
+      showToast(copy.toast, 1800);
       return true;
     }
     if (activeSession && !sessionComplete) {
@@ -2774,7 +2779,9 @@ export default function Home() {
                 onAddToToday={() => startTodayWithCurrent()}
                 addToTodayLabel={
                   activeSession?.kind === "today" && !sessionComplete
-                    ? "当前词已在今日任务"
+                    ? todayAppendCopy(
+                        current.id !== undefined && activeSession.wordIds.includes(current.id),
+                      ).label
                     : "开始一词补漏"
                 }
                 signalTimelineText={

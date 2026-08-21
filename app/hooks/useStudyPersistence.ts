@@ -27,6 +27,7 @@ import {
   isStorageConflictError,
   loadStoredState,
   onRemoteChange,
+  persistActiveQuizExitWrite,
   readStoredState,
   saveStoredState,
   saveStoredStateImmediate,
@@ -977,36 +978,25 @@ export function useStudyPersistence({
     let keepBlocked = true;
     setSaveStatus("saving");
     try {
-      let status: "saved" | "fallback" = "saved";
-      let savedLatest = false;
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const version = localStateVersionRef.current;
-        status = await persistStateSnapshot({
+      const outcome = await persistActiveQuizExitWrite(
+        () => persistStateSnapshot({
           ...stateRef.current,
           activeQuiz: undefined,
-        }, true);
-        if (status === "fallback" && "indexedDB" in window) {
-          throw new Error("题组退出未写入主存储");
-        }
-        if (version === localStateVersionRef.current) {
-          savedLatest = true;
-          break;
-        }
+        }, true),
+        () => localStateVersionRef.current,
+      );
+      if (!outcome.committed) {
+        stashRecoveryCopy(stateRef.current);
+        setSaveStatus("error");
+        notify("退出未完成，本组仍保留；请前往设置重试保存后再退出", 5000);
+        return false;
       }
-      if (!savedLatest) {
-        throw new Error("退出期间学习状态持续变化，请稍后重试");
-      }
-      setSaveStatus(status);
+      setSaveStatus(outcome.saveStatus);
       setLastSaveTime(Date.now());
       pendingLocalChangesRef.current = false;
       updateLoadStatus("ready");
       keepBlocked = false;
       return true;
-    } catch {
-      stashRecoveryCopy(stateRef.current);
-      setSaveStatus("error");
-      notify("退出未完成，本组仍保留；请前往设置重试保存后再退出", 5000);
-      return false;
     } finally {
       finishAuthoritativeWrite(keepBlocked);
     }

@@ -602,3 +602,37 @@ export async function loadStoredState(
     throw error;
   }
 }
+
+export type ActiveQuizExitResult = {
+  committed: boolean;
+  saveStatus: "saved" | "fallback" | "error";
+};
+
+/**
+ * 题组退出的落盘重试与提交判定（纯逻辑，便于单测）。
+ * - `persist` 代表一次写入：主存储（IndexedDB）成功返回 "saved"；主存储写失败但
+ *   fallback（localStorage）写成功返回 "fallback"。
+ * - 主存储写失败但 fallback 写成功时，退出仍视为已提交——主存储中的 activeQuiz 已被
+ *   清除，只把保存状态降级为 fallback，不提示「本组仍保留」。
+ * - 只有两条写路径都失败、或连续 `attempts` 次写期间版本持续变化无法对齐时，才返回
+ *   committed=false，由调用方走恢复副本 + 失败提示。
+ */
+export async function persistActiveQuizExitWrite(
+  persist: () => Promise<"saved" | "fallback">,
+  readVersion: () => number,
+  attempts = 5,
+): Promise<ActiveQuizExitResult> {
+  try {
+    let status: "saved" | "fallback" = "saved";
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const version = readVersion();
+      status = await persist();
+      if (version === readVersion()) {
+        return { committed: true, saveStatus: status };
+      }
+    }
+    return { committed: false, saveStatus: "error" };
+  } catch {
+    return { committed: false, saveStatus: "error" };
+  }
+}
