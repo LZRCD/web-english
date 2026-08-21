@@ -33,6 +33,22 @@ yarn-error.log*
 .pnpm-debug.log*
 .codex-dev-*.log
 .codex-dev-*.pid
+.codex-*.log
+.codex-*.log.err
+.codex-*.err.log
+.codex-*.out.log
+.codex-*.pid
+debug.log
+
+# 本地开发杂项 / 迭代草稿
+1.txt
+2.txt
+*.txt.dump
+batch32_dump.txt
+gui-test-screenshots/
+dsh-flash-subagents/
+.zcode/
+/dump*.txt
 
 # env files (can opt-in for committing if needed)
 .env*

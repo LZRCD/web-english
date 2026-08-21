@@ -2,6 +2,15 @@
 
 面向个人使用的 2027 考研英语红宝书 AI 背词网站。词库、学习记录、错词和收藏均保存在本机，不需要公开部署。
 
+## 技术栈
+
+- **Next.js 16 + React 19 + TypeScript 5.9**，通过 `vinext`（Vite 驱动的 Next.js 运行时）本地构建与启动（固定端口 `3000`）
+- **Tailwind CSS 4** 负责样式
+- **ts-fsrs** 实现 FSRS 间隔重复排程：四档主动回忆评分（Again / Hard / Good / Easy）映射到 FSRS
+- **ECDICT** 作为内置离线英汉辞典分片数据（MIT 许可证）
+- **Node 内置 test runner**（单测）+ **Playwright**（浏览器端 E2E）做验证
+- 可选 **Wrangler / Cloudflare Workers** 部署（见 `worker/`）；默认面向本地个人使用
+
 ## 当前功能
 
 - 收录红宝书 6550 条原书词目：必考词 1856、基础词 3680、超纲词 1014
@@ -227,3 +236,13 @@ npm run test:e2e
 ```
 
 GitHub Actions 的 `Quality` 在普通 push/PR 固定执行 lint、typecheck 和测试；完整 Playwright 位于独立的 `Release browser verification`，只在手动触发、`v*` 发布标签或其他发布工作流调用时运行。
+
+## 许可证
+
+本仓库采用 [MIT License](./LICENSE)。
+
+数据与版权说明：
+
+- 红宝书原文词库与音频属于受版权保护的资料，仅保存在本机，**不在本仓库内分发**。`资源/`、`public/data/redbook.json`、`public/audio/` 等均被 Git 忽略。
+- 内置的 ECDICT 离线辞典按其自身 MIT 许可证使用，重建分片的命令见「离线辞典」一节。
+- 本地密钥（如 `DEEPSEEK_API_KEY`）通过复制 `.env.example` 为 `.env.local` 填写，真实密钥不会被提交。
