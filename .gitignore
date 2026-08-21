@@ -50,6 +50,23 @@ dsh-flash-subagents/
 .zcode/
 /dump*.txt
 
+# 不追踪不提交的本地工作文件（用户裁决）
+docs/iterations/round-81.md
+docs/iterations/round-83.md
+docs/iterations/round-85.md
+docs/iterations/round-86.md
+docs/obsidian-architecture.md
+docs/obsidian-data-boundary.md
+docs/obsidian-integration-plan.md
+docs/obsidian-level-comparison.md
+reports/vocabulary-audit.json
+reports/vocabulary-audit.md
+scripts/dump-repaired.mjs
+scripts/reflag-missing-word.mjs
+scripts/repair-review-failures.mjs
+tests/e2e/visual-state-grouping.spec.mjs
+tests/e2e/visual-use-grouping.spec.mjs
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
